@@ -1,19 +1,26 @@
 const $ = (id) => document.getElementById(id);
 
-// --- Load saved Monday token ---
-chrome.storage.local.get("mondayToken", ({ mondayToken }) => {
+// --- Load saved config ---
+chrome.storage.local.get(["mondayToken", "mondayBoardId"], ({ mondayToken, mondayBoardId }) => {
   if (mondayToken) {
     $("mondayToken").value = mondayToken;
-    $("mondayStatus").innerHTML = '<span class="saved">✅ Token guardado</span>';
+  }
+  if (mondayBoardId) {
+    $("mondayBoardId").value = mondayBoardId;
+  }
+  if (mondayToken && mondayBoardId) {
+    $("mondayStatus").innerHTML = '<span class="saved">✅ Configuración guardada</span>';
   }
 });
 
-// --- Save Monday token ---
+// --- Save config ---
 $("saveToken").addEventListener("click", () => {
   const token = $("mondayToken").value.trim();
+  const boardId = $("mondayBoardId").value.trim();
   if (!token) return ($("mondayStatus").textContent = "⚠️ Ingresa un token");
-  chrome.storage.local.set({ mondayToken: token }, () => {
-    $("mondayStatus").innerHTML = '<span class="saved">✅ Token guardado</span>';
+  if (!boardId) return ($("mondayStatus").textContent = "⚠️ Ingresa el Board ID");
+  chrome.storage.local.set({ mondayToken: token, mondayBoardId: boardId }, () => {
+    $("mondayStatus").innerHTML = '<span class="saved">✅ Configuración guardada</span>';
   });
 });
 

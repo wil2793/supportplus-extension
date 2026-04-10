@@ -19,11 +19,15 @@
 <body>
   <h3>📋 SupportPlus Tools</h3>
 
-  <h3>🟣 Monday.com</h3>
+  <h3>🔑 Monday.com</h3>
   <label>API Token</label>
   <input type="password" id="mondayToken" placeholder="Pega tu token de Monday aquí">
-  <a href="https://macropay7.monday.com/apps/manage/tokens" target="_blank" style="font-size:11px;color:#6C63FF;display:block;margin-bottom:8px;">¿No tienes token? Obtenerlo aquí →</a>
-  <button id="saveToken" style="background:#6C63FF;">Guardar Token</button>
+  <a href="https://macropay7.monday.com/apps/manage/tokens" target="_blank" style="font-size:11px;color:#D94040;display:block;margin-bottom:8px;">¿No tienes token? Obtenerlo aquí →</a>
+
+  <label>Board ID</label>
+  <input type="text" id="mondayBoardId" placeholder="ID del tablero de Monday (ej: 18406696371)">
+
+  <button id="saveToken" style="background:#D94040;">💾 Guardar configuración</button>
   <div id="mondayStatus"></div>
 
   <script src="popup.js"></script>

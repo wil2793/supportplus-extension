@@ -45,7 +45,7 @@ Es la ventanita que aparece al hacer click en el ícono de la extensión. Contie
 2. Un enlace directo a la página de Monday donde se genera el token.
 3. Un botón "Guardar Token" que almacena el token en `chrome.storage.local`.
 
-El diseño es minimalista: 320px de ancho, botones con bordes redondeados y colores morados (#6C63FF) para la identidad de Monday.
+El diseño es minimalista: 320px de ancho, botones con bordes redondeados y color rojizo (#D94040) como identidad visual.
 
 ---
 
@@ -80,7 +80,7 @@ Se inyecta automáticamente en `macropay.supportplus.mx`. Es el archivo más com
 - **Grupos de servicio:** Clasifica tickets en DEV, QA, PROD o GIT según el ID del servicio asociado al ticket.
   - `DEV_IDS`, `QA_IDS`, `PROD_IDS` → Sets con IDs de servicios.
   - `GROUP_MAP` → Mapea cada categoría al ID de grupo en Monday.
-- **MONTH_NAMES:** Nombres de meses en español para construir nombres de boards como `"Tickets DevOps - Marzo - 2026"`.
+- **MONTH_NAMES:** Nombres de meses en español para construir nombres de boards como `"Tickets DBA - Marzo - 2026"`.
 
 #### Sistema de caché (`localStorage`)
 
@@ -96,7 +96,7 @@ Se inyecta automáticamente en `macropay.supportplus.mx`. Es el archivo más com
 
 #### Sincronización (`fetchSyncedTickets`)
 
-- Al cargar la página, consulta todos los boards de Monday que empiecen con "Tickets DevOps".
+- Al cargar la página, consulta todos los boards de Monday que empiecen con "Tickets DBA".
 - Recorre todos los items de cada board, leyendo la columna `link_mknkdctz` (que contiene el link al ticket de SupportPlus).
 - Extrae el ID del ticket de la URL y construye el mapa de tickets ya sincronizados.
 - Usa paginación con cursores para manejar boards con muchos items.
@@ -110,7 +110,7 @@ Se inyecta automáticamente en `macropay.supportplus.mx`. Es el archivo más com
 #### Resolución de board (`dateToBoardName`)
 
 - Toma la fecha de creación del ticket (formato `DD/MM/YYYY`).
-- Genera el nombre del board destino: `"Tickets DevOps - {Mes} - {Año}"`.
+- Genera el nombre del board destino: `"Tickets DBA - {Mes} - {Año}"`.
 
 #### Inyección de botones en la UI (`injectButtons`)
 
