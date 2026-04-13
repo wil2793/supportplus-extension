@@ -99,30 +99,36 @@
     if (cached) return cached;
     const mondayToken = await getMondayToken();
     if (!mondayToken) return {};
+    const configuredBoardId = await getMondayBoardId();
     try {
-      const boardsData = await mondayQuery(mondayToken, `{ boards(limit:500) { id name } }`);
-      const boardIds = boardsData.boards
-        .filter((b) => b.name.startsWith("Tickets DBA") && !b.name.includes("Subelementos"))
-        .map((b) => b.id);
+      let boardIds = [];
+      if (configuredBoardId) {
+        boardIds = [configuredBoardId];
+      } else {
+        const boardsData = await mondayQuery(mondayToken, `{ boards(limit:500) { id name } }`);
+        boardIds = boardsData.boards
+          .filter((b) => b.name.startsWith("Tickets DBA") && !b.name.includes("Subelementos"))
+          .map((b) => b.id);
+      }
       if (!boardIds.length) return {};
       const synced = {};
       for (const boardId of boardIds) {
         const firstPage = await mondayQuery(mondayToken,
-          `query ($boardId: [ID!]!) { boards(ids: $boardId) { items_page(limit: 500) { cursor items { id column_values(ids: ["link_mknkdctz"]) { text } } } } }`,
+          `query ($boardId: [ID!]!) { boards(ids: $boardId) { items_page(limit: 500) { cursor items { id column_values(ids: ["text_mm2c9nhc"]) { text } } } } }`,
           { boardId });
         let page = firstPage.boards[0].items_page;
         for (const item of page.items) {
-          const m = (item.column_values[0]?.text || "").match(/\/(\d+)$/);
-          if (m) synced[m[1]] = item.id;
+          const code = (item.column_values[0]?.text || "").trim();
+          if (code) synced[code] = item.id;
         }
         let cursor = page.cursor;
         while (cursor) {
           const next = await mondayQuery(mondayToken,
-            `query ($cursor: String!) { next_items_page(limit: 500, cursor: $cursor) { cursor items { id column_values(ids: ["link_mknkdctz"]) { text } } } }`,
+            `query ($cursor: String!) { next_items_page(limit: 500, cursor: $cursor) { cursor items { id column_values(ids: ["text_mm2c9nhc"]) { text } } } }`,
             { cursor });
           for (const item of next.next_items_page.items) {
-            const m = (item.column_values[0]?.text || "").match(/\/(\d+)$/);
-            if (m) synced[m[1]] = item.id;
+            const code = (item.column_values[0]?.text || "").trim();
+            if (code) synced[code] = item.id;
           }
           cursor = next.next_items_page.cursor;
         }
@@ -198,11 +204,12 @@
     const synced = getCache() || {};
     const pending = [];
     document.querySelectorAll(".MuiDataGrid-row").forEach((row) => {
+      // Skip if already has synced badge
+      if (row.querySelector("." + SYNCED_CLASS)) return;
       const ticketId = row.getAttribute("data-id");
       if (!ticketId) return;
       const statusCell = row.querySelector('[data-field="ticketStatusName"]');
       if (!statusCell || statusCell.textContent.trim() !== "Cerrado") return;
-      if (synced[ticketId]) return;
       const dateCell = row.querySelector('[data-field="createdAt"]');
       const dateText = dateCell?.textContent?.trim() || "";
       pending.push({ ticketId, dateText, row });
@@ -285,64 +292,92 @@
 
   async function handleBulkMigrate() {
     const mondayToken = await getMondayToken();
-    if (!mondayToken) return alert("⚠️ Configura tu token de Monday en el popup de la extensión primero.");
+    if (!mondayToken) return alert("Configura tu token de Monday en el popup de la extension primero.");
     const boardId = await getMondayBoardId();
-    if (!boardId) return alert("⚠️ Configura el Board ID en el popup de la extensión primero.");
+    if (!boardId) return alert("Configura el Board ID en el popup de la extension primero.");
     const spToken = getToken();
-    if (!spToken) return alert("⚠️ No se encontró token de SupportPlus. ¿Estás logueado?");
+    if (!spToken) return alert("No se encontro token de SupportPlus.");
+
+    // Ensure sync is fresh before checking pending
+    syncPromise = null;
+    localStorage.removeItem(CACHE_KEY);
+    await ensureSyncStarted();
 
     const pending = getPendingRows();
-    if (!pending.length) return alert("✅ No hay tickets pendientes de migrar en esta página.");
-
-    if (!confirm(`Se migrarán ${pending.length} tickets cerrados a Monday. ¿Continuar?`)) return;
+    if (!pending.length) return alert("No hay tickets pendientes de migrar en esta pagina.");
 
     // Fetch groups from configured board
     const boardData = await mondayQuery(mondayToken, `query ($boardId: [ID!]!) { boards(ids: $boardId) { groups { id title } } }`, { boardId });
     const groups = boardData.boards[0]?.groups || [];
     const allGroups = {};
     for (const g of groups) allGroups[g.id] = g.title;
+    const groupOpts = '<option value="">-- Selecciona --</option>' + groups.map(g => `<option value="${g.id}">${g.title}</option>`).join("");
 
-    // Show group selection modal
-    const groupOptions = Object.entries(allGroups).map(([id, title]) => `<option value="${id}">${title}</option>`).join("");
+    // Build ticket rows with individual group selectors
+    const ticketRows = pending.map((p, i) => {
+      const codeCell = p.row.querySelector('[data-field="uniqueCode"]');
+      const subjectCell = p.row.querySelector('[data-field="subject"]');
+      const code = codeCell ? codeCell.textContent.trim() : p.ticketId;
+      const subject = subjectCell ? subjectCell.textContent.trim() : "";
+      const label = subject ? code + " - " + subject.substring(0, 40) + (subject.length > 40 ? "..." : "") : code;
+      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0;">' +
+        '<span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + label + '</span>' +
+        '<select data-idx="' + i + '" class="sp-bulk-group-select" style="padding:4px;font-size:11px;border:1px solid #ddd;border-radius:4px;min-width:120px;">' + groupOpts + '</select>' +
+        '</div>';
+    }).join("");
+
+    // Show assignment modal
     const selOverlay = document.createElement("div");
     selOverlay.id = "sp-monday-modal";
     selOverlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    selOverlay.innerHTML = `
-      <div style="background:#fff;padding:24px;border-radius:12px;max-width:420px;width:90%;font-family:system-ui;">
-        <h3 style="margin:0 0 16px;">⬆ Migración masiva (${pending.length} tickets)</h3>
-        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Grupo destino para todos</label>
-        <select id="sp-bulk-group" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:16px;font-size:13px;">${groupOptions}</select>
-        <div style="display:flex;gap:8px;">
-          <button id="sp-bulk-start" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;">⬆ Iniciar migración</button>
-          <button id="sp-bulk-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>
-        </div>
-      </div>`;
+    selOverlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:560px;width:90%;max-height:85vh;display:flex;flex-direction:column;font-family:system-ui;">' +
+      '<h3 style="margin:0 0 8px;">Migracion masiva (' + pending.length + ' tickets)</h3>' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">' +
+        '<label style="font-size:12px;color:#555;white-space:nowrap;">Asignar todos a:</label>' +
+        '<select id="sp-bulk-all-group" style="flex:1;padding:4px;font-size:11px;border:1px solid #ddd;border-radius:4px;">' + groupOpts + '</select>' +
+        '<button id="sp-bulk-apply-all" style="padding:4px 10px;font-size:11px;border:1px solid #D94040;border-radius:4px;background:#fff;color:#D94040;cursor:pointer;white-space:nowrap;">Aplicar a todos</button>' +
+      '</div>' +
+      '<div style="flex:1;overflow:auto;border:1px solid #eee;border-radius:6px;padding:8px;margin-bottom:12px;">' + ticketRows + '</div>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button id="sp-bulk-start" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;">Iniciar migracion</button>' +
+        '<button id="sp-bulk-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
+      '</div></div>';
     document.body.appendChild(selOverlay);
 
-    const selectedGroup = await new Promise((resolve) => {
-      document.getElementById("sp-bulk-start").addEventListener("click", () => {
-        resolve(document.getElementById("sp-bulk-group").value);
+    // Apply all button
+    document.getElementById("sp-bulk-apply-all").addEventListener("click", function() {
+      var val = document.getElementById("sp-bulk-all-group").value;
+      selOverlay.querySelectorAll(".sp-bulk-group-select").forEach(function(s) { s.value = val; });
+    });
+
+    // Wait for user action
+    const groupAssignments = await new Promise(function(resolve) {
+      document.getElementById("sp-bulk-start").addEventListener("click", function() {
+        var assignments = [];
+        selOverlay.querySelectorAll(".sp-bulk-group-select").forEach(function(s) {
+          assignments[parseInt(s.dataset.idx)] = s.value;
+        });
+        resolve(assignments);
       });
-      document.getElementById("sp-bulk-cancel").addEventListener("click", () => {
+      document.getElementById("sp-bulk-cancel").addEventListener("click", function() {
         selOverlay.remove();
         resolve(null);
       });
     });
     selOverlay.remove();
-    if (!selectedGroup) return;
+    if (!groupAssignments) return;
 
     // Show progress overlay
     const overlay = document.createElement("div");
     overlay.id = "sp-monday-modal";
     overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    overlay.innerHTML = `
-      <div style="background:#fff;padding:24px;border-radius:12px;max-width:420px;width:90%;font-family:system-ui;">
-        <h3 style="margin:0 0 16px;">⬆ Migración masiva</h3>
-        <div id="sp-bulk-status" style="font-size:13px;margin-bottom:12px;">Iniciando...</div>
-        <div style="height:8px;background:#eee;border-radius:4px;"><div id="sp-bulk-bar" style="height:100%;background:#D94040;border-radius:4px;width:0%;transition:width .3s"></div></div>
-        <div id="sp-bulk-log" style="margin-top:12px;max-height:200px;overflow:auto;font-size:12px;color:#666;"></div>
-        <button id="sp-bulk-close" style="margin-top:12px;width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;display:none;">Cerrar</button>
-      </div>`;
+    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:420px;width:90%;font-family:system-ui;">' +
+      '<h3 style="margin:0 0 16px;">Migracion masiva</h3>' +
+      '<div id="sp-bulk-status" style="font-size:13px;margin-bottom:12px;">Iniciando...</div>' +
+      '<div style="height:8px;background:#eee;border-radius:4px;"><div id="sp-bulk-bar" style="height:100%;background:#D94040;border-radius:4px;width:0%;transition:width .3s"></div></div>' +
+      '<div id="sp-bulk-log" style="margin-top:12px;max-height:200px;overflow:auto;font-size:12px;color:#666;"></div>' +
+      '<button id="sp-bulk-close" style="margin-top:12px;width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;display:none;">Cerrar</button>' +
+      '</div>';
     document.body.appendChild(overlay);
 
     const status = document.getElementById("sp-bulk-status");
@@ -356,22 +391,19 @@
 
     for (let i = 0; i < pending.length; i++) {
       const { ticketId, dateText, row } = pending[i];
-      status.textContent = `Procesando ${i + 1} / ${pending.length}...`;
+      const groupId = groupAssignments[i];
+      if (!groupId) continue;
+      status.textContent = "Procesando " + (i + 1) + " / " + pending.length + "...";
       bar.style.width = Math.round(((i + 1) / pending.length) * 100) + "%";
 
       try {
-        // Fetch ticket
-        const ticketRes = await fetch(`${SP_API}/${ticketId}`, {
-          headers: { accept: "application/json", authorization: `Bearer ${spToken}` },
+        const ticketRes = await fetch(SP_API + "/" + ticketId, {
+          headers: { accept: "application/json", authorization: "Bearer " + spToken },
         });
-        if (!ticketRes.ok) throw new Error(`HTTP ${ticketRes.status}`);
+        if (!ticketRes.ok) throw new Error("HTTP " + ticketRes.status);
         const ticketJson = await ticketRes.json();
         const ticket = ticketJson.data || ticketJson;
 
-        // Use selected group
-        const groupId = selectedGroup;
-
-        // Resolve person
         const holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
         let personValue = {};
         if (holderEmail) {
@@ -379,9 +411,9 @@
           if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
         }
 
-        const url = `${BASE_URL}/${ticketId}`;
+        const url = BASE_URL + "/" + ticketId;
         const desc = (ticket.description || "").replace(/<[^>]*>/g, "");
-        const itemName = `${ticket.uniqueCode || ticketId} - ${ticket.subject || "Sin asunto"}`;
+        const itemName = ticket.subject || "Sin asunto";
         const createdDate = new Date(ticket.createdAt).toISOString().slice(0, 10);
         const spPriority = (ticket.incidentPriorityName || ticket.incidentPriority?.name || "").toLowerCase().trim();
         const priorityIndex = PRIORITY_MAP[spPriority] ?? PRIORITY_MAP["medio"];
@@ -392,7 +424,8 @@
           status: { index: 1 },
           priority_mkn9kbe9: { index: priorityIndex },
           cronograma_mkn9hwe3: { from: createdDate, to: createdDate },
-          link_mknkdctz: { url, text: ticket.uniqueCode || url },
+          link_mknkdctz: { url: url, text: ticket.uniqueCode || url },
+          text_mm2c9nhc: ticket.uniqueCode || ticketId,
         });
 
         const result = await mondayQuery(mondayToken,
@@ -403,25 +436,25 @@
         );
 
         const newItemId = result.create_item.id;
-        addToCache(ticketId, newItemId);
+        addToCache(ticket.uniqueCode || ticketId, newItemId);
 
         // Update row UI
-        const btn = row.querySelector(`.${BTN_CLASS}`);
+        const btn = row.querySelector("." + BTN_CLASS);
         if (btn) btn.replaceWith(createSyncedBadge(newItemId));
 
         ok++;
-        log.innerHTML += `<div style="color:#00c875;">✅ ${ticket.uniqueCode} → ${allGroups[groupId] || groupId}</div>`;
+        log.innerHTML += '<div style="color:#00c875;">' + ticket.uniqueCode + ' -> ' + (allGroups[groupId] || groupId) + '</div>';
       } catch (err) {
         fail++;
-        log.innerHTML += `<div style="color:#df2f4a;">❌ ${ticketId}: ${err.message}</div>`;
+        log.innerHTML += '<div style="color:#df2f4a;">' + ticketId + ': ' + err.message + '</div>';
       }
 
       log.scrollTop = log.scrollHeight;
     }
 
-    status.textContent = `Completado: ${ok} migrados, ${fail} errores`;
+    status.textContent = "Completado: " + ok + " migrados, " + fail + " errores";
     closeBtn.style.display = "block";
-    closeBtn.addEventListener("click", () => overlay.remove());
+    closeBtn.addEventListener("click", function() { overlay.remove(); });
   }
 
   // --- Inject buttons ---
@@ -442,9 +475,10 @@
       if (!statusCell || statusCell.textContent.trim() !== "Cerrado") return;
       const firstCell = row.querySelector('[data-field="uniqueCode"]');
       if (!firstCell) return;
+      const uniqueCode = firstCell.textContent.trim();
       const container = firstCell.querySelector(".MuiBox-root") || firstCell;
-      if (synced[ticketId]) {
-        container.prepend(createSyncedBadge(synced[ticketId]));
+      if (uniqueCode && synced[uniqueCode]) {
+        container.prepend(createSyncedBadge(synced[uniqueCode]));
       } else {
         container.prepend(createButton(ticketId));
       }
@@ -539,7 +573,7 @@
 
       const boardId = boards[0].id;
       const groupId = document.getElementById("sp-group-select").value;
-      const itemName = `${ticket.uniqueCode || ticketId} - ${ticket.subject || "Sin asunto"}`;
+      const itemName = ticket.subject || "Sin asunto";
       const createdDate = new Date(ticket.createdAt).toISOString().slice(0, 10);
       const spPriority = (ticket.incidentPriorityName || ticket.incidentPriority?.name || "").toLowerCase().trim();
       const priorityIndex = PRIORITY_MAP[spPriority] ?? PRIORITY_MAP["medio"];
@@ -562,6 +596,7 @@
         priority_mkn9kbe9: { index: priorityIndex },
         cronograma_mkn9hwe3: { from: createdDate, to: createdDate },
         link_mknkdctz: { url: url, text: ticket.uniqueCode || url },
+        text_mm2c9nhc: ticket.uniqueCode || ticketId,
       });
 
       try {
@@ -572,7 +607,7 @@
           { boardId, groupId, itemName, columnValues }
         );
         const newItemId = result.create_item.id;
-        addToCache(ticketId, newItemId);
+        addToCache(ticket.uniqueCode || ticketId, newItemId);
         const row = document.querySelector(`.MuiDataGrid-row[data-id="${ticketId}"]`);
         if (row) {
           const btn = row.querySelector(`.${BTN_CLASS}`);
@@ -597,4 +632,11 @@
   });
   observer.observe(document.body, { childList: true, subtree: true });
   ensureSyncStarted().then(() => injectButtons());
+
+  // --- Re-sync on page focus ---
+  window.addEventListener("focus", () => {
+    syncPromise = null;
+    localStorage.removeItem(CACHE_KEY);
+    ensureSyncStarted().then(() => injectButtons());
+  });
 })();

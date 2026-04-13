@@ -24,8 +24,11 @@
   <input type="password" id="mondayToken" placeholder="Pega tu token de Monday aquí">
   <a href="https://macropay7.monday.com/apps/manage/tokens" target="_blank" style="font-size:11px;color:#D94040;display:block;margin-bottom:8px;">¿No tienes token? Obtenerlo aquí →</a>
 
-  <label>Board ID</label>
-  <input type="text" id="mondayBoardId" placeholder="ID del tablero de Monday (ej: 18406696371)">
+  <button id="loadBoards" style="background:#555;margin-bottom:4px;">🔄 Cargar boards</button>
+  <label>Board</label>
+  <select id="mondayBoardId" style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:8px;">
+    <option value="">-- Primero carga los boards --</option>
+  </select>
 
   <button id="saveToken" style="background:#D94040;">💾 Guardar configuración</button>
   <div id="mondayStatus"></div>

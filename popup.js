@@ -5,20 +5,54 @@ chrome.storage.local.get(["mondayToken", "mondayBoardId"], ({ mondayToken, monda
   if (mondayToken) {
     $("mondayToken").value = mondayToken;
   }
-  if (mondayBoardId) {
-    $("mondayBoardId").value = mondayBoardId;
-  }
   if (mondayToken && mondayBoardId) {
+    // Auto-load boards and preselect
+    loadBoards(mondayToken, mondayBoardId);
     $("mondayStatus").innerHTML = '<span class="saved">✅ Configuración guardada</span>';
   }
+});
+
+// --- Load boards from Monday API ---
+async function loadBoards(token, selectedId) {
+  const select = $("mondayBoardId");
+  select.innerHTML = '<option value="">Cargando boards...</option>';
+  try {
+    const res = await fetch("https://api.monday.com/v2", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: token },
+      body: JSON.stringify({ query: "{ boards(limit:500) { id name } }" }),
+    });
+    const json = await res.json();
+    if (json.errors) throw new Error(json.errors[0].message);
+    const boards = json.data.boards.sort((a, b) => a.name.localeCompare(b.name));
+    select.innerHTML = '<option value="">-- Selecciona un board --</option>';
+    boards.forEach((b) => {
+      const opt = document.createElement("option");
+      opt.value = b.id;
+      opt.textContent = b.name;
+      if (b.id === selectedId) opt.selected = true;
+      select.appendChild(opt);
+    });
+    $("mondayStatus").textContent = `${boards.length} boards cargados`;
+  } catch (e) {
+    select.innerHTML = '<option value="">Error al cargar</option>';
+    $("mondayStatus").textContent = "❌ " + e.message;
+  }
+}
+
+// --- Load boards button ---
+$("loadBoards").addEventListener("click", () => {
+  const token = $("mondayToken").value.trim();
+  if (!token) return ($("mondayStatus").textContent = "⚠️ Ingresa un token primero");
+  loadBoards(token);
 });
 
 // --- Save config ---
 $("saveToken").addEventListener("click", () => {
   const token = $("mondayToken").value.trim();
-  const boardId = $("mondayBoardId").value.trim();
+  const boardId = $("mondayBoardId").value;
   if (!token) return ($("mondayStatus").textContent = "⚠️ Ingresa un token");
-  if (!boardId) return ($("mondayStatus").textContent = "⚠️ Ingresa el Board ID");
+  if (!boardId) return ($("mondayStatus").textContent = "⚠️ Selecciona un board");
   chrome.storage.local.set({ mondayToken: token, mondayBoardId: boardId }, () => {
     $("mondayStatus").innerHTML = '<span class="saved">✅ Configuración guardada</span>';
   });
