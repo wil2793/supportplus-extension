@@ -17,6 +17,15 @@
 
   const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
+  // Extract month (0-indexed) and year from board name like "Tickets DBA - Abril - 2026"
+  function parseBoardDate(boardName) {
+    const m = boardName.match(/- (\w+) - (\d{4})/);
+    if (!m) return null;
+    const monthIdx = MONTH_NAMES.indexOf(m[1]);
+    if (monthIdx === -1) return null;
+    return { month: monthIdx, year: parseInt(m[2]) };
+  }
+
   function getToken() { return localStorage.getItem("token"); }
   function getMondayToken() {
     return new Promise((r, reject) => {
@@ -171,8 +180,8 @@
     badge.className = SYNCED_CLASS;
     badge.textContent = "✅ Migrado";
     badge.title = "Ya migrado a Monday";
-    badge.style.cssText = "display:inline-block;padding:2px 8px;font-size:11px;border:1px solid #2E7D32;border-radius:4px;background:#E8F5E9;color:#2E7D32;font-weight:600;margin-right:6px;white-space:nowrap;cursor:pointer;line-height:normal;box-sizing:border-box;";
-    badge.addEventListener("mouseenter", () => { badge.textContent = "🔗 Ver en Monday"; });
+    badge.style.cssText = "display:inline-block;padding:2px 8px;font-size:11px;border:1px solid #2E7D32;border-radius:4px;background:#E8F5E9;color:#2E7D32;font-weight:600;margin-left:6px;white-space:nowrap;cursor:pointer;line-height:normal;box-sizing:border-box;";
+    badge.addEventListener("mouseenter", () => { badge.textContent = "🔗 Monday"; });
     badge.addEventListener("mouseleave", () => { badge.textContent = "✅ Migrado"; });
     badge.addEventListener("click", (e) => {
       e.stopPropagation(); e.preventDefault();
@@ -187,7 +196,7 @@
     btn.textContent = "🙂 Migrar";
     btn.title = "Migrar a Monday";
     btn.style.cssText =
-      "padding:2px 8px;font-size:11px;cursor:pointer;border:1px solid #D94040;border-radius:4px;background:#D94040;color:#fff;margin-right:6px;white-space:nowrap;";
+      "padding:2px 8px;font-size:11px;cursor:pointer;border:1px solid #D94040;border-radius:4px;background:#D94040;color:#fff;margin-left:6px;white-space:nowrap;";
     btn.addEventListener("mouseenter", () => { if (!btn.disabled) btn.textContent = "🫡 Migrar"; });
     btn.addEventListener("mouseleave", () => { if (!btn.disabled) btn.textContent = "🙂 Migrar"; });
     btn.addEventListener("click", (e) => {
@@ -229,34 +238,55 @@
     return m ? m[1] : null;
   }
 
-  function injectDetailButton() {
+  let detailLoading = false;
+  async function injectDetailButton() {
     if (document.getElementById(DETAIL_BTN_ID)) return;
-    const ticketId = getDetailTicketId();
-    if (!ticketId) return;
-    const stack = document.querySelector(".MuiBox-root .MuiStack-root");
-    if (!stack) return;
+    if (detailLoading) return;
+    detailLoading = true;
+    try {
+      const ticketId = getDetailTicketId();
+      if (!ticketId) return;
 
-    // Only show if ticket is "Cerrado" - search for status chip/badge in the page
-    const allChips = document.querySelectorAll(".MuiChip-label, .MuiTypography-root, span");
+      // Find the box with uniqueCode and status chip (right sidebar)
+      let container = null;
+      document.querySelectorAll(".MuiChip-label").forEach((chip) => {
+        if (container) return;
+        const box = chip.closest(".MuiBox-root");
+        if (box && box.querySelector("p.MuiTypography-body1")) container = box;
+      });
+      if (!container) return;
+
+      const spToken = getToken();
+      if (!spToken) return;
+
+    let uniqueCode = "";
     let isClosed = false;
-    for (const el of allChips) {
-      if (el.textContent.trim() === "Cerrado") { isClosed = true; break; }
-    }
+    try {
+      const res = await fetch(SP_API + "/" + ticketId, {
+        headers: { accept: "application/json", authorization: "Bearer " + spToken },
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      const ticket = json.data || json;
+      uniqueCode = ticket.uniqueCode || "";
+      isClosed = ticket.ticketStatus?.type?.name === "Cerrado" || ticket.ticketStatus?.name === "Cerrado";
+    } catch (e) { return; }
 
-    const synced = getCache() || {};
-    if (synced[ticketId]) {
-      // Always show the "Ver en Monday" badge if already synced
+    const synced = await ensureSyncStarted();
+    if (uniqueCode && synced[uniqueCode]) {
+      const mondayItemId = synced[uniqueCode];
       const badge = document.createElement("span");
       badge.id = DETAIL_BTN_ID;
       badge.textContent = "✅ Migrado";
       badge.style.cssText =
         "padding:6px 14px;font-size:12px;border-radius:6px;background:#E8F5E9;color:#2E7D32;font-weight:600;white-space:nowrap;cursor:pointer;";
-      badge.addEventListener("mouseenter", () => { badge.textContent = "🔗 Ver en Monday"; });
+      badge.addEventListener("mouseenter", () => { badge.textContent = "🔗 Monday"; });
       badge.addEventListener("mouseleave", () => { badge.textContent = "✅ Migrado"; });
       badge.addEventListener("click", () => {
-        window.open(`https://macropay7.monday.com/boards/18402162782/pulses/${synced[ticketId]}`, "_blank");
+        window.open("https://macropay7.monday.com/boards/18402162782/pulses/" + mondayItemId, "_blank");
       });
-      stack.prepend(badge);
+      const chip = container.querySelector(".MuiChip-root");
+      container.insertBefore(badge, chip);
     } else if (isClosed) {
       const btn = document.createElement("button");
       btn.id = DETAIL_BTN_ID;
@@ -270,24 +300,41 @@
         btn.disabled = true;
         handleMondayClick(ticketId).finally(() => { btn.textContent = "🙂 Migrar a Monday"; btn.disabled = false; });
       });
-      stack.prepend(btn);
+      const chip2 = container.querySelector(".MuiChip-root");
+      container.insertBefore(btn, chip2);
     }
+    } finally { detailLoading = false; }
   }
 
   function injectBulkButton() {
     if (document.getElementById(BULK_BTN_ID)) return;
-    const stack = document.querySelector(".MuiBox-root .MuiStack-root");
-    if (!stack) return;
+    let container = document.querySelector(".MuiBox-root .MuiStack-root");
+    let insertMethod = "prepend";
+    if (!container) {
+      // Search view: insert before the search icon button
+      const searchBtn = document.querySelector('button[aria-label="Buscar"]');
+      if (searchBtn) {
+        container = searchBtn.parentElement;
+        insertMethod = "beforeSearch";
+      }
+    }
+    if (!container) return;
 
     const btn = document.createElement("button");
     btn.id = BULK_BTN_ID;
-    btn.textContent = "� Migrar todos";
+    btn.textContent = "😨 Migrar todos";
     btn.style.cssText =
-      "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#D94040;color:#fff;font-weight:600;white-space:nowrap;";
+      "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#D94040;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
     btn.addEventListener("mouseenter", () => { btn.textContent = "😱 Migrar todos"; });
     btn.addEventListener("mouseleave", () => { btn.textContent = "😨 Migrar todos"; });
     btn.addEventListener("click", handleBulkMigrate);
-    stack.prepend(btn);
+
+    if (insertMethod === "beforeSearch") {
+      const searchBtn = container.querySelector('button[aria-label="Buscar"]');
+      container.insertBefore(btn, searchBtn);
+    } else {
+      container.prepend(btn);
+    }
   }
 
   async function handleBulkMigrate() {
@@ -307,7 +354,9 @@
     if (!pending.length) return alert("No hay tickets pendientes de migrar en esta pagina.");
 
     // Fetch groups from configured board
-    const boardData = await mondayQuery(mondayToken, `query ($boardId: [ID!]!) { boards(ids: $boardId) { groups { id title } } }`, { boardId });
+    const boardData = await mondayQuery(mondayToken, `query ($boardId: [ID!]!) { boards(ids: $boardId) { name groups { id title } } }`, { boardId });
+    const boardName = boardData.boards[0]?.name || "";
+    const boardDate = parseBoardDate(boardName);
     const groups = boardData.boards[0]?.groups || [];
     const allGroups = {};
     for (const g of groups) allGroups[g.id] = g.title;
@@ -404,6 +453,26 @@
         const ticketJson = await ticketRes.json();
         const ticket = ticketJson.data || ticketJson;
 
+        // Validate ticket date matches board period
+        if (boardDate) {
+          const ticketCreated = new Date(ticket.createdAt);
+          if (ticketCreated.getMonth() !== boardDate.month || ticketCreated.getFullYear() !== boardDate.year) {
+            var ticketPeriod = MONTH_NAMES[ticketCreated.getMonth()] + " " + ticketCreated.getFullYear();
+            log.innerHTML += '<div style="color:#e67e22;">⚠ ' + (ticket.uniqueCode || ticketId) + ': Ticket de ' + ticketPeriod + ', no corresponde al board (' + MONTH_NAMES[boardDate.month] + ' ' + boardDate.year + ')</div>';
+            log.scrollTop = log.scrollHeight;
+            fail++;
+            continue;
+          }
+        }
+
+        // Check if already migrated
+        const currentCache = getCache() || {};
+        if (ticket.uniqueCode && currentCache[ticket.uniqueCode]) {
+          log.innerHTML += '<div style="color:#e67e22;">' + (ticket.uniqueCode || ticketId) + ': Ya migrado, se omite</div>';
+          log.scrollTop = log.scrollHeight;
+          continue;
+        }
+
         const holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
         let personValue = {};
         if (holderEmail) {
@@ -478,9 +547,9 @@
       const uniqueCode = firstCell.textContent.trim();
       const container = firstCell.querySelector(".MuiBox-root") || firstCell;
       if (uniqueCode && synced[uniqueCode]) {
-        container.prepend(createSyncedBadge(synced[uniqueCode]));
+        container.appendChild(createSyncedBadge(synced[uniqueCode]));
       } else {
-        container.prepend(createButton(ticketId));
+        container.appendChild(createButton(ticketId));
       }
     });
     injectBulkButton();
@@ -534,7 +603,7 @@
 
     overlay.innerHTML = `
       <div style="background:#fff;padding:24px;border-radius:12px;max-width:520px;width:90%;max-height:85vh;overflow:auto;font-family:system-ui;">
-        <h3 style="margin:0 0 16px;">↗ Migrar Ticket a Monday</h3>
+        <h3 style="margin:0 0 16px;">📤 Migrar Ticket a Monday</h3>
         <div style="background:#f5f5f5;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px;">
           <div><b>Folio:</b> ${ticket.uniqueCode || "N/A"}</div>
           <div><b>Asunto:</b> ${ticket.subject || "N/A"}</div>
@@ -572,6 +641,17 @@
       msg.textContent = "Creando item en Monday...";
 
       const boardId = boards[0].id;
+      const boardName = boards[0].name;
+      const boardDate = parseBoardDate(boardName);
+      const ticketDate = new Date(ticket.createdAt);
+
+      if (boardDate && (ticketDate.getMonth() !== boardDate.month || ticketDate.getFullYear() !== boardDate.year)) {
+        const ticketMonthName = MONTH_NAMES[ticketDate.getMonth()];
+        msg.textContent = "Este ticket es de " + ticketMonthName + " " + ticketDate.getFullYear() + " y el board seleccionado es de " + MONTH_NAMES[boardDate.month] + " " + boardDate.year + ". Selecciona el board correcto.";
+        sendBtn.disabled = false;
+        return;
+      }
+
       const groupId = document.getElementById("sp-group-select").value;
       const itemName = ticket.subject || "Sin asunto";
       const createdDate = new Date(ticket.createdAt).toISOString().slice(0, 10);
@@ -587,6 +667,23 @@
           console.log("[SP Monday] Buscando email:", holderEmail, "→ userId:", userId);
           if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
         } catch (e) { console.warn("[SP Monday] Error buscando usuario:", e); }
+      }
+
+      // Check if already migrated before creating
+      syncPromise = null;
+      localStorage.removeItem(CACHE_KEY);
+      const freshSynced = await ensureSyncStarted();
+      if (ticket.uniqueCode && freshSynced[ticket.uniqueCode]) {
+        msg.textContent = "Este ticket ya fue migrado a Monday.";
+        sendBtn.disabled = false;
+        const detailBtn = document.getElementById(DETAIL_BTN_ID);
+        if (detailBtn) {
+          const badge = createSyncedBadge(freshSynced[ticket.uniqueCode]);
+          badge.id = DETAIL_BTN_ID;
+          badge.style.cssText = "padding:6px 14px;font-size:12px;border-radius:6px;background:#E8F5E9;color:#2E7D32;font-weight:600;white-space:nowrap;cursor:pointer;";
+          detailBtn.replaceWith(badge);
+        }
+        return;
       }
 
       const columnValues = JSON.stringify({
@@ -613,7 +710,15 @@
           const btn = row.querySelector(`.${BTN_CLASS}`);
           if (btn) btn.replaceWith(createSyncedBadge(newItemId));
         }
-        msg.innerHTML = '✅ Item creado! <a href="https://macropay7.monday.com" target="_blank" style="color:#D94040;">Ver en Monday</a>';
+        // Update detail view button if present
+        const detailBtn = document.getElementById(DETAIL_BTN_ID);
+        if (detailBtn) {
+          const badge = createSyncedBadge(newItemId);
+          badge.id = DETAIL_BTN_ID;
+          badge.style.cssText = "padding:6px 14px;font-size:12px;border-radius:6px;background:#E8F5E9;color:#2E7D32;font-weight:600;white-space:nowrap;cursor:pointer;";
+          detailBtn.replaceWith(badge);
+        }
+        msg.innerHTML = '✅ Item creado! <a href="https://macropay7.monday.com" target="_blank" style="color:#D94040;">Monday</a>';
       } catch (err) {
         msg.textContent = "❌ Error: " + err.message;
         sendBtn.disabled = false;

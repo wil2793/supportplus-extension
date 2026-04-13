@@ -24,7 +24,10 @@ async function loadBoards(token, selectedId) {
     });
     const json = await res.json();
     if (json.errors) throw new Error(json.errors[0].message);
-    const boards = json.data.boards.sort((a, b) => a.name.localeCompare(b.name));
+    const currentYear = new Date().getFullYear().toString();
+    const boards = json.data.boards
+      .filter((b) => b.name.startsWith("Tickets DBA") && b.name.includes(currentYear))
+      .sort((a, b) => a.name.localeCompare(b.name));
     select.innerHTML = '<option value="">-- Selecciona un board --</option>';
     boards.forEach((b) => {
       const opt = document.createElement("option");
