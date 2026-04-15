@@ -615,7 +615,7 @@
         </select>
         <div id="sp-monday-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>
         <div style="display:flex;gap:8px;">
-          <button id="sp-monday-send" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;">⬆ Crear en Monday</button>
+          <button id="sp-monday-send" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">💾 Crear en Monday</button>
           <button id="sp-monday-close" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cerrar</button>
         </div>
       </div>`;
@@ -638,7 +638,15 @@
 
     sendBtn.addEventListener("click", async () => {
       sendBtn.disabled = true;
-      msg.textContent = "Creando item en Monday...";
+      sendBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Creando...';
+      // Inject spinner keyframes if not present
+      if (!document.getElementById("sp-spinner-style")) {
+        const style = document.createElement("style");
+        style.id = "sp-spinner-style";
+        style.textContent = "@keyframes sp-spin { to { transform: rotate(360deg); } }";
+        document.head.appendChild(style);
+      }
+      msg.textContent = "";
 
       const boardId = boards[0].id;
       const boardName = boards[0].name;
@@ -648,6 +656,7 @@
       if (boardDate && (ticketDate.getMonth() !== boardDate.month || ticketDate.getFullYear() !== boardDate.year)) {
         const ticketMonthName = MONTH_NAMES[ticketDate.getMonth()];
         msg.textContent = "Este ticket es de " + ticketMonthName + " " + ticketDate.getFullYear() + " y el board seleccionado es de " + MONTH_NAMES[boardDate.month] + " " + boardDate.year + ". Selecciona el board correcto.";
+        sendBtn.innerHTML = "💾 Crear en Monday";
         sendBtn.disabled = false;
         return;
       }
@@ -675,6 +684,7 @@
       const freshSynced = await ensureSyncStarted();
       if (ticket.uniqueCode && freshSynced[ticket.uniqueCode]) {
         msg.textContent = "Este ticket ya fue migrado a Monday.";
+        sendBtn.innerHTML = "💾 Crear en Monday";
         sendBtn.disabled = false;
         const detailBtn = document.getElementById(DETAIL_BTN_ID);
         if (detailBtn) {
@@ -718,9 +728,25 @@
           badge.style.cssText = "padding:6px 14px;font-size:12px;border-radius:6px;background:#E8F5E9;color:#2E7D32;font-weight:600;white-space:nowrap;cursor:pointer;";
           detailBtn.replaceWith(badge);
         }
-        msg.innerHTML = '✅ Item creado! <a href="https://macropay7.monday.com" target="_blank" style="color:#D94040;">Monday</a>';
+        msg.innerHTML = '✅ Item creado!';
+        sendBtn.innerHTML = "✅ Creado";
+        sendBtn.disabled = true;
+        const modal = document.getElementById("sp-monday-modal"); if (modal) modal.remove();
+        // Show success toast
+        const toast = document.createElement("div");
+        toast.style.cssText = "position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:100000;background:#2E7D32;color:#fff;padding:12px 20px;border-radius:8px;font-family:system-ui;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.2);display:flex;align-items:center;gap:8px;animation:sp-toast-in 0.3s ease;";
+        toast.innerHTML = "✅ Ticket migrado a Monday";
+        if (!document.getElementById("sp-toast-style")) {
+          const s = document.createElement("style");
+          s.id = "sp-toast-style";
+          s.textContent = "@keyframes sp-toast-in{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}@keyframes sp-toast-out{from{opacity:1}to{opacity:0;transform:translateY(-10px)}}";
+          document.head.appendChild(s);
+        }
+        document.body.appendChild(toast);
+        setTimeout(() => { toast.style.animation = "sp-toast-out 0.3s ease forwards"; setTimeout(() => toast.remove(), 300); }, 3000);
       } catch (err) {
         msg.textContent = "❌ Error: " + err.message;
+        sendBtn.innerHTML = "💾 Crear en Monday";
         sendBtn.disabled = false;
       }
     });
