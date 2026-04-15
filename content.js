@@ -684,8 +684,9 @@
       const freshSynced = await ensureSyncStarted();
       if (ticket.uniqueCode && freshSynced[ticket.uniqueCode]) {
         msg.textContent = "Este ticket ya fue migrado a Monday.";
-        sendBtn.innerHTML = "💾 Crear en Monday";
-        sendBtn.disabled = false;
+        sendBtn.innerHTML = "✅ Migrado";
+        sendBtn.disabled = true;
+        sendBtn.style.background = "#2E7D32";
         const detailBtn = document.getElementById(DETAIL_BTN_ID);
         if (detailBtn) {
           const badge = createSyncedBadge(freshSynced[ticket.uniqueCode]);
