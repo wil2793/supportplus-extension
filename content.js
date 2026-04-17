@@ -4,6 +4,7 @@
   const BTN_CLASS = "sp-monday-btn";
   const SYNCED_CLASS = "sp-monday-synced";
   const TAKE_BTN_CLASS = "sp-take-btn";
+  const STEAL_BTN_CLASS = "sp-steal-btn";
   const BULK_BTN_ID = "sp-monday-bulk";
   const BASE_URL = "https://macropay.supportplus.mx/es/dashboard/tickets";
   const CACHE_KEY = "sp_monday_synced";
@@ -262,6 +263,9 @@
 
     let uniqueCode = "";
     let isClosed = false;
+    let isWaiting = false;
+    let isAssigned = false;
+    let holderName = "";
     try {
       const res = await fetch(SP_API + "/" + ticketId, {
         headers: { accept: "application/json", authorization: "Bearer " + spToken },
@@ -271,6 +275,10 @@
       const ticket = json.data || json;
       uniqueCode = ticket.uniqueCode || "";
       isClosed = ticket.ticketStatus?.type?.name === "Cerrado" || ticket.ticketStatus?.name === "Cerrado";
+      isWaiting = ticket.ticketStatus?.name === "En espera";
+      isAssigned = ticket.ticketStatus?.name === "Asignado";
+      holderName = ticket.ticketHolder?.ticketHolderLog?.fullName || "";
+      console.log("[SP Monday] Detail ticket status:", ticket.ticketStatus?.name, "| type:", ticket.ticketStatus?.type?.name, "| closed:", isClosed, "| waiting:", isWaiting, "| assigned:", isAssigned, "| holder:", holderName);
     } catch (e) { return; }
 
     const synced = await ensureSyncStarted();
@@ -303,6 +311,39 @@
       });
       const chip2 = container.querySelector(".MuiChip-root");
       container.insertBefore(btn, chip2);
+    } else if (isWaiting) {
+      const takeBtn = document.createElement("button");
+      takeBtn.id = DETAIL_BTN_ID;
+      takeBtn.textContent = "🤚 Tomar ticket";
+      takeBtn.style.cssText =
+        "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#1976D2;color:#fff;font-weight:600;white-space:nowrap;";
+      takeBtn.addEventListener("mouseenter", () => { if (!takeBtn.disabled) takeBtn.textContent = "✊ Tomar ticket"; });
+      takeBtn.addEventListener("mouseleave", () => { if (!takeBtn.disabled) takeBtn.textContent = "🤚 Tomar ticket"; });
+      takeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        showTakeModal(ticketId, takeBtn);
+      });
+      const chip3 = container.querySelector(".MuiChip-root");
+      container.insertBefore(takeBtn, chip3);
+    } else if (isAssigned) {
+      const myName = getLoggedUserName();
+      if (holderName && myName && holderName !== myName) {
+        const stealBtn = document.createElement("button");
+        stealBtn.id = DETAIL_BTN_ID;
+        stealBtn.textContent = "🥷 Robar ticket";
+        stealBtn.style.cssText =
+          "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#E65100;color:#fff;font-weight:600;white-space:nowrap;";
+        stealBtn.addEventListener("mouseenter", () => { if (!stealBtn.disabled) stealBtn.textContent = "💀 Robar ticket"; });
+        stealBtn.addEventListener("mouseleave", () => { if (!stealBtn.disabled) stealBtn.textContent = "🥷 Robar ticket"; });
+        stealBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          showTakeModal(ticketId, stealBtn);
+        });
+        const chip4 = container.querySelector(".MuiChip-root");
+        container.insertBefore(stealBtn, chip4);
+      }
     }
     } finally { detailLoading = false; }
   }
@@ -621,13 +662,17 @@
 
     confirmBtn.addEventListener("click", async function() {
       confirmBtn.disabled = true;
+      confirmBtn.style.background = "#999";
       confirmBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Tomando...';
+      cancelBtn.style.display = "none";
 
       var profileId = await getMyProfileId();
       if (!profileId) {
         msg.textContent = "No se pudo obtener tu perfil.";
         confirmBtn.innerHTML = "✊ Tomar ticket";
+        confirmBtn.style.background = "#1976D2";
         confirmBtn.disabled = false;
+        cancelBtn.style.display = "";
         return;
       }
 
@@ -679,9 +724,28 @@
       } catch (err) {
         msg.textContent = "Error: " + err.message;
         confirmBtn.innerHTML = "✊ Tomar ticket";
+        confirmBtn.style.background = "#1976D2";
         confirmBtn.disabled = false;
+        cancelBtn.style.display = "";
       }
     });
+  }
+
+  function createStealButton(ticketId) {
+    const btn = document.createElement("button");
+    btn.className = STEAL_BTN_CLASS;
+    btn.textContent = "🥷 Robar";
+    btn.title = "Robar ticket";
+    btn.style.cssText =
+      "padding:2px 8px;font-size:11px;cursor:pointer;border:1px solid #E65100;border-radius:4px;background:#E65100;color:#fff;margin-left:6px;white-space:nowrap;";
+    btn.addEventListener("mouseenter", function() { if (!btn.disabled) btn.textContent = "💀 Robar"; });
+    btn.addEventListener("mouseleave", function() { if (!btn.disabled) btn.textContent = "🥷 Robar"; });
+    btn.addEventListener("click", function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      showTakeModal(ticketId, btn);
+    });
+    return btn;
   }
 
   async function injectButtons() {
@@ -702,9 +766,33 @@
       if (!firstCell) return;
       const container = firstCell.querySelector(".MuiBox-root") || firstCell;
 
+      // Clean up stale buttons if status changed
+      if (statusText !== "En espera") {
+        const oldTake = row.querySelector("." + TAKE_BTN_CLASS);
+        if (oldTake) oldTake.remove();
+      }
+      if (statusText !== "Cerrado") {
+        const oldMigrate = row.querySelector("." + BTN_CLASS);
+        if (oldMigrate) oldMigrate.remove();
+      }
+      if (statusText !== "Asignado") {
+        const oldSteal = row.querySelector("." + STEAL_BTN_CLASS);
+        if (oldSteal) oldSteal.remove();
+      }
+
       // Inject take button for "En espera" tickets
       if (statusText === "En espera" && !row.querySelector("." + TAKE_BTN_CLASS)) {
         container.appendChild(createTakeButton(ticketId));
+      }
+
+      // Inject steal button for "Asignado" tickets not assigned to me
+      if (statusText === "Asignado" && !row.querySelector("." + STEAL_BTN_CLASS)) {
+        const responsibleCell = row.querySelector('[data-field="responsibleName"]');
+        const responsibleName = responsibleCell ? responsibleCell.textContent.trim() : "";
+        const myName = getLoggedUserName();
+        if (responsibleName && myName && responsibleName !== myName) {
+          container.appendChild(createStealButton(ticketId));
+        }
       }
 
       // Inject migrate buttons for "Cerrado" tickets
@@ -805,7 +893,10 @@
 
     sendBtn.addEventListener("click", async () => {
       sendBtn.disabled = true;
+      sendBtn.style.background = "#999";
       sendBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Creando...';
+      var closeBtn = document.getElementById("sp-monday-close");
+      if (closeBtn) closeBtn.style.display = "none";
       // Inject spinner keyframes if not present
       if (!document.getElementById("sp-spinner-style")) {
         const style = document.createElement("style");
@@ -824,7 +915,10 @@
         const ticketMonthName = MONTH_NAMES[ticketDate.getMonth()];
         msg.textContent = "Este ticket es de " + ticketMonthName + " " + ticketDate.getFullYear() + " y el board seleccionado es de " + MONTH_NAMES[boardDate.month] + " " + boardDate.year + ". Selecciona el board correcto.";
         sendBtn.innerHTML = "💾 Crear en Monday";
+        sendBtn.style.background = "#D94040";
         sendBtn.disabled = false;
+        var closeBtnA = document.getElementById("sp-monday-close");
+        if (closeBtnA) closeBtnA.style.display = "";
         return;
       }
 
@@ -915,7 +1009,10 @@
       } catch (err) {
         msg.textContent = "❌ Error: " + err.message;
         sendBtn.innerHTML = "💾 Crear en Monday";
+        sendBtn.style.background = "#D94040";
         sendBtn.disabled = false;
+        var closeBtnB = document.getElementById("sp-monday-close");
+        if (closeBtnB) closeBtnB.style.display = "";
       }
     });
 
