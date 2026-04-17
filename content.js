@@ -3,6 +3,7 @@
   const MONDAY_API = "https://api.monday.com/v2";
   const BTN_CLASS = "sp-monday-btn";
   const SYNCED_CLASS = "sp-monday-synced";
+  const TAKE_BTN_CLASS = "sp-take-btn";
   const BULK_BTN_ID = "sp-monday-bulk";
   const BASE_URL = "https://macropay.supportplus.mx/es/dashboard/tickets";
   const CACHE_KEY = "sp_monday_synced";
@@ -527,6 +528,162 @@
   }
 
   // --- Inject buttons ---
+  const HIGHLIGHT_CLASS = "sp-my-row";
+
+  function getLoggedUserName() {
+    const el = document.querySelector('[class*="warapperNameUserAndLogout"] p');
+    return el ? el.textContent.trim() : "";
+  }
+
+  function highlightMyRows() {
+    const myName = getLoggedUserName();
+    if (!myName) return;
+    document.querySelectorAll(".MuiDataGrid-row").forEach((row) => {
+      if (row.classList.contains(HIGHLIGHT_CLASS)) return;
+      const responsibleCell = row.querySelector('[data-field="responsibleName"]');
+      if (responsibleCell && responsibleCell.textContent.trim() === myName) {
+        row.classList.add(HIGHLIGHT_CLASS);
+        row.style.backgroundColor = "rgba(217, 64, 64, 0.08)";
+      }
+    });
+  }
+
+  // --- Take ticket (reassign) ---
+  let myProfileId = null;
+  async function getMyProfileId() {
+    if (myProfileId) return myProfileId;
+    const spToken = getToken();
+    if (!spToken) return null;
+    const myName = getLoggedUserName();
+    if (!myName) return null;
+    try {
+      const res = await fetch(SP_API.replace("/tickets/web", "") + "/tickets/web/active-profiles-by-resolution-group/19", {
+        headers: { accept: "application/json", authorization: "Bearer " + spToken },
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      const profiles = json.data || json;
+      const me = profiles.find(function(p) { return p.profileFullName === myName; });
+      if (me) myProfileId = me.profileId;
+      return myProfileId;
+    } catch (e) { return null; }
+  }
+
+  function createTakeButton(ticketId) {
+    const btn = document.createElement("button");
+    btn.className = TAKE_BTN_CLASS;
+    btn.textContent = "🤚 Tomar";
+    btn.title = "Tomar ticket";
+    btn.style.cssText =
+      "padding:2px 8px;font-size:11px;cursor:pointer;border:1px solid #1976D2;border-radius:4px;background:#1976D2;color:#fff;margin-left:6px;white-space:nowrap;";
+    btn.addEventListener("mouseenter", function() { if (!btn.disabled) btn.textContent = "✊ Tomar"; });
+    btn.addEventListener("mouseleave", function() { if (!btn.disabled) btn.textContent = "🤚 Tomar"; });
+    btn.addEventListener("click", function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      showTakeModal(ticketId, btn);
+    });
+    return btn;
+  }
+
+  function showTakeModal(ticketId, originalBtn) {
+    var existing = document.getElementById("sp-take-modal");
+    if (existing) existing.remove();
+
+    var overlay = document.createElement("div");
+    overlay.id = "sp-take-modal";
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:420px;width:90%;font-family:system-ui;">' +
+      '<h3 style="margin:0 0 16px;">🤚 Tomar ticket</h3>' +
+      '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario (opcional)</label>' +
+      '<textarea id="sp-take-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:80px;resize:vertical;box-sizing:border-box;margin-bottom:12px;" placeholder="Se revisa"></textarea>' +
+      '<div id="sp-take-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button id="sp-take-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">✊ Tomar ticket</button>' +
+        '<button id="sp-take-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
+      '</div></div>';
+    document.body.appendChild(overlay);
+
+    // Inject spinner keyframes if not present
+    if (!document.getElementById("sp-spinner-style")) {
+      var style = document.createElement("style");
+      style.id = "sp-spinner-style";
+      style.textContent = "@keyframes sp-spin { to { transform: rotate(360deg); } }";
+      document.head.appendChild(style);
+    }
+
+    var confirmBtn = document.getElementById("sp-take-confirm");
+    var cancelBtn = document.getElementById("sp-take-cancel");
+    var msg = document.getElementById("sp-take-msg");
+
+    cancelBtn.addEventListener("click", function() { overlay.remove(); });
+    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+    confirmBtn.addEventListener("click", async function() {
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Tomando...';
+
+      var profileId = await getMyProfileId();
+      if (!profileId) {
+        msg.textContent = "No se pudo obtener tu perfil.";
+        confirmBtn.innerHTML = "✊ Tomar ticket";
+        confirmBtn.disabled = false;
+        return;
+      }
+
+      var comment = document.getElementById("sp-take-comment").value.trim() || "Se revisa";
+      var spToken = getToken();
+
+      try {
+        var res = await fetch(SP_API + "/reassign/" + ticketId, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+          body: JSON.stringify({
+            ticketCommentRequest: { internal: false, content: comment },
+            resolutionGroupId: 19,
+            serviceId: null,
+            responsibleProfileId: profileId,
+            resolutionGroup: { label: "Infraestructura DBA", value: 19 }
+          }),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var json = await res.json();
+        if (json.success) {
+          overlay.remove();
+          // Update button
+          originalBtn.textContent = "✅ Tomado";
+          originalBtn.style.background = "#2E7D32";
+          originalBtn.style.borderColor = "#2E7D32";
+          originalBtn.disabled = true;
+          // Highlight row
+          var row = originalBtn.closest(".MuiDataGrid-row");
+          if (row) {
+            row.classList.add(HIGHLIGHT_CLASS);
+            row.style.backgroundColor = "rgba(217, 64, 64, 0.08)";
+          }
+          // Toast
+          var toast = document.createElement("div");
+          toast.style.cssText = "position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:100000;background:#2E7D32;color:#fff;padding:12px 20px;border-radius:8px;font-family:system-ui;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.2);animation:sp-toast-in 0.3s ease;";
+          toast.textContent = "✅ Ticket tomado";
+          if (!document.getElementById("sp-toast-style")) {
+            var s = document.createElement("style");
+            s.id = "sp-toast-style";
+            s.textContent = "@keyframes sp-toast-in{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}@keyframes sp-toast-out{from{opacity:1}to{opacity:0;transform:translateX(-50%) translateY(-10px)}}";
+            document.head.appendChild(s);
+          }
+          document.body.appendChild(toast);
+          setTimeout(function() { toast.style.animation = "sp-toast-out 0.3s ease forwards"; setTimeout(function() { toast.remove(); }, 300); }, 3000);
+        } else {
+          throw new Error("No success");
+        }
+      } catch (err) {
+        msg.textContent = "Error: " + err.message;
+        confirmBtn.innerHTML = "✊ Tomar ticket";
+        confirmBtn.disabled = false;
+      }
+    });
+  }
+
   async function injectButtons() {
     const synced = await ensureSyncStarted();
 
@@ -537,21 +694,31 @@
 
     const rows = document.querySelectorAll(".MuiDataGrid-row");
     rows.forEach((row) => {
-      if (row.querySelector(`.${BTN_CLASS}`) || row.querySelector(`.${SYNCED_CLASS}`)) return;
       const ticketId = row.getAttribute("data-id");
       if (!ticketId) return;
       const statusCell = row.querySelector('[data-field="ticketStatusName"]');
-      if (!statusCell || statusCell.textContent.trim() !== "Cerrado") return;
+      const statusText = statusCell ? statusCell.textContent.trim() : "";
       const firstCell = row.querySelector('[data-field="uniqueCode"]');
       if (!firstCell) return;
-      const uniqueCode = firstCell.textContent.trim();
       const container = firstCell.querySelector(".MuiBox-root") || firstCell;
-      if (uniqueCode && synced[uniqueCode]) {
-        container.appendChild(createSyncedBadge(synced[uniqueCode]));
-      } else {
-        container.appendChild(createButton(ticketId));
+
+      // Inject take button for "En espera" tickets
+      if (statusText === "En espera" && !row.querySelector("." + TAKE_BTN_CLASS)) {
+        container.appendChild(createTakeButton(ticketId));
+      }
+
+      // Inject migrate buttons for "Cerrado" tickets
+      if (statusText === "Cerrado") {
+        if (row.querySelector("." + BTN_CLASS) || row.querySelector("." + SYNCED_CLASS)) return;
+        const uniqueCode = firstCell.textContent.trim();
+        if (uniqueCode && synced[uniqueCode]) {
+          container.appendChild(createSyncedBadge(synced[uniqueCode]));
+        } else {
+          container.appendChild(createButton(ticketId));
+        }
       }
     });
+    highlightMyRows();
     injectBulkButton();
   }
 
