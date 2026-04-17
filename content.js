@@ -5,7 +5,9 @@
   const SYNCED_CLASS = "sp-monday-synced";
   const TAKE_BTN_CLASS = "sp-take-btn";
   const STEAL_BTN_CLASS = "sp-steal-btn";
+  const CLOSE_BTN_CLASS = "sp-close-btn";
   const BULK_BTN_ID = "sp-monday-bulk";
+  const BULK_CLOSE_BTN_ID = "sp-close-bulk";
   const BASE_URL = "https://macropay.supportplus.mx/es/dashboard/tickets";
   const CACHE_KEY = "sp_monday_synced";
   const CACHE_TTL = 1000 * 60 * 30;
@@ -367,8 +369,8 @@
     btn.textContent = "😨 Migrar todos";
     btn.style.cssText =
       "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#D94040;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-    btn.addEventListener("mouseenter", () => { btn.textContent = "😱 Migrar todos"; });
-    btn.addEventListener("mouseleave", () => { btn.textContent = "😨 Migrar todos"; });
+    btn.addEventListener("mouseenter", () => { if (!btn.disabled) btn.textContent = "😱 Migrar todos"; });
+    btn.addEventListener("mouseleave", () => { if (!btn.disabled) btn.textContent = "😨 Migrar todos"; });
     btn.addEventListener("click", handleBulkMigrate);
 
     if (insertMethod === "beforeSearch") {
@@ -380,12 +382,32 @@
   }
 
   async function handleBulkMigrate() {
+    // Prevent double click
+    const bulkBtn = document.getElementById(BULK_BTN_ID);
+    if (bulkBtn) {
+      bulkBtn.disabled = true;
+      bulkBtn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Cargando...';
+      if (!document.getElementById("sp-spinner-style")) {
+        var style = document.createElement("style");
+        style.id = "sp-spinner-style";
+        style.textContent = "@keyframes sp-spin { to { transform: rotate(360deg); } }";
+        document.head.appendChild(style);
+      }
+    }
+
+    function restoreBulkBtn() {
+      if (bulkBtn) {
+        bulkBtn.disabled = false;
+        bulkBtn.textContent = "😨 Migrar todos";
+      }
+    }
+
     const mondayToken = await getMondayToken();
-    if (!mondayToken) return alert("Configura tu token de Monday en el popup de la extension primero.");
+    if (!mondayToken) { restoreBulkBtn(); return alert("Configura tu token de Monday en el popup de la extension primero."); }
     const boardId = await getMondayBoardId();
-    if (!boardId) return alert("Configura el Board ID en el popup de la extension primero.");
+    if (!boardId) { restoreBulkBtn(); return alert("Configura el Board ID en el popup de la extension primero."); }
     const spToken = getToken();
-    if (!spToken) return alert("No se encontro token de SupportPlus.");
+    if (!spToken) { restoreBulkBtn(); return alert("No se encontro token de SupportPlus."); }
 
     // Ensure sync is fresh before checking pending
     syncPromise = null;
@@ -393,7 +415,7 @@
     await ensureSyncStarted();
 
     const pending = getPendingRows();
-    if (!pending.length) return alert("No hay tickets pendientes de migrar en esta pagina.");
+    if (!pending.length) { restoreBulkBtn(); return alert("No hay tickets pendientes de migrar en esta pagina."); }
 
     // Fetch groups from configured board
     const boardData = await mondayQuery(mondayToken, `query ($boardId: [ID!]!) { boards(ids: $boardId) { name groups { id title } } }`, { boardId });
@@ -418,6 +440,7 @@
     }).join("");
 
     // Show assignment modal
+    restoreBulkBtn();
     const selOverlay = document.createElement("div");
     selOverlay.id = "sp-monday-modal";
     selOverlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
@@ -637,7 +660,7 @@
     overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:420px;width:90%;font-family:system-ui;">' +
       '<h3 style="margin:0 0 16px;">🤚 Tomar ticket</h3>' +
       '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario (opcional)</label>' +
-      '<textarea id="sp-take-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:80px;resize:vertical;box-sizing:border-box;margin-bottom:12px;" placeholder="Se revisa"></textarea>' +
+      '<textarea id="sp-take-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:80px;resize:vertical;box-sizing:border-box;margin-bottom:12px;" placeholder="Escribe un comentario..."></textarea>' +
       '<div id="sp-take-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
       '<div style="display:flex;gap:8px;">' +
         '<button id="sp-take-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">✊ Tomar ticket</button>' +
@@ -676,7 +699,7 @@
         return;
       }
 
-      var comment = document.getElementById("sp-take-comment").value.trim() || "Se revisa";
+      var comment = document.getElementById("sp-take-comment").value.trim();
       var spToken = getToken();
 
       try {
@@ -748,6 +771,181 @@
     return btn;
   }
 
+  // --- Close ticket ---
+  function createCloseButton(ticketId) {
+    const btn = document.createElement("button");
+    btn.className = CLOSE_BTN_CLASS;
+    btn.textContent = "🔒 Cerrar";
+    btn.title = "Cerrar ticket";
+    btn.style.cssText =
+      "padding:2px 8px;font-size:11px;cursor:pointer;border:1px solid #616161;border-radius:4px;background:#616161;color:#fff;margin-left:6px;white-space:nowrap;";
+    btn.addEventListener("mouseenter", function() { if (!btn.disabled) btn.textContent = "🔐 Cerrar"; });
+    btn.addEventListener("mouseleave", function() { if (!btn.disabled) btn.textContent = "🔒 Cerrar"; });
+    btn.addEventListener("click", async function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      btn.disabled = true;
+      btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
+      var spToken = getToken();
+      try {
+        var res = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+          body: JSON.stringify({
+            id: 9, ticketId: parseInt(ticketId), name: "Cerrado",
+            pauseServiceLevel: true, closeTicket: true, confirmByRequester: false, blockEdit: true,
+            type: { id: 5, name: "Cerrado" }
+          }),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        btn.textContent = "✅ Cerrado";
+        btn.style.background = "#2E7D32";
+        btn.style.borderColor = "#2E7D32";
+      } catch (err) {
+        btn.textContent = "❌";
+        btn.title = err.message;
+        setTimeout(function() { btn.textContent = "🔒 Cerrar"; btn.disabled = false; }, 2000);
+      }
+    });
+    return btn;
+  }
+
+  function getAssignedRows() {
+    const rows = [];
+    document.querySelectorAll(".MuiDataGrid-row").forEach(function(row) {
+      var ticketId = row.getAttribute("data-id");
+      if (!ticketId) return;
+      var statusCell = row.querySelector('[data-field="ticketStatusName"]');
+      if (!statusCell || statusCell.textContent.trim() !== "Asignado") return;
+      var codeCell = row.querySelector('[data-field="uniqueCode"]');
+      var code = codeCell ? codeCell.textContent.trim() : ticketId;
+      var subjectCell = row.querySelector('[data-field="subject"]');
+      var subject = subjectCell ? subjectCell.textContent.trim() : "";
+      var responsibleCell = row.querySelector('[data-field="responsibleName"]');
+      var responsible = responsibleCell ? responsibleCell.textContent.trim() : "";
+      rows.push({ ticketId: ticketId, code: code, subject: subject, responsible: responsible, row: row });
+    });
+    return rows;
+  }
+
+  async function handleBulkClose() {
+    var bulkCloseBtn = document.getElementById(BULK_CLOSE_BTN_ID);
+    if (bulkCloseBtn) {
+      bulkCloseBtn.disabled = true;
+      bulkCloseBtn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Cargando...';
+    }
+    function restoreCloseBtn() {
+      if (bulkCloseBtn) { bulkCloseBtn.disabled = false; bulkCloseBtn.textContent = "🔒 Cerrar todos"; }
+    }
+
+    var spToken = getToken();
+    if (!spToken) { restoreCloseBtn(); return alert("No se encontro token de SupportPlus."); }
+
+    var assigned = getAssignedRows();
+    if (!assigned.length) { restoreCloseBtn(); return alert("No hay tickets asignados en esta pagina."); }
+
+    // Build ticket rows with checkboxes
+    var ticketRows = assigned.map(function(p, i) {
+      var label = p.code + (p.subject ? " - " + p.subject.substring(0, 35) + (p.subject.length > 35 ? "..." : "") : "");
+      var resp = p.responsible ? ' <span style="color:#888;font-size:10px;">(' + p.responsible + ')</span>' : "";
+      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0;">' +
+        '<input type="checkbox" data-idx="' + i + '" class="sp-close-check" style="cursor:pointer;">' +
+        '<span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + label + resp + '</span>' +
+        '</div>';
+    }).join("");
+
+    restoreCloseBtn();
+
+    var overlay = document.createElement("div");
+    overlay.id = "sp-close-modal";
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:560px;width:90%;max-height:85vh;display:flex;flex-direction:column;font-family:system-ui;">' +
+      '<h3 style="margin:0 0 8px;">🔒 Cerrar tickets (' + assigned.length + ' asignados)</h3>' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">' +
+        '<label style="font-size:12px;color:#555;cursor:pointer;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="sp-close-all"> Seleccionar todos</label>' +
+      '</div>' +
+      '<div style="flex:1;overflow:auto;border:1px solid #eee;border-radius:6px;padding:8px;margin-bottom:12px;">' + ticketRows + '</div>' +
+      '<div id="sp-close-msg" style="font-size:13px;margin-bottom:8px;min-height:20px;"></div>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button id="sp-close-start" style="flex:1;padding:10px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">🔐 Cerrar seleccionados</button>' +
+        '<button id="sp-close-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
+      '</div></div>';
+    document.body.appendChild(overlay);
+
+    // Select all toggle
+    document.getElementById("sp-close-all").addEventListener("change", function() {
+      var checked = this.checked;
+      overlay.querySelectorAll(".sp-close-check").forEach(function(cb) { cb.checked = checked; });
+    });
+
+    var startBtn = document.getElementById("sp-close-start");
+    var cancelBtn = document.getElementById("sp-close-cancel");
+    var msg = document.getElementById("sp-close-msg");
+
+    cancelBtn.addEventListener("click", function() { overlay.remove(); });
+    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+    startBtn.addEventListener("click", async function() {
+      var selected = [];
+      overlay.querySelectorAll(".sp-close-check").forEach(function(cb) {
+        if (cb.checked) selected.push(parseInt(cb.dataset.idx));
+      });
+      if (!selected.length) { msg.textContent = "Selecciona al menos un ticket."; return; }
+
+      startBtn.disabled = true;
+      startBtn.style.background = "#999";
+      startBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Cerrando...';
+      cancelBtn.style.display = "none";
+
+      var ok = 0, fail = 0;
+      for (var i = 0; i < selected.length; i++) {
+        var idx = selected[i];
+        var t = assigned[idx];
+        msg.textContent = "Cerrando " + (i + 1) + " / " + selected.length + "...";
+        try {
+          var res = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + t.ticketId, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+            body: JSON.stringify({
+              id: 9, ticketId: parseInt(t.ticketId), name: "Cerrado",
+              pauseServiceLevel: true, closeTicket: true, confirmByRequester: false, blockEdit: true,
+              type: { id: 5, name: "Cerrado" }
+            }),
+          });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          ok++;
+        } catch (err) {
+          fail++;
+        }
+      }
+
+      msg.textContent = "Completado: " + ok + " cerrados, " + fail + " errores";
+      startBtn.innerHTML = "✅ Listo";
+      startBtn.style.background = "#2E7D32";
+      cancelBtn.style.display = "";
+      cancelBtn.textContent = "Cerrar";
+      cancelBtn.addEventListener("click", function() { overlay.remove(); });
+    });
+  }
+
+  function injectBulkCloseButton() {
+    if (document.getElementById(BULK_CLOSE_BTN_ID)) return;
+    var bulkMigrateBtn = document.getElementById(BULK_BTN_ID);
+    if (!bulkMigrateBtn) return;
+    var parent = bulkMigrateBtn.parentElement;
+    if (!parent) return;
+
+    var btn = document.createElement("button");
+    btn.id = BULK_CLOSE_BTN_ID;
+    btn.textContent = "🔒 Cerrar todos";
+    btn.style.cssText =
+      "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#616161;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+    btn.addEventListener("mouseenter", function() { if (!btn.disabled) btn.textContent = "🔐 Cerrar todos"; });
+    btn.addEventListener("mouseleave", function() { if (!btn.disabled) btn.textContent = "🔒 Cerrar todos"; });
+    btn.addEventListener("click", handleBulkClose);
+    parent.insertBefore(btn, bulkMigrateBtn.nextSibling);
+  }
+
   async function injectButtons() {
     const synced = await ensureSyncStarted();
 
@@ -795,6 +993,22 @@
         }
       }
 
+      // Inject close button for "Asignado" tickets assigned to me
+      if (statusText === "Asignado" && !row.querySelector("." + CLOSE_BTN_CLASS)) {
+        const responsibleCell2 = row.querySelector('[data-field="responsibleName"]');
+        const responsibleName2 = responsibleCell2 ? responsibleCell2.textContent.trim() : "";
+        const myName2 = getLoggedUserName();
+        if (responsibleName2 && myName2 && responsibleName2 === myName2) {
+          container.appendChild(createCloseButton(ticketId));
+        }
+      }
+
+      // Clean up close button if status changed
+      if (statusText !== "Asignado") {
+        const oldClose = row.querySelector("." + CLOSE_BTN_CLASS);
+        if (oldClose) oldClose.remove();
+      }
+
       // Inject migrate buttons for "Cerrado" tickets
       if (statusText === "Cerrado") {
         if (row.querySelector("." + BTN_CLASS) || row.querySelector("." + SYNCED_CLASS)) return;
@@ -808,6 +1022,7 @@
     });
     highlightMyRows();
     injectBulkButton();
+    injectBulkCloseButton();
   }
 
   // --- Handle single click ---
