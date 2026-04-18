@@ -366,11 +366,11 @@
 
     const btn = document.createElement("button");
     btn.id = BULK_BTN_ID;
-    btn.textContent = "😨 Migrar todos";
+    btn.textContent = "😨 Migrar varios";
     btn.style.cssText =
       "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#D94040;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-    btn.addEventListener("mouseenter", () => { if (!btn.disabled) btn.textContent = "😱 Migrar todos"; });
-    btn.addEventListener("mouseleave", () => { if (!btn.disabled) btn.textContent = "😨 Migrar todos"; });
+    btn.addEventListener("mouseenter", () => { if (!btn.disabled) btn.textContent = "😱 Migrar varios"; });
+    btn.addEventListener("mouseleave", () => { if (!btn.disabled) btn.textContent = "😨 Migrar varios"; });
     btn.addEventListener("click", handleBulkMigrate);
 
     if (insertMethod === "beforeSearch") {
@@ -398,7 +398,7 @@
     function restoreBulkBtn() {
       if (bulkBtn) {
         bulkBtn.disabled = false;
-        bulkBtn.textContent = "😨 Migrar todos";
+        bulkBtn.textContent = "😨 Migrar varios";
       }
     }
 
@@ -792,15 +792,19 @@
           method: "PATCH",
           headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
           body: JSON.stringify({
-            id: 9, ticketId: parseInt(ticketId), name: "Cerrado",
-            pauseServiceLevel: true, closeTicket: true, confirmByRequester: false, blockEdit: true,
-            type: { id: 5, name: "Cerrado" }
+            nextTicketStatusId: 9,
+            ticketCommentRequest: null
           }),
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
-        btn.textContent = "✅ Cerrado";
-        btn.style.background = "#2E7D32";
-        btn.style.borderColor = "#2E7D32";
+        // Replace close button with migrate button
+        var row = btn.closest(".MuiDataGrid-row");
+        btn.replaceWith(createButton(ticketId));
+        // Remove steal button if present
+        if (row) {
+          var oldSteal = row.querySelector("." + STEAL_BTN_CLASS);
+          if (oldSteal) oldSteal.remove();
+        }
       } catch (err) {
         btn.textContent = "❌";
         btn.title = err.message;
@@ -835,7 +839,7 @@
       bulkCloseBtn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Cargando...';
     }
     function restoreCloseBtn() {
-      if (bulkCloseBtn) { bulkCloseBtn.disabled = false; bulkCloseBtn.textContent = "🔒 Cerrar todos"; }
+      if (bulkCloseBtn) { bulkCloseBtn.disabled = false; bulkCloseBtn.textContent = "🔒 Cerrar varios"; }
     }
 
     var spToken = getToken();
@@ -907,13 +911,17 @@
             method: "PATCH",
             headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
             body: JSON.stringify({
-              id: 9, ticketId: parseInt(t.ticketId), name: "Cerrado",
-              pauseServiceLevel: true, closeTicket: true, confirmByRequester: false, blockEdit: true,
-              type: { id: 5, name: "Cerrado" }
+              nextTicketStatusId: 9,
+              ticketCommentRequest: null
             }),
           });
           if (!res.ok) throw new Error("HTTP " + res.status);
           ok++;
+          // Update row UI: replace close button with migrate button
+          var closeBtn = t.row.querySelector("." + CLOSE_BTN_CLASS);
+          if (closeBtn) closeBtn.replaceWith(createButton(t.ticketId));
+          var stealBtn = t.row.querySelector("." + STEAL_BTN_CLASS);
+          if (stealBtn) stealBtn.remove();
         } catch (err) {
           fail++;
         }
@@ -937,11 +945,11 @@
 
     var btn = document.createElement("button");
     btn.id = BULK_CLOSE_BTN_ID;
-    btn.textContent = "🔒 Cerrar todos";
+    btn.textContent = "🔒 Cerrar varios";
     btn.style.cssText =
       "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#616161;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-    btn.addEventListener("mouseenter", function() { if (!btn.disabled) btn.textContent = "🔐 Cerrar todos"; });
-    btn.addEventListener("mouseleave", function() { if (!btn.disabled) btn.textContent = "🔒 Cerrar todos"; });
+    btn.addEventListener("mouseenter", function() { if (!btn.disabled) btn.textContent = "🔐 Cerrar varios"; });
+    btn.addEventListener("mouseleave", function() { if (!btn.disabled) btn.textContent = "🔒 Cerrar varios"; });
     btn.addEventListener("click", handleBulkClose);
     parent.insertBefore(btn, bulkMigrateBtn.nextSibling);
   }
