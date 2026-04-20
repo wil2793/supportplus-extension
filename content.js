@@ -848,9 +848,16 @@
     var existing = document.getElementById("sp-close-modal-single");
     if (existing) existing.remove();
 
-    // Fetch info first
-    var info = await fetchTicketInfo(ticketId);
+    // Fetch ticket info and Monday groups in parallel
+    var mondayToken = await getMondayToken();
+    var boardId = await getMondayBoardId();
+    var [info, groupsData] = await Promise.all([
+      fetchTicketInfo(ticketId),
+      (mondayToken && boardId) ? mondayQuery(mondayToken, 'query ($boardId: [ID!]!) { boards(ids: $boardId) { name groups { id title } } }', { boardId }).catch(function() { return null; }) : Promise.resolve(null)
+    ]);
     var summaryHTML = ticketSummaryHTML(info);
+    var groups = groupsData?.boards?.[0]?.groups || [];
+    var groupOpts = '<option value="">-- No migrar --</option>' + groups.map(function(g) { return '<option value="' + g.id + '">' + g.title + '</option>'; }).join("");
 
     var overlay = document.createElement("div");
     overlay.id = "sp-close-modal-single";
@@ -858,6 +865,8 @@
     overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:420px;width:90%;font-family:system-ui;">' +
       '<h3 style="margin:0 0 16px;">🔒 Cerrar ticket #' + ticketId + '</h3>' +
       summaryHTML +
+      '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Migrar a Monday (opcional)</label>' +
+      '<select id="sp-close-group" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:12px;font-size:13px;">' + groupOpts + '</select>' +
       '<div id="sp-close-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
       '<div style="display:flex;gap:8px;">' +
         '<button id="sp-close-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">🔐 Cerrar ticket</button>' +
@@ -875,6 +884,16 @@
     var confirmBtn = document.getElementById("sp-close-confirm");
     var cancelBtn = document.getElementById("sp-close-cancel");
     var msg = document.getElementById("sp-close-msg");
+    var groupSelect = document.getElementById("sp-close-group");
+
+    // Update button text when group selection changes
+    groupSelect.addEventListener("change", function() {
+      if (groupSelect.value) {
+        confirmBtn.innerHTML = "🔐 Cerrar y migrar";
+      } else {
+        confirmBtn.innerHTML = "🔐 Cerrar ticket";
+      }
+    });
 
     cancelBtn.addEventListener("click", function() { overlay.remove(); });
     overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
@@ -882,29 +901,87 @@
     confirmBtn.addEventListener("click", async function() {
       confirmBtn.disabled = true;
       confirmBtn.style.background = "#999";
+      var selectedGroup = groupSelect.value;
       confirmBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Cerrando...';
       cancelBtn.style.display = "none";
 
       var spToken = getToken();
       try {
+        // Step 1: Close ticket
         var res = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
           method: "PATCH",
           headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
           body: JSON.stringify({ nextTicketStatusId: 9, ticketCommentRequest: null }),
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
+
+        // Step 2: Migrate if group selected
+        if (selectedGroup && mondayToken && boardId && info) {
+          confirmBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Migrando...';
+
+          var ticketRes = await fetch(SP_API + "/" + ticketId, {
+            headers: { accept: "application/json", authorization: "Bearer " + spToken },
+          });
+          var ticketJson = await ticketRes.json();
+          var ticket = ticketJson.data || ticketJson;
+
+          var holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
+          var users = await getMondayUsers(mondayToken);
+          var personValue = {};
+          if (holderEmail) {
+            var userId = users[holderEmail.toLowerCase()];
+            if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
+          }
+
+          var url = BASE_URL + "/" + ticketId;
+          var desc = (ticket.description || "").replace(/<[^>]*>/g, "");
+          var itemName = ticket.subject || "Sin asunto";
+          var createdDate = new Date(ticket.createdAt).toISOString().slice(0, 10);
+          var spPriority = (ticket.incidentPriorityName || ticket.incidentPriority?.name || "").toLowerCase().trim();
+          var priorityIndex = PRIORITY_MAP[spPriority] ?? PRIORITY_MAP["medio"];
+
+          var columnValues = JSON.stringify({
+            descripci_n_mkn9e5f4: { text: desc },
+            ...(personValue.personsAndTeams ? { multiple_person_mm25nvfq: personValue } : {}),
+            status: { index: 1 },
+            priority_mkn9kbe9: { index: priorityIndex },
+            cronograma_mkn9hwe3: { from: createdDate, to: createdDate },
+            link_mknkdctz: { url: url, text: ticket.uniqueCode || url },
+            text_mm2c9nhc: ticket.uniqueCode || ticketId,
+          });
+
+          var result = await mondayQuery(mondayToken,
+            'mutation ($boardId: ID!, $groupId: String!, $itemName: String!, $columnValues: JSON!) { create_item(board_id: $boardId, group_id: $groupId, item_name: $itemName, column_values: $columnValues) { id } }',
+            { boardId: boardId, groupId: selectedGroup, itemName: itemName, columnValues: columnValues }
+          );
+          var newItemId = result.create_item.id;
+          addToCache(ticket.uniqueCode || ticketId, newItemId);
+        }
+
         overlay.remove();
         var row = originalBtn.closest(".MuiDataGrid-row");
-        originalBtn.replaceWith(createButton(ticketId));
+        if (selectedGroup) {
+          var synced = getCache() || {};
+          var uc = info?.uniqueCode || ticketId;
+          if (synced[uc]) {
+            originalBtn.replaceWith(createSyncedBadge(synced[uc]));
+          } else {
+            originalBtn.replaceWith(createButton(ticketId));
+          }
+        } else {
+          originalBtn.replaceWith(createButton(ticketId));
+        }
         if (row) {
           var oldSteal = row.querySelector("." + STEAL_BTN_CLASS);
           if (oldSteal) oldSteal.remove();
+          var oldClose = row.querySelector("." + CLOSE_BTN_CLASS);
+          if (oldClose) oldClose.remove();
           var statusCell = row.querySelector('[data-field="ticketStatusName"]');
           if (statusCell) statusCell.textContent = "Cerrado";
         }
       } catch (err) {
         msg.textContent = "Error: " + err.message;
-        confirmBtn.innerHTML = "🔐 Cerrar ticket";
+        confirmBtn.innerHTML = selectedGroup ? "🔐 Cerrar y migrar" : "🔐 Cerrar ticket";
         confirmBtn.style.background = "#616161";
         confirmBtn.disabled = false;
         cancelBtn.style.display = "";
