@@ -642,23 +642,66 @@
       "padding:2px 8px;font-size:11px;cursor:pointer;border:1px solid #1976D2;border-radius:4px;background:#1976D2;color:#fff;margin-left:6px;white-space:nowrap;";
     btn.addEventListener("mouseenter", function() { if (!btn.disabled) btn.textContent = "✊ Tomar"; });
     btn.addEventListener("mouseleave", function() { if (!btn.disabled) btn.textContent = "🤚 Tomar"; });
-    btn.addEventListener("click", function(e) {
+    btn.addEventListener("click", async function(e) {
       e.stopPropagation();
       e.preventDefault();
-      showTakeModal(ticketId, btn);
+      btn.disabled = true;
+      var origText = btn.textContent;
+      btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
+      await showTakeModal(ticketId, btn);
+      btn.textContent = origText;
+      btn.disabled = false;
     });
     return btn;
   }
 
-  function showTakeModal(ticketId, originalBtn) {
+  // --- Ticket summary helpers ---
+  async function fetchTicketInfo(ticketId) {
+    var spToken = getToken();
+    if (!spToken) return null;
+    try {
+      var res = await fetch(SP_API + "/" + ticketId, {
+        headers: { accept: "application/json", authorization: "Bearer " + spToken },
+      });
+      if (!res.ok) return null;
+      var json = await res.json();
+      var t = json.data || json;
+      return {
+        uniqueCode: t.uniqueCode || "N/A",
+        subject: t.subject || "Sin asunto",
+        desc: (t.description || "").replace(/<[^>]*>/g, "").substring(0, 200),
+        holder: t.ticketHolder?.ticketHolderLog?.fullName || "Sin asignar",
+        holderEmail: t.ticketHolder?.ticketHolderLog?.email || "",
+        priority: t.incidentPriority?.name || ""
+      };
+    } catch (e) { return null; }
+  }
+
+  function ticketSummaryHTML(info) {
+    if (!info) return "";
+    return '<div style="background:#f5f5f5;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px;">' +
+      '<div><b>Folio:</b> ' + info.uniqueCode + '</div>' +
+      '<div><b>Asunto:</b> ' + info.subject + '</div>' +
+      '<div><b>Persona:</b> ' + info.holder + (info.holderEmail ? ' (' + info.holderEmail + ')' : '') + '</div>' +
+      '<div><b>Prioridad:</b> ' + info.priority + '</div>' +
+      (info.desc ? '<div style="margin-top:4px;max-height:60px;overflow:auto;"><b>Desc:</b> ' + info.desc + '</div>' : '') +
+      '</div>';
+  }
+
+  async function showTakeModal(ticketId, originalBtn) {
     var existing = document.getElementById("sp-take-modal");
     if (existing) existing.remove();
+
+    // Fetch info first
+    var info = await fetchTicketInfo(ticketId);
+    var summaryHTML = ticketSummaryHTML(info);
 
     var overlay = document.createElement("div");
     overlay.id = "sp-take-modal";
     overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
     overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:420px;width:90%;font-family:system-ui;">' +
-      '<h3 style="margin:0 0 16px;">🤚 Tomar ticket</h3>' +
+      '<h3 style="margin:0 0 16px;">🤚 Tomar ticket #' + ticketId + '</h3>' +
+      summaryHTML +
       '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario (opcional)</label>' +
       '<textarea id="sp-take-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:80px;resize:vertical;box-sizing:border-box;margin-bottom:12px;" placeholder="Escribe un comentario..."></textarea>' +
       '<div id="sp-take-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
@@ -703,31 +746,33 @@
       var spToken = getToken();
 
       try {
+        var body = {
+          resolutionGroupId: 19,
+          serviceId: null,
+          responsibleProfileId: profileId,
+          resolutionGroup: { label: "Infraestructura DBA", value: 19 }
+        };
+        if (comment) body.ticketCommentRequest = { internal: false, content: comment };
         var res = await fetch(SP_API + "/reassign/" + ticketId, {
           method: "PUT",
           headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-          body: JSON.stringify({
-            ticketCommentRequest: { internal: false, content: comment },
-            resolutionGroupId: 19,
-            serviceId: null,
-            responsibleProfileId: profileId,
-            resolutionGroup: { label: "Infraestructura DBA", value: 19 }
-          }),
+          body: JSON.stringify(body),
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
         var json = await res.json();
         if (json.success) {
           overlay.remove();
-          // Update button
-          originalBtn.textContent = "✅ Tomado";
-          originalBtn.style.background = "#2E7D32";
-          originalBtn.style.borderColor = "#2E7D32";
-          originalBtn.disabled = true;
+          // Replace take/steal button with close button
+          var newCloseBtn = createCloseButton(ticketId);
+          originalBtn.replaceWith(newCloseBtn);
           // Highlight row
-          var row = originalBtn.closest(".MuiDataGrid-row");
+          var row = newCloseBtn.closest(".MuiDataGrid-row");
           if (row) {
             row.classList.add(HIGHLIGHT_CLASS);
             row.style.backgroundColor = "rgba(217, 64, 64, 0.08)";
+            // Update status cell
+            var statusCell = row.querySelector('[data-field="ticketStatusName"]');
+            if (statusCell) statusCell.textContent = "Asignado";
           }
           // Toast
           var toast = document.createElement("div");
@@ -763,10 +808,15 @@
       "padding:2px 8px;font-size:11px;cursor:pointer;border:1px solid #E65100;border-radius:4px;background:#E65100;color:#fff;margin-left:6px;white-space:nowrap;";
     btn.addEventListener("mouseenter", function() { if (!btn.disabled) btn.textContent = "💀 Robar"; });
     btn.addEventListener("mouseleave", function() { if (!btn.disabled) btn.textContent = "🥷 Robar"; });
-    btn.addEventListener("click", function(e) {
+    btn.addEventListener("click", async function(e) {
       e.stopPropagation();
       e.preventDefault();
-      showTakeModal(ticketId, btn);
+      btn.disabled = true;
+      var origText = btn.textContent;
+      btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
+      await showTakeModal(ticketId, btn);
+      btn.textContent = origText;
+      btn.disabled = false;
     });
     return btn;
   }
@@ -785,33 +835,81 @@
       e.stopPropagation();
       e.preventDefault();
       btn.disabled = true;
+      var origText = btn.textContent;
       btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
+      await showCloseModal(ticketId, btn);
+      btn.textContent = origText;
+      btn.disabled = false;
+    });
+    return btn;
+  }
+
+  async function showCloseModal(ticketId, originalBtn) {
+    var existing = document.getElementById("sp-close-modal-single");
+    if (existing) existing.remove();
+
+    // Fetch info first
+    var info = await fetchTicketInfo(ticketId);
+    var summaryHTML = ticketSummaryHTML(info);
+
+    var overlay = document.createElement("div");
+    overlay.id = "sp-close-modal-single";
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:420px;width:90%;font-family:system-ui;">' +
+      '<h3 style="margin:0 0 16px;">🔒 Cerrar ticket #' + ticketId + '</h3>' +
+      summaryHTML +
+      '<div id="sp-close-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button id="sp-close-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">🔐 Cerrar ticket</button>' +
+        '<button id="sp-close-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
+      '</div></div>';
+    document.body.appendChild(overlay);
+
+    if (!document.getElementById("sp-spinner-style")) {
+      var style = document.createElement("style");
+      style.id = "sp-spinner-style";
+      style.textContent = "@keyframes sp-spin { to { transform: rotate(360deg); } }";
+      document.head.appendChild(style);
+    }
+
+    var confirmBtn = document.getElementById("sp-close-confirm");
+    var cancelBtn = document.getElementById("sp-close-cancel");
+    var msg = document.getElementById("sp-close-msg");
+
+    cancelBtn.addEventListener("click", function() { overlay.remove(); });
+    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+    confirmBtn.addEventListener("click", async function() {
+      confirmBtn.disabled = true;
+      confirmBtn.style.background = "#999";
+      confirmBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Cerrando...';
+      cancelBtn.style.display = "none";
+
       var spToken = getToken();
       try {
         var res = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
           method: "PATCH",
           headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-          body: JSON.stringify({
-            nextTicketStatusId: 9,
-            ticketCommentRequest: null
-          }),
+          body: JSON.stringify({ nextTicketStatusId: 9, ticketCommentRequest: null }),
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
-        // Replace close button with migrate button
-        var row = btn.closest(".MuiDataGrid-row");
-        btn.replaceWith(createButton(ticketId));
-        // Remove steal button if present
+        overlay.remove();
+        var row = originalBtn.closest(".MuiDataGrid-row");
+        originalBtn.replaceWith(createButton(ticketId));
         if (row) {
           var oldSteal = row.querySelector("." + STEAL_BTN_CLASS);
           if (oldSteal) oldSteal.remove();
+          var statusCell = row.querySelector('[data-field="ticketStatusName"]');
+          if (statusCell) statusCell.textContent = "Cerrado";
         }
       } catch (err) {
-        btn.textContent = "❌";
-        btn.title = err.message;
-        setTimeout(function() { btn.textContent = "🔒 Cerrar"; btn.disabled = false; }, 2000);
+        msg.textContent = "Error: " + err.message;
+        confirmBtn.innerHTML = "🔐 Cerrar ticket";
+        confirmBtn.style.background = "#616161";
+        confirmBtn.disabled = false;
+        cancelBtn.style.display = "";
       }
     });
-    return btn;
   }
 
   function getAssignedRows() {
