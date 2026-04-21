@@ -612,7 +612,41 @@
       const responsibleCell = row.querySelector('[data-field="responsibleName"]');
       if (responsibleCell && responsibleCell.textContent.trim() === myName) {
         row.classList.add(HIGHLIGHT_CLASS);
-        row.style.backgroundColor = "rgba(217, 64, 64, 0.08)";
+        row.style.position = "relative";
+        var indicator = document.createElement("span");
+        indicator.textContent = "❗";
+        indicator.style.cssText = "position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:14px;z-index:1;pointer-events:none;";
+        row.appendChild(indicator);
+      }
+    });
+  }
+
+  const STATUS_COLORS = {
+    "Asignado": "rgba(33, 150, 243, 0.18)",
+    "En validación": "rgba(156, 39, 176, 0.18)",
+    "En atención": "rgba(255, 152, 0, 0.18)",
+    "Por aprobador": "rgba(121, 85, 72, 0.18)",
+    "Por ejecutar": "rgba(0, 150, 136, 0.18)",
+    "Por revisar": "rgba(63, 81, 181, 0.18)",
+    "En aplicaciones": "rgba(233, 30, 99, 0.18)",
+    "Por confirmar": "rgba(255, 193, 7, 0.20)",
+    "Cerrado": "rgba(76, 175, 80, 0.18)",
+    "Rechazado": "rgba(244, 67, 54, 0.18)",
+    "Cancelado": "rgba(158, 158, 158, 0.20)",
+    "Reabierto": "rgba(255, 87, 34, 0.18)",
+    "En espera": "rgba(255, 235, 59, 0.20)"
+  };
+
+  function colorRowsByStatus() {
+    document.querySelectorAll(".MuiDataGrid-row").forEach(function(row) {
+      if (row.dataset.spColored) return;
+      var statusCell = row.querySelector('[data-field="ticketStatusName"]');
+      if (!statusCell) return;
+      var status = statusCell.textContent.trim();
+      var color = STATUS_COLORS[status];
+      if (color) {
+        row.style.backgroundColor = color;
+        row.dataset.spColored = "1";
       }
     });
   }
@@ -1209,6 +1243,7 @@
       }
     });
     highlightMyRows();
+    colorRowsByStatus();
     injectBulkButton();
     injectBulkCloseButton();
   }
