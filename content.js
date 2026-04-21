@@ -1,4 +1,9 @@
 (function () {
+  // Make loading backdrop less invasive - thin top bar instead of fullscreen
+  const hideBackdrop = document.createElement("style");
+  hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } }";
+  document.head.appendChild(hideBackdrop);
+
   const SP_API = "https://macropayapi.supportplus.mx/tickets/web";
   const MONDAY_API = "https://api.monday.com/v2";
   const BTN_CLASS = "sp-monday-btn";
