@@ -1168,6 +1168,42 @@
     parent.insertBefore(btn, bulkMigrateBtn.nextSibling);
   }
 
+  const STATUS_FILTER_ID = "sp-status-filter";
+
+  function injectStatusFilter() {
+    if (document.getElementById(STATUS_FILTER_ID)) return;
+    var bulkMigrateBtn = document.getElementById(BULK_BTN_ID);
+    if (!bulkMigrateBtn) return;
+    var parent = bulkMigrateBtn.parentElement;
+    if (!parent) return;
+
+    var statuses = ["Todos", "Asignado", "En espera", "En atención", "En validación", "Por confirmar", "Por ejecutar", "Por revisar", "En aplicaciones", "Cerrado", "Rechazado", "Cancelado", "Reabierto"];
+    var select = document.createElement("select");
+    select.id = STATUS_FILTER_ID;
+    select.style.cssText = "padding:5px 8px;font-size:12px;border:1px solid #ddd;border-radius:6px;margin-right:8px;cursor:pointer;";
+    statuses.forEach(function(s) {
+      var opt = document.createElement("option");
+      opt.value = s;
+      opt.textContent = s;
+      select.appendChild(opt);
+    });
+
+    select.addEventListener("change", function() {
+      var val = select.value;
+      document.querySelectorAll(".MuiDataGrid-row").forEach(function(row) {
+        var statusCell = row.querySelector('[data-field="ticketStatusName"]');
+        var status = statusCell ? statusCell.textContent.trim() : "";
+        if (val === "Todos" || status === val) {
+          row.style.display = "";
+        } else {
+          row.style.display = "none";
+        }
+      });
+    });
+
+    parent.insertBefore(select, bulkMigrateBtn);
+  }
+
   async function injectButtons() {
     const synced = await ensureSyncStarted();
 
@@ -1246,6 +1282,7 @@
     colorRowsByStatus();
     injectBulkButton();
     injectBulkCloseButton();
+    injectStatusFilter();
   }
 
   // --- Handle single click ---
