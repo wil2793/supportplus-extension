@@ -1216,18 +1216,16 @@
 
   function injectSearchButton() {
     if (document.getElementById(SEARCH_BTN_ID)) return;
-    var bulkMigrateBtn = document.getElementById(BULK_BTN_ID);
-    if (!bulkMigrateBtn) return;
-    var parent = bulkMigrateBtn.parentElement;
-    if (!parent) return;
+    var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
+    if (!userWrapper) return;
 
     var btn = document.createElement("button");
     btn.id = SEARCH_BTN_ID;
     btn.textContent = "🔍 Buscar";
     btn.style.cssText =
-      "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#7B1FA2;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+      "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#7B1FA2;color:#fff;font-weight:600;white-space:nowrap;margin-right:12px;";
     btn.addEventListener("click", showSearchModal);
-    parent.insertBefore(btn, bulkMigrateBtn);
+    userWrapper.parentElement.insertBefore(btn, userWrapper);
   }
 
   function showSearchModal() {
@@ -1362,40 +1360,6 @@
 
   const STATUS_FILTER_ID = "sp-status-filter";
 
-  function injectStatusFilter() {
-    if (document.getElementById(STATUS_FILTER_ID)) return;
-    var bulkMigrateBtn = document.getElementById(BULK_BTN_ID);
-    if (!bulkMigrateBtn) return;
-    var parent = bulkMigrateBtn.parentElement;
-    if (!parent) return;
-
-    var statuses = ["Todos", "Asignado", "En espera", "En atención", "En validación", "Por confirmar", "Por ejecutar", "Por revisar", "En aplicaciones", "Cerrado", "Rechazado", "Cancelado", "Reabierto"];
-    var select = document.createElement("select");
-    select.id = STATUS_FILTER_ID;
-    select.style.cssText = "padding:5px 8px;font-size:12px;border:1px solid #ddd;border-radius:6px;margin-right:8px;cursor:pointer;";
-    statuses.forEach(function(s) {
-      var opt = document.createElement("option");
-      opt.value = s;
-      opt.textContent = s;
-      select.appendChild(opt);
-    });
-
-    select.addEventListener("change", function() {
-      var val = select.value;
-      document.querySelectorAll(".MuiDataGrid-row").forEach(function(row) {
-        var statusCell = row.querySelector('[data-field="ticketStatusName"]');
-        var status = statusCell ? statusCell.textContent.trim() : "";
-        if (val === "Todos" || status === val) {
-          row.style.display = "";
-        } else {
-          row.style.display = "none";
-        }
-      });
-    });
-
-    parent.insertBefore(select, bulkMigrateBtn);
-  }
-
   async function injectButtons() {
     const synced = await ensureSyncStarted();
 
@@ -1476,7 +1440,6 @@
     injectBulkCloseButton();
     injectNewTicketButton();
     injectSearchButton();
-    injectStatusFilter();
   }
 
   // --- Handle single click ---
