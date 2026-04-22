@@ -4,6 +4,47 @@
   hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } }";
   document.head.appendChild(hideBackdrop);
 
+  // --- Toast helpers ---
+  function ensureToastStyles() {
+    if (!document.getElementById("sp-toast-style")) {
+      var s = document.createElement("style");
+      s.id = "sp-toast-style";
+      s.textContent = "@keyframes sp-toast-in{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}@keyframes sp-toast-out{from{opacity:1}to{opacity:0;transform:translateX(-50%) translateY(-10px)}}@keyframes sp-spin{to{transform:rotate(360deg)}}";
+      document.head.appendChild(s);
+    }
+  }
+  function showLoadingToast(text) {
+    ensureToastStyles();
+    var existing = document.getElementById("sp-loading-toast");
+    if (existing) existing.remove();
+    var toast = document.createElement("div");
+    toast.id = "sp-loading-toast";
+    toast.style.cssText = "position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:100000;background:#333;color:#fff;padding:12px 20px;border-radius:8px;font-family:system-ui;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.2);display:flex;align-items:center;gap:8px;animation:sp-toast-in 0.3s ease;";
+    toast.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> ' + text;
+    document.body.appendChild(toast);
+    return toast;
+  }
+  function showSuccessToast(text) {
+    ensureToastStyles();
+    var existing = document.getElementById("sp-loading-toast");
+    if (existing) existing.remove();
+    var toast = document.createElement("div");
+    toast.style.cssText = "position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:100000;background:#2E7D32;color:#fff;padding:12px 20px;border-radius:8px;font-family:system-ui;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.2);display:flex;align-items:center;gap:8px;animation:sp-toast-in 0.3s ease;";
+    toast.textContent = text;
+    document.body.appendChild(toast);
+    setTimeout(function() { toast.style.animation = "sp-toast-out 0.3s ease forwards"; setTimeout(function() { toast.remove(); }, 300); }, 3000);
+  }
+  function showErrorToast(text) {
+    ensureToastStyles();
+    var existing = document.getElementById("sp-loading-toast");
+    if (existing) existing.remove();
+    var toast = document.createElement("div");
+    toast.style.cssText = "position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:100000;background:#D94040;color:#fff;padding:12px 20px;border-radius:8px;font-family:system-ui;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.2);display:flex;align-items:center;gap:8px;animation:sp-toast-in 0.3s ease;";
+    toast.textContent = text;
+    document.body.appendChild(toast);
+    setTimeout(function() { toast.style.animation = "sp-toast-out 0.3s ease forwards"; setTimeout(function() { toast.remove(); }, 4000); }, 4000);
+  }
+
   const SP_API = "https://macropayapi.supportplus.mx/tickets/web";
   const MONDAY_API = "https://api.monday.com/v2";
   const BTN_CLASS = "sp-monday-btn";
@@ -766,24 +807,17 @@
     overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
 
     confirmBtn.addEventListener("click", async function() {
-      confirmBtn.disabled = true;
-      confirmBtn.style.background = "#999";
-      confirmBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Tomando...';
-      cancelBtn.style.display = "none";
+      var comment = document.getElementById("sp-take-comment").value.trim();
+      overlay.remove();
+      showLoadingToast("Tomando ticket...");
 
       var profileId = await getMyProfileId();
       if (!profileId) {
-        msg.textContent = "No se pudo obtener tu perfil.";
-        confirmBtn.innerHTML = "✊ Tomar ticket";
-        confirmBtn.style.background = "#1976D2";
-        confirmBtn.disabled = false;
-        cancelBtn.style.display = "";
+        showErrorToast("No se pudo obtener tu perfil");
         return;
       }
 
-      var comment = document.getElementById("sp-take-comment").value.trim();
       var spToken = getToken();
-
       try {
         var body = {
           resolutionGroupId: 19,
@@ -800,40 +834,21 @@
         if (!res.ok) throw new Error("HTTP " + res.status);
         var json = await res.json();
         if (json.success) {
-          overlay.remove();
-          // Replace take/steal button with close button
           var newCloseBtn = createCloseButton(ticketId);
           originalBtn.replaceWith(newCloseBtn);
-          // Highlight row
           var row = newCloseBtn.closest(".MuiDataGrid-row");
           if (row) {
             row.classList.add(HIGHLIGHT_CLASS);
             row.style.backgroundColor = "rgba(217, 64, 64, 0.08)";
-            // Update status cell
             var statusCell = row.querySelector('[data-field="ticketStatusName"]');
             if (statusCell) statusCell.textContent = "Asignado";
           }
-          // Toast
-          var toast = document.createElement("div");
-          toast.style.cssText = "position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:100000;background:#2E7D32;color:#fff;padding:12px 20px;border-radius:8px;font-family:system-ui;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.2);animation:sp-toast-in 0.3s ease;";
-          toast.textContent = "✅ Ticket tomado";
-          if (!document.getElementById("sp-toast-style")) {
-            var s = document.createElement("style");
-            s.id = "sp-toast-style";
-            s.textContent = "@keyframes sp-toast-in{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}@keyframes sp-toast-out{from{opacity:1}to{opacity:0;transform:translateX(-50%) translateY(-10px)}}";
-            document.head.appendChild(s);
-          }
-          document.body.appendChild(toast);
-          setTimeout(function() { toast.style.animation = "sp-toast-out 0.3s ease forwards"; setTimeout(function() { toast.remove(); }, 300); }, 3000);
+          showSuccessToast("Ticket tomado");
         } else {
           throw new Error("No success");
         }
       } catch (err) {
-        msg.textContent = "Error: " + err.message;
-        confirmBtn.innerHTML = "✊ Tomar ticket";
-        confirmBtn.style.background = "#1976D2";
-        confirmBtn.disabled = false;
-        cancelBtn.style.display = "";
+        showErrorToast("Error: " + err.message);
       }
     });
   }
@@ -938,15 +953,12 @@
     overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
 
     confirmBtn.addEventListener("click", async function() {
-      confirmBtn.disabled = true;
-      confirmBtn.style.background = "#999";
       var selectedGroup = groupSelect.value;
-      confirmBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Cerrando...';
-      cancelBtn.style.display = "none";
+      overlay.remove();
+      showLoadingToast(selectedGroup ? "Cerrando y migrando..." : "Cerrando ticket...");
 
       var spToken = getToken();
       try {
-        // Step 1: Close ticket
         var res = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
           method: "PATCH",
           headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
@@ -954,10 +966,7 @@
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
 
-        // Step 2: Migrate if group selected
         if (selectedGroup && mondayToken && boardId && info) {
-          confirmBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Migrando...';
-
           var ticketRes = await fetch(SP_API + "/" + ticketId, {
             headers: { accept: "application/json", authorization: "Bearer " + spToken },
           });
@@ -997,7 +1006,6 @@
           addToCache(ticket.uniqueCode || ticketId, newItemId);
         }
 
-        overlay.remove();
         var row = originalBtn.closest(".MuiDataGrid-row");
         if (selectedGroup) {
           var synced = getCache() || {};
@@ -1018,12 +1026,9 @@
           var statusCell = row.querySelector('[data-field="ticketStatusName"]');
           if (statusCell) statusCell.textContent = "Cerrado";
         }
+        showSuccessToast(selectedGroup ? "Ticket cerrado y migrado" : "Ticket cerrado");
       } catch (err) {
-        msg.textContent = "Error: " + err.message;
-        confirmBtn.innerHTML = selectedGroup ? "🔐 Cerrar y migrar" : "🔐 Cerrar ticket";
-        confirmBtn.style.background = "#616161";
-        confirmBtn.disabled = false;
-        cancelBtn.style.display = "";
+        showErrorToast("Error: " + err.message);
       }
     });
   }
@@ -1457,7 +1462,6 @@
           const btn = row.querySelector(`.${BTN_CLASS}`);
           if (btn) btn.replaceWith(createSyncedBadge(newItemId));
         }
-        // Update detail view button if present
         const detailBtn = document.getElementById(DETAIL_BTN_ID);
         if (detailBtn) {
           const badge = createSyncedBadge(newItemId);
@@ -1465,22 +1469,8 @@
           badge.style.cssText = "padding:6px 14px;font-size:12px;border-radius:6px;background:#E8F5E9;color:#2E7D32;font-weight:600;white-space:nowrap;cursor:pointer;";
           detailBtn.replaceWith(badge);
         }
-        msg.innerHTML = '✅ Item creado!';
-        sendBtn.innerHTML = "✅ Creado";
-        sendBtn.disabled = true;
         const modal = document.getElementById("sp-monday-modal"); if (modal) modal.remove();
-        // Show success toast
-        const toast = document.createElement("div");
-        toast.style.cssText = "position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:100000;background:#2E7D32;color:#fff;padding:12px 20px;border-radius:8px;font-family:system-ui;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.2);display:flex;align-items:center;gap:8px;animation:sp-toast-in 0.3s ease;";
-        toast.innerHTML = "✅ Ticket migrado a Monday";
-        if (!document.getElementById("sp-toast-style")) {
-          const s = document.createElement("style");
-          s.id = "sp-toast-style";
-          s.textContent = "@keyframes sp-toast-in{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}@keyframes sp-toast-out{from{opacity:1}to{opacity:0;transform:translateY(-10px)}}";
-          document.head.appendChild(s);
-        }
-        document.body.appendChild(toast);
-        setTimeout(() => { toast.style.animation = "sp-toast-out 0.3s ease forwards"; setTimeout(() => toast.remove(), 300); }, 3000);
+        showSuccessToast("Ticket migrado a Monday");
       } catch (err) {
         msg.textContent = "❌ Error: " + err.message;
         sendBtn.innerHTML = "💾 Crear en Monday";
