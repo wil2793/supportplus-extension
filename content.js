@@ -1210,6 +1210,156 @@
     parent.insertBefore(btn, bulkMigrateBtn);
   }
 
+  // --- Custom search ---
+  const SEARCH_BTN_ID = "sp-search-btn";
+  const SP_SEARCH_API = "https://macropayapi.supportplus.mx/tickets/search-by-level-and-resolution-groups";
+
+  function injectSearchButton() {
+    if (document.getElementById(SEARCH_BTN_ID)) return;
+    var bulkMigrateBtn = document.getElementById(BULK_BTN_ID);
+    if (!bulkMigrateBtn) return;
+    var parent = bulkMigrateBtn.parentElement;
+    if (!parent) return;
+
+    var btn = document.createElement("button");
+    btn.id = SEARCH_BTN_ID;
+    btn.textContent = "🔍 Buscar";
+    btn.style.cssText =
+      "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#7B1FA2;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+    btn.addEventListener("click", showSearchModal);
+    parent.insertBefore(btn, bulkMigrateBtn);
+  }
+
+  function showSearchModal() {
+    var existing = document.getElementById("sp-search-modal");
+    if (existing) existing.remove();
+
+    var overlay = document.createElement("div");
+    overlay.id = "sp-search-modal";
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+
+    var statusOpts = '<option value="">Todos</option><option value="Asignado">Asignado</option><option value="En espera">En espera</option><option value="En atención">En atención</option><option value="En validación">En validación</option><option value="Por confirmar">Por confirmar</option><option value="Por ejecutar">Por ejecutar</option><option value="Por revisar">Por revisar</option><option value="En aplicaciones">En aplicaciones</option><option value="Cerrado">Cerrado</option><option value="Rechazado">Rechazado</option><option value="Cancelado">Cancelado</option><option value="Reabierto">Reabierto</option>';
+    var typeOpts = '<option value="">Todos</option><option value="5">Solicitud</option><option value="6">Incidente</option>';
+    var priorityOpts = '<option value="">Todas</option><option value="6">Critico</option><option value="7">Alto</option><option value="8">Medio</option><option value="9">Bajo</option>';
+
+    var inputStyle = 'width:100%;padding:6px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;';
+
+    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:620px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
+      '<h3 style="margin:0 0 16px;">🔍 Buscar tickets</h3>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">' +
+        '<div><label style="font-size:11px;color:#888;">Folio</label><input id="sp-sf-code" style="' + inputStyle + '" placeholder="Ej: 123"></div>' +
+        '<div><label style="font-size:11px;color:#888;">Solicitante</label><input id="sp-sf-requester" style="' + inputStyle + '" placeholder="Nombre"></div>' +
+        '<div><label style="font-size:11px;color:#888;">Estado</label><select id="sp-sf-status" style="' + inputStyle + '">' + statusOpts + '</select></div>' +
+        '<div><label style="font-size:11px;color:#888;">Tipo</label><select id="sp-sf-type" style="' + inputStyle + '">' + typeOpts + '</select></div>' +
+        '<div><label style="font-size:11px;color:#888;">Prioridad</label><select id="sp-sf-priority" style="' + inputStyle + '">' + priorityOpts + '</select></div>' +
+        '<div><label style="font-size:11px;color:#888;">Desde</label><input id="sp-sf-from" type="datetime-local" style="' + inputStyle + '"></div>' +
+        '<div><label style="font-size:11px;color:#888;">Hasta</label><input id="sp-sf-to" type="datetime-local" style="' + inputStyle + '"></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;margin-bottom:12px;">' +
+        '<button id="sp-sf-search" style="flex:1;padding:10px;border:none;border-radius:6px;background:#7B1FA2;color:#fff;cursor:pointer;font-size:14px;">🔍 Buscar</button>' +
+        '<button id="sp-sf-close" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cerrar</button>' +
+      '</div>' +
+      '<div id="sp-sf-results" style="flex:1;overflow:auto;min-height:100px;"></div>' +
+      '<div id="sp-sf-paging" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:#888;"></div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    document.getElementById("sp-sf-close").addEventListener("click", function() { overlay.remove(); });
+    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+    var currentPage = 1;
+    document.getElementById("sp-sf-search").addEventListener("click", function() { currentPage = 1; doSearch(); });
+
+    async function doSearch() {
+      var results = document.getElementById("sp-sf-results");
+      var paging = document.getElementById("sp-sf-paging");
+      results.innerHTML = '<div style="text-align:center;padding:20px;color:#888;">Buscando...</div>';
+      paging.innerHTML = "";
+
+      var spToken = getToken();
+      if (!spToken) { results.innerHTML = '<div style="color:#D94040;padding:12px;">No hay token de SupportPlus</div>'; return; }
+
+      var params = "page=" + (currentPage - 1) + "&size=25&resolutionGroupId=19";
+      var code = document.getElementById("sp-sf-code").value.trim();
+      var requester = document.getElementById("sp-sf-requester").value.trim();
+      var status = document.getElementById("sp-sf-status").value;
+      var type = document.getElementById("sp-sf-type").value;
+      var priority = document.getElementById("sp-sf-priority").value;
+      var from = document.getElementById("sp-sf-from").value;
+      var to = document.getElementById("sp-sf-to").value;
+
+      if (code) params += "&uniqueCode=" + encodeURIComponent(code);
+      if (requester) params += "&requesterName=" + encodeURIComponent(requester);
+      if (status) params += "&ticketStatusName=" + encodeURIComponent(status);
+      if (type) params += "&reportTypeId=" + type;
+      if (priority) params += "&priorityId=" + priority;
+      if (from) params += "&initDate=" + from;
+      if (to) params += "&endDate=" + to;
+
+      try {
+        var res = await fetch(SP_SEARCH_API + "?" + params, {
+          headers: { accept: "application/json", authorization: "Bearer " + spToken },
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var json = await res.json();
+        var data = json.data || json;
+        var tickets = data.content || [];
+        var totalPages = data.totalPages || 1;
+        var totalElements = data.totalElements || 0;
+
+        if (!tickets.length) {
+          results.innerHTML = '<div style="text-align:center;padding:20px;color:#888;">Sin resultados</div>';
+          return;
+        }
+
+        var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+        html += '<thead><tr style="background:rgba(0,0,0,0.05);text-align:left;">' +
+          '<th style="padding:6px;">Folio</th>' +
+          '<th style="padding:6px;">Fecha</th>' +
+          '<th style="padding:6px;">Solicitante</th>' +
+          '<th style="padding:6px;">Asunto</th>' +
+          '<th style="padding:6px;">Estado</th>' +
+          '<th style="padding:6px;">Analista</th>' +
+          '<th style="padding:6px;"></th>' +
+          '</tr></thead><tbody>';
+
+        tickets.forEach(function(t) {
+          var statusColor = STATUS_COLORS[t.ticketStatusName] || "transparent";
+          var date = (t.createdAt || "").replace("T", " ").substring(0, 16);
+          var subject = (t.subject || "").substring(0, 35) + ((t.subject || "").length > 35 ? "..." : "");
+          var requesterName = (t.requesterName || "").substring(0, 20) + ((t.requesterName || "").length > 20 ? "..." : "");
+
+          html += '<tr style="background:' + statusColor + ';border-bottom:1px solid #eee;">';
+          html += '<td style="padding:6px;font-weight:600;">' + (t.uniqueCode || t.id) + '</td>';
+          html += '<td style="padding:6px;font-size:11px;">' + date + '</td>';
+          html += '<td style="padding:6px;" title="' + (t.requesterName || "") + '">' + requesterName + '</td>';
+          html += '<td style="padding:6px;" title="' + (t.subject || "") + '">' + subject + '</td>';
+          html += '<td style="padding:6px;font-size:11px;">' + (t.ticketStatusName || "") + '</td>';
+          html += '<td style="padding:6px;">' + (t.responsibleName || "Sin asignar") + '</td>';
+          html += '<td style="padding:6px;"><a href="/es/dashboard/tickets/' + t.id + '" style="color:#7B1FA2;font-size:11px;font-weight:600;text-decoration:none;">Ir al ticket →</a></td>';
+          html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        results.innerHTML = html;
+
+        paging.innerHTML = '<span>' + totalElements + ' resultados | Pag ' + currentPage + ' de ' + totalPages + '</span>' +
+          '<div style="display:flex;gap:4px;">' +
+            '<button id="sp-sf-prev" style="padding:4px 10px;font-size:11px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;"' + (currentPage <= 1 ? ' disabled' : '') + '>&lt;</button>' +
+            '<button id="sp-sf-next" style="padding:4px 10px;font-size:11px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;"' + (currentPage >= totalPages ? ' disabled' : '') + '>&gt;</button>' +
+          '</div>';
+
+        var prev = document.getElementById("sp-sf-prev");
+        var next = document.getElementById("sp-sf-next");
+        if (prev) prev.addEventListener("click", function() { if (currentPage > 1) { currentPage--; doSearch(); } });
+        if (next) next.addEventListener("click", function() { if (currentPage < totalPages) { currentPage++; doSearch(); } });
+
+      } catch (err) {
+        results.innerHTML = '<div style="color:#D94040;padding:12px;">Error: ' + err.message + '</div>';
+      }
+    }
+  }
+
   const STATUS_FILTER_ID = "sp-status-filter";
 
   function injectStatusFilter() {
@@ -1325,6 +1475,7 @@
     injectBulkButton();
     injectBulkCloseButton();
     injectNewTicketButton();
+    injectSearchButton();
     injectStatusFilter();
   }
 
