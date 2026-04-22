@@ -1244,7 +1244,7 @@
 
     var inputStyle = 'width:100%;padding:6px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;';
 
-    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:620px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
+    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:900px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
       '<h3 style="margin:0 0 16px;">🔍 Buscar tickets</h3>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">' +
         '<div><label style="font-size:11px;color:#888;">Folio</label><input id="sp-sf-code" style="' + inputStyle + '" placeholder="Ej: 123"></div>' +
