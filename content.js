@@ -809,11 +809,15 @@
     confirmBtn.addEventListener("click", async function() {
       var comment = document.getElementById("sp-take-comment").value.trim();
       overlay.remove();
+      originalBtn.disabled = true;
+      originalBtn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
       showLoadingToast("Tomando ticket...");
 
       var profileId = await getMyProfileId();
       if (!profileId) {
         showErrorToast("No se pudo obtener tu perfil");
+        originalBtn.textContent = "🤚 Tomar";
+        originalBtn.disabled = false;
         return;
       }
 
@@ -839,16 +843,25 @@
           var row = newCloseBtn.closest(".MuiDataGrid-row");
           if (row) {
             row.classList.add(HIGHLIGHT_CLASS);
-            row.style.backgroundColor = "rgba(217, 64, 64, 0.08)";
+            row.style.position = "relative";
+            var indicator = document.createElement("span");
+            indicator.textContent = "❗";
+            indicator.style.cssText = "position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:14px;z-index:1;pointer-events:none;";
+            row.appendChild(indicator);
             var statusCell = row.querySelector('[data-field="ticketStatusName"]');
             if (statusCell) statusCell.textContent = "Asignado";
           }
           showSuccessToast("Ticket tomado");
+          if (isDetailView()) {
+            setTimeout(function() { window.location.reload(); }, 1500);
+          }
         } else {
           throw new Error("No success");
         }
       } catch (err) {
         showErrorToast("Error: " + err.message);
+        originalBtn.textContent = "🤚 Tomar";
+        originalBtn.disabled = false;
       }
     });
   }
@@ -955,6 +968,8 @@
     confirmBtn.addEventListener("click", async function() {
       var selectedGroup = groupSelect.value;
       overlay.remove();
+      originalBtn.disabled = true;
+      originalBtn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
       showLoadingToast(selectedGroup ? "Cerrando y migrando..." : "Cerrando ticket...");
 
       var spToken = getToken();
@@ -1029,6 +1044,8 @@
         showSuccessToast(selectedGroup ? "Ticket cerrado y migrado" : "Ticket cerrado");
       } catch (err) {
         showErrorToast("Error: " + err.message);
+        originalBtn.textContent = "🔒 Cerrar";
+        originalBtn.disabled = false;
       }
     });
   }
@@ -1173,6 +1190,26 @@
     parent.insertBefore(btn, bulkMigrateBtn.nextSibling);
   }
 
+  const NEW_TICKET_BTN_ID = "sp-new-ticket";
+
+  function injectNewTicketButton() {
+    if (document.getElementById(NEW_TICKET_BTN_ID)) return;
+    var bulkMigrateBtn = document.getElementById(BULK_BTN_ID);
+    if (!bulkMigrateBtn) return;
+    var parent = bulkMigrateBtn.parentElement;
+    if (!parent) return;
+
+    var btn = document.createElement("button");
+    btn.id = NEW_TICKET_BTN_ID;
+    btn.textContent = "➕ Nuevo ticket";
+    btn.style.cssText =
+      "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#1976D2;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+    btn.addEventListener("click", function() {
+      window.location.href = "/es/dashboard/tickets/nuevo";
+    });
+    parent.insertBefore(btn, bulkMigrateBtn);
+  }
+
   const STATUS_FILTER_ID = "sp-status-filter";
 
   function injectStatusFilter() {
@@ -1287,6 +1324,7 @@
     colorRowsByStatus();
     injectBulkButton();
     injectBulkCloseButton();
+    injectNewTicketButton();
     injectStatusFilter();
   }
 
@@ -1374,16 +1412,10 @@
     sendBtn.addEventListener("click", async () => {
       sendBtn.disabled = true;
       sendBtn.style.background = "#999";
-      sendBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Creando...';
-      var closeBtn = document.getElementById("sp-monday-close");
-      if (closeBtn) closeBtn.style.display = "none";
-      // Inject spinner keyframes if not present
-      if (!document.getElementById("sp-spinner-style")) {
-        const style = document.createElement("style");
-        style.id = "sp-spinner-style";
-        style.textContent = "@keyframes sp-spin { to { transform: rotate(360deg); } }";
-        document.head.appendChild(style);
-      }
+      sendBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Validando...';
+      var closeBtnEl = document.getElementById("sp-monday-close");
+      if (closeBtnEl) closeBtnEl.style.display = "none";
+      ensureToastStyles();
       msg.textContent = "";
 
       const boardId = boards[0].id;
@@ -1397,29 +1429,11 @@
         sendBtn.innerHTML = "💾 Crear en Monday";
         sendBtn.style.background = "#D94040";
         sendBtn.disabled = false;
-        var closeBtnA = document.getElementById("sp-monday-close");
-        if (closeBtnA) closeBtnA.style.display = "";
+        if (closeBtnEl) closeBtnEl.style.display = "";
         return;
       }
 
-      const groupId = document.getElementById("sp-group-select").value;
-      const itemName = ticket.subject || "Sin asunto";
-      const createdDate = new Date(ticket.createdAt).toISOString().slice(0, 10);
-      const spPriority = (ticket.incidentPriorityName || ticket.incidentPriority?.name || "").toLowerCase().trim();
-      const priorityIndex = PRIORITY_MAP[spPriority] ?? PRIORITY_MAP["medio"];
-
-      let personValue = {};
-      const holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
-      if (holderEmail) {
-        try {
-          const users = await getMondayUsers(mondayToken);
-          const userId = users[holderEmail.toLowerCase()];
-          console.log("[SP Monday] Buscando email:", holderEmail, "→ userId:", userId);
-          if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
-        } catch (e) { console.warn("[SP Monday] Error buscando usuario:", e); }
-      }
-
-      // Check if already migrated before creating
+      // Check if already migrated
       syncPromise = null;
       localStorage.removeItem(CACHE_KEY);
       const freshSynced = await ensureSyncStarted();
@@ -1436,6 +1450,26 @@
           detailBtn.replaceWith(badge);
         }
         return;
+      }
+
+      // Validations passed - close modal and show loading toast
+      const modal = document.getElementById("sp-monday-modal"); if (modal) modal.remove();
+      showLoadingToast("Migrando a Monday...");
+
+      const groupId = document.getElementById("sp-group-select")?.value || "";
+      const itemName = ticket.subject || "Sin asunto";
+      const createdDate = new Date(ticket.createdAt).toISOString().slice(0, 10);
+      const spPriority = (ticket.incidentPriorityName || ticket.incidentPriority?.name || "").toLowerCase().trim();
+      const priorityIndex = PRIORITY_MAP[spPriority] ?? PRIORITY_MAP["medio"];
+
+      let personValue = {};
+      const holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
+      if (holderEmail) {
+        try {
+          const users = await getMondayUsers(mondayToken);
+          const userId = users[holderEmail.toLowerCase()];
+          if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
+        } catch (e) {}
       }
 
       const columnValues = JSON.stringify({
@@ -1469,15 +1503,9 @@
           badge.style.cssText = "padding:6px 14px;font-size:12px;border-radius:6px;background:#E8F5E9;color:#2E7D32;font-weight:600;white-space:nowrap;cursor:pointer;";
           detailBtn.replaceWith(badge);
         }
-        const modal = document.getElementById("sp-monday-modal"); if (modal) modal.remove();
         showSuccessToast("Ticket migrado a Monday");
       } catch (err) {
-        msg.textContent = "❌ Error: " + err.message;
-        sendBtn.innerHTML = "💾 Crear en Monday";
-        sendBtn.style.background = "#D94040";
-        sendBtn.disabled = false;
-        var closeBtnB = document.getElementById("sp-monday-close");
-        if (closeBtnB) closeBtnB.style.display = "";
+        showErrorToast("Error: " + err.message);
       }
     });
 
