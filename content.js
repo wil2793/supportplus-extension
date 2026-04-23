@@ -290,7 +290,7 @@
 
   let detailLoading = false;
   async function injectDetailButton() {
-    if (document.getElementById(DETAIL_BTN_ID)) return;
+    if (document.querySelectorAll("#" + DETAIL_BTN_ID).length > 0) return;
     if (detailLoading) return;
     detailLoading = true;
     try {
