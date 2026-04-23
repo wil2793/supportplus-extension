@@ -240,6 +240,25 @@
     return badge;
   }
 
+  function createCopyButton(text) {
+    const btn = document.createElement("button");
+    btn.className = "sp-copy-btn";
+    btn.innerHTML = "📋";
+    btn.title = "Copiar folio";
+    btn.style.cssText = "padding:1px 4px;font-size:12px;cursor:pointer;border:none;background:transparent;margin-left:4px;opacity:0.6;";
+    btn.addEventListener("mouseenter", function() { btn.style.opacity = "1"; });
+    btn.addEventListener("mouseleave", function() { btn.style.opacity = "0.6"; });
+    btn.addEventListener("click", function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      navigator.clipboard.writeText(text).then(function() {
+        btn.innerHTML = "✅";
+        setTimeout(function() { btn.innerHTML = "📋"; }, 1500);
+      });
+    });
+    return btn;
+  }
+
   function createButton(ticketId) {
     const btn = document.createElement("button");
     btn.className = BTN_CLASS;
@@ -1395,6 +1414,13 @@
       const firstCell = row.querySelector('[data-field="uniqueCode"]');
       if (!firstCell) return;
       const container = firstCell.querySelector(".MuiBox-root") || firstCell;
+
+      // Inject copy button if not present
+      if (!row.querySelector(".sp-copy-btn")) {
+        const codeEl = firstCell.querySelector("p.MuiTypography-body1");
+        const codeText = codeEl ? codeEl.textContent.trim() : "";
+        if (codeText) container.appendChild(createCopyButton(codeText));
+      }
 
       // Clean up stale buttons if status changed
       if (statusText !== "En espera") {
