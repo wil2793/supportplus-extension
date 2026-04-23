@@ -1,7 +1,7 @@
 (function () {
   // Make loading backdrop less invasive - thin top bar instead of fullscreen
   const hideBackdrop = document.createElement("style");
-  hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } }";
+  hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } } .MuiDataGrid-cell[data-field='uniqueCode'] { min-width: 300px !important; max-width: 300px !important; } .MuiDataGrid-columnHeader[data-field='uniqueCode'] { min-width: 300px !important; max-width: 300px !important; }";
   document.head.appendChild(hideBackdrop);
 
   // --- Toast helpers ---
@@ -349,6 +349,17 @@
     } catch (e) { return; }
 
     const synced = await ensureSyncStarted();
+
+    // Add copy button in detail view
+    if (!container.querySelector(".sp-copy-btn") && uniqueCode) {
+      var copyBtn = createCopyButton(uniqueCode);
+      copyBtn.style.fontSize = "14px";
+      copyBtn.style.padding = "2px 6px";
+      var chipEl = container.querySelector(".MuiChip-root");
+      if (chipEl) container.insertBefore(copyBtn, chipEl);
+      else container.appendChild(copyBtn);
+    }
+
     if (uniqueCode && synced[uniqueCode]) {
       const mondayItemId = synced[uniqueCode];
       const badge = document.createElement("span");
