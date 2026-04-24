@@ -980,6 +980,8 @@
     overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:420px;width:90%;font-family:system-ui;">' +
       '<h3 style="margin:0 0 16px;">🔒 Cerrar ticket #' + ticketId + '</h3>' +
       summaryHTML +
+      '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario (opcional)</label>' +
+      '<textarea id="sp-close-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:60px;resize:vertical;box-sizing:border-box;margin-bottom:12px;" placeholder="Escribe un comentario..."></textarea>' +
       '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Migrar a Monday (opcional)</label>' +
       '<select id="sp-close-group" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:12px;font-size:13px;">' + groupOpts + '</select>' +
       '<div id="sp-close-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
@@ -1015,6 +1017,7 @@
 
     confirmBtn.addEventListener("click", async function() {
       var selectedGroup = groupSelect.value;
+      var commentText = document.getElementById("sp-close-comment").value.trim();
       overlay.remove();
       originalBtn.disabled = true;
       originalBtn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
@@ -1022,6 +1025,17 @@
 
       var spToken = getToken();
       try {
+        // Step 1: Add comment if provided
+        if (commentText) {
+          var commentRes = await fetch(SP_API + "/comment/" + ticketId, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+            body: JSON.stringify({ content: "<p>" + commentText + "</p>", internal: false }),
+          });
+          if (!commentRes.ok) throw new Error("Error al agregar comentario: HTTP " + commentRes.status);
+        }
+
+        // Step 2: Close ticket
         var res = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
           method: "PATCH",
           headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
@@ -1481,7 +1495,8 @@
       // Inject migrate buttons for "Cerrado" tickets
       if (statusText === "Cerrado") {
         if (row.querySelector("." + BTN_CLASS) || row.querySelector("." + SYNCED_CLASS)) return;
-        const uniqueCode = firstCell.textContent.trim();
+        const codeEl = firstCell.querySelector("p.MuiTypography-body1");
+        const uniqueCode = codeEl ? codeEl.textContent.trim() : "";
         if (uniqueCode && synced[uniqueCode]) {
           container.appendChild(createSyncedBadge(synced[uniqueCode]));
         } else {
