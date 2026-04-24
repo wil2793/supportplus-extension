@@ -1291,19 +1291,40 @@
   }
 
   const QUICK_FILTER_ID = "sp-quick-filter";
+  const QUICK_FILTER_ASSIGNED_ID = "sp-quick-filter-assigned";
+  const QUICK_FILTER_ATTENTION_ID = "sp-quick-filter-attention";
 
   function injectQuickFilterButton() {
-    if (document.getElementById(QUICK_FILTER_ID)) return;
     var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
     if (!userWrapper) return;
+    var parent = userWrapper.parentElement;
 
-    var btn = document.createElement("button");
-    btn.id = QUICK_FILTER_ID;
-    btn.textContent = "⏳ Solo en espera";
-    btn.style.cssText =
-      "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#FF8F00;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-    btn.addEventListener("click", function() { showQuickFilterModal("En espera"); });
-    userWrapper.parentElement.insertBefore(btn, userWrapper);
+    if (!document.getElementById(QUICK_FILTER_ID)) {
+      var btn = document.createElement("button");
+      btn.id = QUICK_FILTER_ID;
+      btn.textContent = "⏳ En espera";
+      btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#FF8F00;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+      btn.addEventListener("click", function() { showQuickFilterModal("En espera"); });
+      parent.insertBefore(btn, userWrapper);
+    }
+
+    if (!document.getElementById(QUICK_FILTER_ASSIGNED_ID)) {
+      var btn2 = document.createElement("button");
+      btn2.id = QUICK_FILTER_ASSIGNED_ID;
+      btn2.textContent = "📌 Asignados";
+      btn2.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#1976D2;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+      btn2.addEventListener("click", function() { showQuickFilterModal("Asignado"); });
+      parent.insertBefore(btn2, userWrapper);
+    }
+
+    if (!document.getElementById(QUICK_FILTER_ATTENTION_ID)) {
+      var btn3 = document.createElement("button");
+      btn3.id = QUICK_FILTER_ATTENTION_ID;
+      btn3.textContent = "🔔 En atención";
+      btn3.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#E65100;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+      btn3.addEventListener("click", function() { showQuickFilterModal("En atención"); });
+      parent.insertBefore(btn3, userWrapper);
+    }
   }
 
   async function showQuickFilterModal(statusName) {
@@ -1315,7 +1336,7 @@
     overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
     overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:900px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
-        '<h3 style="margin:0;">⏳ Tickets en espera</h3>' +
+        '<h3 style="margin:0;">Tickets: ' + statusName + '</h3>' +
         '<button id="sp-qf-close" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Cerrar</button>' +
       '</div>' +
       '<div id="sp-qf-results" style="flex:1;overflow:auto;min-height:100px;"><div style="text-align:center;padding:20px;color:#888;">Buscando...</div></div>' +
@@ -1350,7 +1371,7 @@
         var totalElements = data.totalElements || 0;
 
         if (!tickets.length) {
-          results.innerHTML = '<div style="text-align:center;padding:20px;color:#888;">Sin tickets en espera</div>';
+          results.innerHTML = '<div style="text-align:center;padding:20px;color:#888;">Sin tickets con estado: ' + statusName + '</div>';
           return;
         }
 
@@ -1382,7 +1403,7 @@
         html += '</tbody></table>';
         results.innerHTML = html;
 
-        paging.innerHTML = '<span>' + totalElements + ' en espera | Pag ' + currentPage + ' de ' + totalPages + '</span>' +
+        paging.innerHTML = '<span>' + totalElements + ' tickets | Pag ' + currentPage + ' de ' + totalPages + '</span>' +
           '<div style="display:flex;gap:4px;">' +
             '<button id="sp-qf-prev" style="padding:4px 10px;font-size:11px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;"' + (currentPage <= 1 ? ' disabled' : '') + '>&lt;</button>' +
             '<button id="sp-qf-next" style="padding:4px 10px;font-size:11px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;"' + (currentPage >= totalPages ? ' disabled' : '') + '>&gt;</button>' +
