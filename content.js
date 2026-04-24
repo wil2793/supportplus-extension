@@ -1636,6 +1636,10 @@
   async function injectButtons() {
     const synced = await ensureSyncStarted();
 
+    // Header buttons - always inject regardless of view
+    injectSearchButton();
+    injectQuickFilterButton();
+
     if (isDetailView()) {
       injectDetailButton();
       injectIamButton();
@@ -1721,8 +1725,6 @@
     injectBulkButton();
     injectBulkCloseButton();
     injectNewTicketButton();
-    injectSearchButton();
-    injectQuickFilterButton();
   }
 
   // --- Handle single click ---
