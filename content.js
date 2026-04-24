@@ -1290,6 +1290,114 @@
     userWrapper.parentElement.insertBefore(btn, userWrapper);
   }
 
+  const QUICK_FILTER_ID = "sp-quick-filter";
+
+  function injectQuickFilterButton() {
+    if (document.getElementById(QUICK_FILTER_ID)) return;
+    var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
+    if (!userWrapper) return;
+
+    var btn = document.createElement("button");
+    btn.id = QUICK_FILTER_ID;
+    btn.textContent = "⏳ Solo en espera";
+    btn.style.cssText =
+      "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#FF8F00;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+    btn.addEventListener("click", function() { showQuickFilterModal("En espera"); });
+    userWrapper.parentElement.insertBefore(btn, userWrapper);
+  }
+
+  async function showQuickFilterModal(statusName) {
+    var existing = document.getElementById("sp-search-modal");
+    if (existing) existing.remove();
+
+    var overlay = document.createElement("div");
+    overlay.id = "sp-search-modal";
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:900px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+        '<h3 style="margin:0;">⏳ Tickets en espera</h3>' +
+        '<button id="sp-qf-close" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Cerrar</button>' +
+      '</div>' +
+      '<div id="sp-qf-results" style="flex:1;overflow:auto;min-height:100px;"><div style="text-align:center;padding:20px;color:#888;">Buscando...</div></div>' +
+      '<div id="sp-qf-paging" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:#888;"></div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    document.getElementById("sp-qf-close").addEventListener("click", function() { overlay.remove(); });
+    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+    var currentPage = 1;
+    await doQuickSearch();
+
+    async function doQuickSearch() {
+      var results = document.getElementById("sp-qf-results");
+      var paging = document.getElementById("sp-qf-paging");
+      results.innerHTML = '<div style="text-align:center;padding:20px;color:#888;">Buscando...</div>';
+      paging.innerHTML = "";
+
+      var spToken = getToken();
+      if (!spToken) { results.innerHTML = '<div style="color:#D94040;padding:12px;">No hay token</div>'; return; }
+
+      try {
+        var res = await fetch(SP_SEARCH_API + "?page=" + (currentPage - 1) + "&size=25&resolutionGroupId=19&ticketStatusName=" + encodeURIComponent(statusName), {
+          headers: { accept: "application/json", authorization: "Bearer " + spToken },
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var json = await res.json();
+        var data = json.data || json;
+        var tickets = data.content || [];
+        var totalPages = data.totalPages || 1;
+        var totalElements = data.totalElements || 0;
+
+        if (!tickets.length) {
+          results.innerHTML = '<div style="text-align:center;padding:20px;color:#888;">Sin tickets en espera</div>';
+          return;
+        }
+
+        var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+        html += '<thead><tr style="background:rgba(0,0,0,0.05);text-align:left;">' +
+          '<th style="padding:6px;">Folio</th>' +
+          '<th style="padding:6px;">Fecha</th>' +
+          '<th style="padding:6px;">Solicitante</th>' +
+          '<th style="padding:6px;">Asunto</th>' +
+          '<th style="padding:6px;">Analista</th>' +
+          '<th style="padding:6px;">Prioridad</th>' +
+          '<th style="padding:6px;"></th>' +
+          '</tr></thead><tbody>';
+
+        tickets.forEach(function(t) {
+          var date = (t.createdAt || "").replace("T", " ").substring(0, 16);
+          var subject = (t.subject || "").substring(0, 40) + ((t.subject || "").length > 40 ? "..." : "");
+          html += '<tr style="background:rgba(255,235,59,0.1);border-bottom:1px solid #eee;">';
+          html += '<td style="padding:6px;font-weight:600;">' + (t.uniqueCode || t.id) + '</td>';
+          html += '<td style="padding:6px;font-size:11px;">' + date + '</td>';
+          html += '<td style="padding:6px;">' + (t.requesterName || "") + '</td>';
+          html += '<td style="padding:6px;" title="' + (t.subject || "") + '">' + subject + '</td>';
+          html += '<td style="padding:6px;">' + (t.responsibleName || "Sin asignar") + '</td>';
+          html += '<td style="padding:6px;font-size:11px;">' + (t.incidentPriorityName || "") + '</td>';
+          html += '<td style="padding:6px;"><a href="/es/dashboard/tickets/' + t.id + '" style="display:inline-block;padding:4px 12px;background:#FF8F00;color:#fff;font-size:12px;font-weight:600;text-decoration:none;border-radius:4px;white-space:nowrap;">Ir al ticket</a></td>';
+          html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        results.innerHTML = html;
+
+        paging.innerHTML = '<span>' + totalElements + ' en espera | Pag ' + currentPage + ' de ' + totalPages + '</span>' +
+          '<div style="display:flex;gap:4px;">' +
+            '<button id="sp-qf-prev" style="padding:4px 10px;font-size:11px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;"' + (currentPage <= 1 ? ' disabled' : '') + '>&lt;</button>' +
+            '<button id="sp-qf-next" style="padding:4px 10px;font-size:11px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;"' + (currentPage >= totalPages ? ' disabled' : '') + '>&gt;</button>' +
+          '</div>';
+
+        var prev = document.getElementById("sp-qf-prev");
+        var next = document.getElementById("sp-qf-next");
+        if (prev) prev.addEventListener("click", function() { if (currentPage > 1) { currentPage--; doQuickSearch(); } });
+        if (next) next.addEventListener("click", function() { if (currentPage < totalPages) { currentPage++; doQuickSearch(); } });
+      } catch (err) {
+        results.innerHTML = '<div style="color:#D94040;padding:12px;">Error: ' + err.message + '</div>';
+      }
+    }
+  }
+
   function showSearchModal() {
     var existing = document.getElementById("sp-search-modal");
     if (existing) existing.remove();
@@ -1510,6 +1618,7 @@
     injectBulkCloseButton();
     injectNewTicketButton();
     injectSearchButton();
+    injectQuickFilterButton();
   }
 
   // --- Handle single click ---
