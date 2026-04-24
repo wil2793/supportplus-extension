@@ -444,6 +444,62 @@
     } finally { detailLoading = false; }
   }
 
+  const IAM_BTN_ID = "sp-iam-btn";
+  const IAM_PROFILES = [296, 126, 128];
+  const IAM_API = "https://macropayapi.supportplus.mx/ticket-participants/assign-visitor-participant";
+
+  function injectIamButton() {
+    if (document.getElementById(IAM_BTN_ID)) return;
+    if (!isDetailView()) return;
+    var ticketId = getDetailTicketId();
+    if (!ticketId) return;
+
+    // Find the "Agregar usuarios" card
+    var cards = document.querySelectorAll(".MuiCardHeader-content .MuiTypography-body1");
+    var targetCard = null;
+    cards.forEach(function(el) {
+      if (el.textContent.trim() === "Agregar usuarios") targetCard = el.closest(".MuiCard-root");
+    });
+    if (!targetCard) return;
+
+    var btn = document.createElement("button");
+    btn.id = IAM_BTN_ID;
+    btn.textContent = "👥 Agregar IAMcitos";
+    btn.style.cssText = "width:100%;padding:10px;font-size:13px;cursor:pointer;border:none;border-radius:6px;background:#1976D2;color:#fff;font-weight:600;margin-top:8px;";
+    btn.addEventListener("click", async function() {
+      btn.disabled = true;
+      btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Agregando...';
+      ensureToastStyles();
+      showLoadingToast("Agregando IAMcitos...");
+
+      var spToken = getToken();
+      var ok = 0, fail = 0;
+      for (var i = 0; i < IAM_PROFILES.length; i++) {
+        try {
+          var res = await fetch(IAM_API, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+            body: JSON.stringify({ profileId: IAM_PROFILES[i], ticketId: parseInt(ticketId), isParticipant: false }),
+          });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          ok++;
+        } catch (e) { fail++; }
+      }
+
+      if (fail === 0) {
+        showSuccessToast("IAMcitos agregados (" + ok + "/" + IAM_PROFILES.length + ")");
+        btn.textContent = "✅ IAMcitos agregados";
+        btn.style.background = "#2E7D32";
+      } else {
+        showErrorToast("Algunos fallaron: " + ok + " ok, " + fail + " errores");
+        btn.textContent = "👥 Agregar IAMcitos";
+        btn.disabled = false;
+      }
+    });
+
+    targetCard.appendChild(btn);
+  }
+
   function injectBulkButton() {
     if (document.getElementById(BULK_BTN_ID)) return;
     let container = document.querySelector(".MuiBox-root .MuiStack-root");
@@ -1556,6 +1612,7 @@
 
     if (isDetailView()) {
       injectDetailButton();
+      injectIamButton();
       return;
     }
 
