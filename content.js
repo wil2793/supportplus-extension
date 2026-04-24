@@ -448,6 +448,8 @@
   const IAM_PROFILES = [296, 126, 128];
   const IAM_API = "https://macropayapi.supportplus.mx/ticket-participants/assign-visitor-participant";
 
+  const IAM_NAMES = ["Carlos Alberto Lopez Mata", "Crhistian Uziel Sanchez Alvarez", "Leyver Adair Vasquez Velasco"];
+
   function injectIamButton() {
     if (document.getElementById(IAM_BTN_ID)) return;
     if (!isDetailView()) return;
@@ -462,6 +464,16 @@
     });
     if (!targetCard) return;
 
+    // Check if all IAMcitos already exist in the list
+    var existingNames = [];
+    targetCard.querySelectorAll("p[aria-label]").forEach(function(p) {
+      existingNames.push(p.getAttribute("aria-label"));
+    });
+    var allExist = IAM_NAMES.every(function(name) {
+      return existingNames.indexOf(name) !== -1;
+    });
+    if (allExist) return;
+
     var btn = document.createElement("button");
     btn.id = IAM_BTN_ID;
     btn.textContent = "👥 Agregar IAMcitos";
@@ -475,6 +487,8 @@
       var spToken = getToken();
       var ok = 0, fail = 0;
       for (var i = 0; i < IAM_PROFILES.length; i++) {
+        // Skip if already exists
+        if (existingNames.indexOf(IAM_NAMES[i]) !== -1) { ok++; continue; }
         try {
           var res = await fetch(IAM_API, {
             method: "POST",
@@ -487,9 +501,8 @@
       }
 
       if (fail === 0) {
-        showSuccessToast("IAMcitos agregados (" + ok + "/" + IAM_PROFILES.length + ")");
-        btn.textContent = "✅ IAMcitos agregados";
-        btn.style.background = "#2E7D32";
+        showSuccessToast("IAMcitos agregados");
+        setTimeout(function() { window.location.reload(); }, 1500);
       } else {
         showErrorToast("Algunos fallaron: " + ok + " ok, " + fail + " errores");
         btn.textContent = "👥 Agregar IAMcitos";
