@@ -482,18 +482,31 @@
       btn.disabled = true;
       btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Agregando...';
       ensureToastStyles();
-      showLoadingToast("Agregando IAMcitos...");
 
+      // Re-check existing names at click time
+      var currentNames = [];
+      targetCard.querySelectorAll("p[aria-label]").forEach(function(p) {
+        currentNames.push(p.getAttribute("aria-label"));
+      });
+      var missing = [];
+      for (var j = 0; j < IAM_NAMES.length; j++) {
+        if (currentNames.indexOf(IAM_NAMES[j]) === -1) missing.push(IAM_PROFILES[j]);
+      }
+      if (!missing.length) {
+        showSuccessToast("Todos los IAMcitos ya existen");
+        btn.remove();
+        return;
+      }
+
+      showLoadingToast("Agregando " + missing.length + " IAMcito(s)...");
       var spToken = getToken();
       var ok = 0, fail = 0;
-      for (var i = 0; i < IAM_PROFILES.length; i++) {
-        // Skip if already exists
-        if (existingNames.indexOf(IAM_NAMES[i]) !== -1) { ok++; continue; }
+      for (var i = 0; i < missing.length; i++) {
         try {
           var res = await fetch(IAM_API, {
             method: "POST",
             headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-            body: JSON.stringify({ profileId: IAM_PROFILES[i], ticketId: parseInt(ticketId), isParticipant: false }),
+            body: JSON.stringify({ profileId: missing[i], ticketId: parseInt(ticketId), isParticipant: false }),
           });
           if (!res.ok) throw new Error("HTTP " + res.status);
           ok++;
