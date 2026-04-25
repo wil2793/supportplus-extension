@@ -1372,6 +1372,67 @@
     userWrapper.parentElement.insertBefore(btn, userWrapper);
   }
 
+  const QUICK_SEARCH_ID = "sp-quick-search";
+
+  function injectQuickSearch() {
+    if (document.getElementById(QUICK_SEARCH_ID)) return;
+    var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
+    if (!userWrapper) return;
+    var parent = userWrapper.parentElement;
+
+    var wrapper = document.createElement("div");
+    wrapper.id = QUICK_SEARCH_ID;
+    wrapper.style.cssText = "display:inline-flex;align-items:center;gap:4px;margin-right:12px;";
+
+    var input = document.createElement("input");
+    input.id = "sp-quick-search-input";
+    input.type = "text";
+    input.placeholder = "Folio o ID...";
+    input.style.cssText = "padding:5px 10px;font-size:12px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;background:rgba(255,255,255,0.15);color:#fff;width:130px;outline:none;";
+    input.addEventListener("focus", function() { input.style.borderColor = "rgba(255,255,255,0.6)"; });
+    input.addEventListener("blur", function() { input.style.borderColor = "rgba(255,255,255,0.3)"; });
+
+    var goBtn = document.createElement("button");
+    goBtn.textContent = "→";
+    goBtn.style.cssText = "padding:5px 10px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#4CAF50;color:#fff;font-weight:600;";
+
+    async function doQuickSearch() {
+      var val = input.value.trim();
+      if (!val) return;
+      goBtn.disabled = true;
+      goBtn.textContent = "...";
+
+      var spToken = getToken();
+      if (!spToken) { showErrorToast("No hay token"); goBtn.textContent = "→"; goBtn.disabled = false; return; }
+
+      try {
+        var res = await fetch(SP_SEARCH_API + "?uniqueCode=" + encodeURIComponent(val) + "&resolutionGroupId=19&page=0&size=1", {
+          headers: { accept: "application/json", authorization: "Bearer " + spToken },
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var json = await res.json();
+        var tickets = (json.data || json).content || [];
+        if (tickets.length > 0) {
+          window.open("/es/dashboard/tickets/" + tickets[0].id, "_blank");
+        } else {
+          showErrorToast("Ticket no encontrado: " + val);
+        }
+      } catch (err) {
+        showErrorToast("Error: " + err.message);
+      }
+      goBtn.textContent = "→";
+      goBtn.disabled = false;
+      input.value = "";
+    }
+
+    goBtn.addEventListener("click", doQuickSearch);
+    input.addEventListener("keydown", function(e) { if (e.key === "Enter") doQuickSearch(); });
+
+    wrapper.appendChild(input);
+    wrapper.appendChild(goBtn);
+    parent.insertBefore(wrapper, userWrapper);
+  }
+
   const QUICK_FILTER_ID = "sp-quick-filter";
   const QUICK_FILTER_ASSIGNED_ID = "sp-quick-filter-assigned";
   const QUICK_FILTER_ATTENTION_ID = "sp-quick-filter-attention";
@@ -1638,6 +1699,7 @@
 
     // Header buttons - always inject regardless of view
     injectSearchButton();
+    injectQuickSearch();
     injectQuickFilterButton();
 
     if (isDetailView()) {
