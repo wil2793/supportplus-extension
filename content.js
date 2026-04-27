@@ -984,6 +984,8 @@
           showSuccessToast("Ticket tomado");
           if (isDetailView()) {
             setTimeout(function() { window.location.reload(); }, 1500);
+          } else {
+            window.open("/es/dashboard/tickets/" + ticketId, "_blank");
           }
         } else {
           throw new Error("No success");
