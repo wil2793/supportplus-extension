@@ -1186,6 +1186,9 @@
           if (statusCell) statusCell.textContent = "Cerrado";
         }
         showSuccessToast(selectedGroup ? "Ticket cerrado y migrado" : "Ticket cerrado");
+        if (isDetailView()) {
+          setTimeout(function() { window.close(); }, 1500);
+        }
       } catch (err) {
         showErrorToast("Error: " + err.message);
         originalBtn.textContent = "🔒 Cerrar";
