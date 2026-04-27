@@ -1540,27 +1540,53 @@
           '<th style="padding:6px;">Fecha</th>' +
           '<th style="padding:6px;">Solicitante</th>' +
           '<th style="padding:6px;">Asunto</th>' +
+          '<th style="padding:6px;">Estado</th>' +
           '<th style="padding:6px;">Analista</th>' +
-          '<th style="padding:6px;">Prioridad</th>' +
-          '<th style="padding:6px;"></th>' +
+          '<th style="padding:6px;">Acciones</th>' +
           '</tr></thead><tbody>';
 
+        var myName = getLoggedUserName();
+        var synced = getCache() || {};
         tickets.forEach(function(t) {
+          var statusColor = STATUS_COLORS[t.ticketStatusName] || "transparent";
           var date = (t.createdAt || "").replace("T", " ").substring(0, 16);
           var subject = (t.subject || "").substring(0, 40) + ((t.subject || "").length > 40 ? "..." : "");
-          html += '<tr style="background:rgba(255,235,59,0.1);border-bottom:1px solid #eee;">';
-          html += '<td style="padding:6px;font-weight:600;">' + (t.uniqueCode || t.id) + '</td>';
+          html += '<tr style="background:' + statusColor + ';border-bottom:1px solid #eee;">';
+          html += '<td style="padding:6px;font-weight:600;"><a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="color:inherit;text-decoration:none;">' + (t.uniqueCode || t.id) + '</a></td>';
           html += '<td style="padding:6px;font-size:11px;">' + date + '</td>';
           html += '<td style="padding:6px;">' + (t.requesterName || "") + '</td>';
           html += '<td style="padding:6px;" title="' + (t.subject || "") + '">' + subject + '</td>';
+          html += '<td style="padding:6px;font-size:11px;">' + (t.ticketStatusName || "") + '</td>';
           html += '<td style="padding:6px;">' + (t.responsibleName || "Sin asignar") + '</td>';
-          html += '<td style="padding:6px;font-size:11px;">' + (t.incidentPriorityName || "") + '</td>';
-          html += '<td style="padding:6px;"><a href="/es/dashboard/tickets/' + t.id + '" style="display:inline-block;padding:4px 12px;background:#FF8F00;color:#fff;font-size:12px;font-weight:600;text-decoration:none;border-radius:4px;white-space:nowrap;">Ir al ticket</a></td>';
+          html += '<td style="padding:6px;white-space:nowrap;" class="sp-modal-actions" data-id="' + t.id + '" data-status="' + (t.ticketStatusName || "") + '" data-responsible="' + (t.responsibleName || "") + '" data-code="' + (t.uniqueCode || "") + '"></td>';
           html += '</tr>';
         });
 
         html += '</tbody></table>';
         results.innerHTML = html;
+
+        // Inject action buttons in results
+        results.querySelectorAll(".sp-modal-actions").forEach(function(cell) {
+          var id = cell.dataset.id;
+          var status = cell.dataset.status;
+          var responsible = cell.dataset.responsible;
+          var code = cell.dataset.code;
+          if (status === "En espera") cell.appendChild(createTakeButton(id));
+          if (status === "Asignado" && responsible && myName && responsible === myName) cell.appendChild(createCloseButton(id));
+          if (status === "Asignado" && responsible && myName && responsible !== myName) cell.appendChild(createStealButton(id));
+          if (status === "Cerrado") {
+            if (code && synced[code]) { cell.appendChild(createSyncedBadge(synced[code])); }
+            else { cell.appendChild(createButton(id)); }
+          }
+          // Always add "open" link
+          var link = document.createElement("a");
+          link.href = "/es/dashboard/tickets/" + id;
+          link.target = "_blank";
+          link.textContent = "↗";
+          link.title = "Abrir ticket";
+          link.style.cssText = "display:inline-block;padding:2px 6px;font-size:14px;text-decoration:none;margin-left:4px;";
+          cell.appendChild(link);
+        });
 
         paging.innerHTML = '<span>' + totalElements + ' tickets | Pag ' + currentPage + ' de ' + totalPages + '</span>' +
           '<div style="display:flex;gap:4px;">' +
@@ -1668,9 +1694,11 @@
           '<th style="padding:6px;">Asunto</th>' +
           '<th style="padding:6px;">Estado</th>' +
           '<th style="padding:6px;">Analista</th>' +
-          '<th style="padding:6px;"></th>' +
+          '<th style="padding:6px;">Acciones</th>' +
           '</tr></thead><tbody>';
 
+        var myName2 = getLoggedUserName();
+        var synced2 = getCache() || {};
         tickets.forEach(function(t) {
           var statusColor = STATUS_COLORS[t.ticketStatusName] || "transparent";
           var date = (t.createdAt || "").replace("T", " ").substring(0, 16);
@@ -1678,18 +1706,40 @@
           var requesterName = (t.requesterName || "").substring(0, 20) + ((t.requesterName || "").length > 20 ? "..." : "");
 
           html += '<tr style="background:' + statusColor + ';border-bottom:1px solid #eee;">';
-          html += '<td style="padding:6px;font-weight:600;">' + (t.uniqueCode || t.id) + '</td>';
+          html += '<td style="padding:6px;font-weight:600;"><a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="color:inherit;text-decoration:none;">' + (t.uniqueCode || t.id) + '</a></td>';
           html += '<td style="padding:6px;font-size:11px;">' + date + '</td>';
           html += '<td style="padding:6px;" title="' + (t.requesterName || "") + '">' + requesterName + '</td>';
           html += '<td style="padding:6px;" title="' + (t.subject || "") + '">' + subject + '</td>';
           html += '<td style="padding:6px;font-size:11px;">' + (t.ticketStatusName || "") + '</td>';
           html += '<td style="padding:6px;">' + (t.responsibleName || "Sin asignar") + '</td>';
-          html += '<td style="padding:6px;"><a href="/es/dashboard/tickets/' + t.id + '" style="display:inline-block;padding:4px 12px;background:#7B1FA2;color:#fff;font-size:12px;font-weight:600;text-decoration:none;border-radius:4px;white-space:nowrap;">Ir al ticket</a></td>';
+          html += '<td style="padding:6px;white-space:nowrap;" class="sp-search-actions" data-id="' + t.id + '" data-status="' + (t.ticketStatusName || "") + '" data-responsible="' + (t.responsibleName || "") + '" data-code="' + (t.uniqueCode || "") + '"></td>';
           html += '</tr>';
         });
 
         html += '</tbody></table>';
         results.innerHTML = html;
+
+        // Inject action buttons
+        results.querySelectorAll(".sp-search-actions").forEach(function(cell) {
+          var id = cell.dataset.id;
+          var status = cell.dataset.status;
+          var responsible = cell.dataset.responsible;
+          var code = cell.dataset.code;
+          if (status === "En espera") cell.appendChild(createTakeButton(id));
+          if (status === "Asignado" && responsible && myName2 && responsible === myName2) cell.appendChild(createCloseButton(id));
+          if (status === "Asignado" && responsible && myName2 && responsible !== myName2) cell.appendChild(createStealButton(id));
+          if (status === "Cerrado") {
+            if (code && synced2[code]) { cell.appendChild(createSyncedBadge(synced2[code])); }
+            else { cell.appendChild(createButton(id)); }
+          }
+          var link = document.createElement("a");
+          link.href = "/es/dashboard/tickets/" + id;
+          link.target = "_blank";
+          link.textContent = "↗";
+          link.title = "Abrir ticket";
+          link.style.cssText = "display:inline-block;padding:2px 6px;font-size:14px;text-decoration:none;margin-left:4px;";
+          cell.appendChild(link);
+        });
 
         paging.innerHTML = '<span>' + totalElements + ' resultados | Pag ' + currentPage + ' de ' + totalPages + '</span>' +
           '<div style="display:flex;gap:4px;">' +
