@@ -1575,6 +1575,8 @@
   const QUICK_FILTER_ID = "sp-quick-filter";
   const QUICK_FILTER_ASSIGNED_ID = "sp-quick-filter-assigned";
   const QUICK_FILTER_ATTENTION_ID = "sp-quick-filter-attention";
+  const QUICK_FILTER_MYCREATED_ID = "sp-quick-filter-mycreated";
+  const QUICK_FILTER_MYASSIGNED_ID = "sp-quick-filter-myassigned";
 
   function injectQuickFilterButton() {
     var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
@@ -1607,18 +1609,44 @@
       btn3.addEventListener("click", function() { showQuickFilterModal("En atención"); });
       parent.insertBefore(btn3, userWrapper);
     }
+
+    if (!document.getElementById(QUICK_FILTER_MYASSIGNED_ID)) {
+      var myName = getLoggedUserName();
+      if (myName) {
+        var btn4 = document.createElement("button");
+        btn4.id = QUICK_FILTER_MYASSIGNED_ID;
+        btn4.textContent = "👤 Mis asignados";
+        btn4.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#2E7D32;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+        btn4.addEventListener("click", function() { showQuickFilterModal("", "responsibleName=" + encodeURIComponent(myName), "Mis tickets asignados"); });
+        parent.insertBefore(btn4, userWrapper);
+      }
+    }
+
+    if (!document.getElementById(QUICK_FILTER_MYCREATED_ID)) {
+      var myName2 = getLoggedUserName();
+      if (myName2) {
+        var btn5 = document.createElement("button");
+        btn5.id = QUICK_FILTER_MYCREATED_ID;
+        btn5.textContent = "📝 Mis creados";
+        btn5.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#7B1FA2;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+        btn5.addEventListener("click", function() { showQuickFilterModal("", "requesterName=" + encodeURIComponent(myName2), "Tickets que yo cree"); });
+        parent.insertBefore(btn5, userWrapper);
+      }
+    }
   }
 
-  async function showQuickFilterModal(statusName) {
+  async function showQuickFilterModal(statusName, extraParams, title) {
     var existing = document.getElementById("sp-search-modal");
     if (existing) existing.remove();
+
+    var modalTitle = title || ("Tickets: " + statusName);
 
     var overlay = document.createElement("div");
     overlay.id = "sp-search-modal";
     overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
     overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:900px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
-        '<h3 style="margin:0;">Tickets: ' + statusName + '</h3>' +
+        '<h3 style="margin:0;">' + modalTitle + '</h3>' +
         '<button id="sp-qf-close" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Cerrar</button>' +
       '</div>' +
       '<div id="sp-qf-results" style="flex:1;overflow:auto;min-height:100px;"><div style="text-align:center;padding:20px;color:#888;">Buscando...</div></div>' +
@@ -1642,7 +1670,10 @@
       if (!spToken) { results.innerHTML = '<div style="color:#D94040;padding:12px;">No hay token</div>'; return; }
 
       try {
-        var res = await fetch(SP_SEARCH_API + "?page=" + (currentPage - 1) + "&size=25&resolutionGroupId=19&ticketStatusName=" + encodeURIComponent(statusName), {
+        var url = SP_SEARCH_API + "?page=" + (currentPage - 1) + "&size=25&resolutionGroupId=19";
+        if (statusName) url += "&ticketStatusName=" + encodeURIComponent(statusName);
+        if (extraParams) url += "&" + extraParams;
+        var res = await fetch(url, {
           headers: { accept: "application/json", authorization: "Bearer " + spToken },
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
