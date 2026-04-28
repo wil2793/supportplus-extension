@@ -889,13 +889,36 @@
 
   function ticketSummaryHTML(info) {
     if (!info) return "";
+    var slMatches = [];
+    if (info.desc) {
+      var matches = info.desc.match(/SL\d{10,}/g);
+      if (matches) slMatches = matches.filter(function(v, i, a) { return a.indexOf(v) === i; });
+    }
+    var slHTML = "";
+    if (slMatches.length) {
+      slHTML = '<div style="margin-top:6px;padding:6px 8px;background:#E3F2FD;border-radius:4px;">' +
+        '<b style="font-size:11px;color:#1976D2;">SL detectadas:</b> ';
+      slMatches.forEach(function(sl) {
+        slHTML += '<span class="sp-sl-copy" data-sl="' + sl + '" style="display:inline-flex;align-items:center;gap:2px;margin:2px 4px;padding:2px 8px;background:#fff;border:1px solid #1976D2;border-radius:4px;font-weight:600;font-size:12px;">' + sl + '</span>';
+      });
+      slHTML += '</div>';
+    }
     return '<div style="background:#f5f5f5;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px;">' +
       '<div><b>Folio:</b> ' + info.uniqueCode + '</div>' +
       '<div><b>Asunto:</b> ' + info.subject + '</div>' +
       '<div><b>Persona:</b> ' + info.holder + (info.holderEmail ? ' (' + info.holderEmail + ')' : '') + '</div>' +
       '<div><b>Prioridad:</b> ' + info.priority + '</div>' +
       (info.desc ? '<div style="margin-top:4px;max-height:60px;overflow:auto;"><b>Desc:</b> ' + info.desc + '</div>' : '') +
+      slHTML +
       '</div>';
+  }
+
+  function injectSLCopyButtons(container) {
+    container.querySelectorAll(".sp-sl-copy").forEach(function(span) {
+      if (span.querySelector(".sp-copy-btn")) return;
+      var sl = span.dataset.sl;
+      if (sl) span.appendChild(createCopyButton(sl));
+    });
   }
 
   async function showTakeModal(ticketId, originalBtn) {
@@ -920,6 +943,7 @@
         '<button id="sp-take-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
       '</div></div>';
     document.body.appendChild(overlay);
+    injectSLCopyButtons(overlay);
 
     // Inject spinner keyframes if not present
     if (!document.getElementById("sp-spinner-style")) {
@@ -1074,6 +1098,7 @@
         '<button id="sp-close-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
       '</div></div>';
     document.body.appendChild(overlay);
+    injectSLCopyButtons(overlay);
 
     if (!document.getElementById("sp-spinner-style")) {
       var style = document.createElement("style");
@@ -1930,6 +1955,7 @@
       </div>`;
 
     document.body.appendChild(overlay);
+    injectSLCopyButtons(overlay);
 
     const groupSelect = document.getElementById("sp-group-select");
     const board = boards[0];
