@@ -952,7 +952,10 @@
         desc: (t.description || "").replace(/<[^>]*>/g, "").substring(0, 200),
         holder: t.ticketHolder?.ticketHolderLog?.fullName || "Sin asignar",
         holderEmail: t.ticketHolder?.ticketHolderLog?.email || "",
-        priority: t.incidentPriority?.name || ""
+        priority: t.incidentPriority?.name || "",
+        status: t.ticketStatus?.name || "",
+        requester: t.ticketInfo?.fullName || "",
+        createdAt: t.createdAt ? t.createdAt.replace("T", " ").substring(0, 16) : ""
       };
     } catch (e) { return null; }
   }
@@ -966,7 +969,7 @@
     var slRaw = fullText.match(/SL\d{10,}/g);
     if (slRaw) slMatches = slRaw.filter(function(v, i, a) { return a.indexOf(v) === i; });
 
-    // Detect DB users (mp-, srv-, usr_, dba-, app-)
+    // Detect DB users
     var userMatches = [];
     var userRaw = fullText.match(/(?:mp-|srv-|usr_|dba-|app-)[a-zA-Z0-9_\-]+/g);
     if (userRaw) {
@@ -974,10 +977,44 @@
       userMatches = userRaw.filter(function(v) { var low = v.toLowerCase(); if (seen[low]) return false; seen[low] = true; return true; });
     }
 
+    var statusColor = STATUS_COLORS[info.status] || "rgba(0,0,0,0.05)";
+    var rowStyle = 'padding:10px 14px;border-bottom:1px solid #e8e8e8;display:flex;align-items:center;gap:8px;';
+
+    var card = '<div style="border:2px solid #2196F3;border-top:5px solid #2196F3;border-radius:10px;overflow:hidden;margin-bottom:16px;font-size:13px;font-family:system-ui;background:#fff;">' +
+      // Folio + Fecha
+      '<div style="' + rowStyle + 'justify-content:space-between;">' +
+        '<span>📁 <b>Folio:</b> <span style="color:#1976D2;font-weight:700;">' + info.uniqueCode + '</span></span>' +
+        '<span>📅 <b>Fecha:</b> ' + (info.createdAt || "N/A") + '</span>' +
+      '</div>' +
+      // Solicitante
+      '<div style="' + rowStyle + '">' +
+        '<span>👤 <b>Solicitante:</b> ' + (info.requester || "N/A") + '</span>' +
+      '</div>' +
+      // Asunto
+      '<div style="' + rowStyle + '">' +
+        '<span>✉️ <b>Asunto:</b> ' + info.subject + '</span>' +
+      '</div>' +
+      // Estatus
+      '<div style="' + rowStyle + '">' +
+        '<span>✅ <b>Estatus:</b> <span style="color:#2E7D32;font-weight:700;">' + (info.status || "N/A") + '</span></span>' +
+        '<span style="margin-left:16px;">⚡ <b>Prioridad:</b> ' + (info.priority || "N/A") + '</span>' +
+      '</div>' +
+      // Analista
+      '<div style="' + rowStyle + '">' +
+        '<span>🔍 <b>Analista:</b> ' + info.holder + (info.holderEmail ? ' <span style="color:#888;">(' + info.holderEmail + ')</span>' : '') + '</span>' +
+      '</div>' +
+      // Descripcion
+      (info.desc ? '<div style="' + rowStyle + 'flex-direction:column;align-items:flex-start;">' +
+        '<b>📝 Descripción:</b>' +
+        '<div style="margin-top:4px;max-height:60px;overflow:auto;font-size:12px;color:#555;width:100%;">' + info.desc + '</div>' +
+      '</div>' : '') +
+      '</div>';
+
+    // SL and users outside the card
     var slHTML = "";
     if (slMatches.length) {
-      slHTML = '<div style="margin-top:6px;margin-bottom:8px;padding:6px 8px;background:#E3F2FD;border-radius:4px;">' +
-        '<b style="font-size:11px;color:#1976D2;">SL detectadas:</b> ';
+      slHTML = '<div style="margin-bottom:8px;padding:8px 10px;background:#E3F2FD;border-radius:6px;border-left:4px solid #1976D2;">' +
+        '<b style="font-size:11px;color:#1976D2;">📋 SL detectadas:</b> ';
       slMatches.forEach(function(sl) {
         slHTML += '<span class="sp-sl-copy" data-sl="' + sl + '" style="display:inline-flex;align-items:center;gap:2px;margin:2px 4px;padding:2px 8px;background:#fff;border:1px solid #1976D2;border-radius:4px;font-weight:600;font-size:12px;">' + sl + '</span>';
       });
@@ -986,22 +1023,15 @@
 
     var userHTML = "";
     if (userMatches.length) {
-      userHTML = '<div style="margin-top:6px;margin-bottom:8px;padding:6px 8px;background:#FFF3E0;border-radius:4px;">' +
-        '<b style="font-size:11px;color:#E65100;">Usuarios detectados:</b> ';
+      userHTML = '<div style="margin-bottom:8px;padding:8px 10px;background:#FFF3E0;border-radius:6px;border-left:4px solid #E65100;">' +
+        '<b style="font-size:11px;color:#E65100;">🖥️ Usuarios detectados:</b> ';
       userMatches.forEach(function(u) {
         userHTML += '<span class="sp-user-copy" data-user="' + u + '" style="display:inline-flex;align-items:center;gap:2px;margin:2px 4px;padding:2px 8px;background:#fff;border:1px solid #E65100;border-radius:4px;font-weight:600;font-size:12px;font-family:monospace;">' + u + '</span>';
       });
       userHTML += '</div>';
     }
 
-    return '<div style="background:#f5f5f5;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px;">' +
-      '<div><b>Folio:</b> ' + info.uniqueCode + '</div>' +
-      '<div><b>Asunto:</b> ' + info.subject + '</div>' +
-      '<div><b>Persona:</b> ' + info.holder + (info.holderEmail ? ' (' + info.holderEmail + ')' : '') + '</div>' +
-      '<div><b>Prioridad:</b> ' + info.priority + '</div>' +
-      (info.desc ? '<div style="margin-top:4px;max-height:60px;overflow:auto;"><b>Desc:</b> ' + info.desc + '</div>' : '') +
-      '</div>' +
-      slHTML + userHTML;
+    return card + slHTML + userHTML;
   }
 
   function injectSLCopyButtons(container) {
