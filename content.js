@@ -556,7 +556,10 @@
     var userRaw = fullText.match(/(?:mp-|srv-|usr_|dba-|app-)[a-zA-Z0-9_\-]+/g);
     if (userRaw) {
       var seen = {};
-      userMatches = userRaw.filter(function(v) { var low = v.toLowerCase(); if (seen[low]) return false; seen[low] = true; return true; });
+      userMatches = userRaw.map(function(v) {
+        var m = v.match(/(.*?(?:_dev\d|_qa\d|_t\d|_prod))/i);
+        return m ? m[1] : v;
+      }).filter(function(v) { var low = v.toLowerCase(); if (seen[low]) return false; seen[low] = true; return true; });
     }
 
     if (!slMatches.length && !userMatches.length) return;
@@ -990,7 +993,10 @@
     var userRaw = fullText.match(/(?:mp-|srv-|usr_|dba-|app-)[a-zA-Z0-9_\-]+/g);
     if (userRaw) {
       var seen = {};
-      userMatches = userRaw.filter(function(v) { var low = v.toLowerCase(); if (seen[low]) return false; seen[low] = true; return true; });
+      userMatches = userRaw.map(function(v) {
+        var m = v.match(/(.*?(?:_dev\d|_qa\d|_t\d|_prod))/i);
+        return m ? m[1] : v;
+      }).filter(function(v) { var low = v.toLowerCase(); if (seen[low]) return false; seen[low] = true; return true; });
     }
 
     var statusColor = STATUS_COLORS[info.status] || "rgba(0,0,0,0.05)";
