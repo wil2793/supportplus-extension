@@ -1580,9 +1580,9 @@
           var link = document.createElement("a");
           link.href = "/es/dashboard/tickets/" + id;
           link.target = "_blank";
-          link.textContent = "↗";
+          link.textContent = "Ir al ticket";
           link.title = "Abrir ticket";
-          link.style.cssText = "display:inline-block;padding:2px 6px;font-size:14px;text-decoration:none;margin-left:4px;";
+          link.style.cssText = "display:inline-block;padding:4px 12px;background:#7B1FA2;color:#fff;font-size:12px;font-weight:600;text-decoration:none;border-radius:4px;white-space:nowrap;margin-left:4px;";
           cell.appendChild(link);
         });
 
@@ -1734,9 +1734,9 @@
           var link = document.createElement("a");
           link.href = "/es/dashboard/tickets/" + id;
           link.target = "_blank";
-          link.textContent = "↗";
+          link.textContent = "Ir al ticket";
           link.title = "Abrir ticket";
-          link.style.cssText = "display:inline-block;padding:2px 6px;font-size:14px;text-decoration:none;margin-left:4px;";
+          link.style.cssText = "display:inline-block;padding:4px 12px;background:#7B1FA2;color:#fff;font-size:12px;font-weight:600;text-decoration:none;border-radius:4px;white-space:nowrap;margin-left:4px;";
           cell.appendChild(link);
         });
 
