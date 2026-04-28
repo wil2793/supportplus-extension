@@ -526,6 +526,73 @@
     targetCard.appendChild(btn);
   }
 
+  const DETAIL_DETECTIONS_ID = "sp-detail-detections";
+
+  function injectDetailDetections() {
+    if (document.getElementById(DETAIL_DETECTIONS_ID)) return;
+    if (!isDetailView()) return;
+
+    // Find "Evidencias" h2 to insert before it
+    var evidenciasH2 = null;
+    document.querySelectorAll("h2.MuiTypography-h2").forEach(function(h2) {
+      if (h2.textContent.trim() === "Evidencias") evidenciasH2 = h2;
+    });
+    if (!evidenciasH2) return;
+
+    // Read description and subject from the page
+    var descEl = document.querySelector(".MuiBox-root.mui-se5hlr");
+    var subjectEl = document.querySelector(".MuiBox-root.mui-81wn4v");
+    var descText = descEl ? descEl.textContent : "";
+    var subjectText = subjectEl ? subjectEl.textContent : "";
+    var fullText = subjectText + " " + descText;
+
+    // Detect SL
+    var slMatches = [];
+    var slRaw = fullText.match(/SL\d{10,}/g);
+    if (slRaw) slMatches = slRaw.filter(function(v, i, a) { return a.indexOf(v) === i; });
+
+    // Detect users
+    var userMatches = [];
+    var userRaw = fullText.match(/(?:mp-|srv-|usr_|dba-|app-)[a-zA-Z0-9_\-]+/g);
+    if (userRaw) userMatches = userRaw.filter(function(v, i, a) { return a.indexOf(v) === i; });
+
+    if (!slMatches.length && !userMatches.length) return;
+
+    var container = document.createElement("div");
+    container.id = DETAIL_DETECTIONS_ID;
+    container.style.cssText = "margin-bottom:12px;";
+
+    if (slMatches.length) {
+      var slDiv = document.createElement("div");
+      slDiv.style.cssText = "padding:8px 10px;background:#E3F2FD;border-radius:6px;margin-bottom:8px;";
+      slDiv.innerHTML = '<b style="font-size:12px;color:#1976D2;">SL detectadas:</b> ';
+      slMatches.forEach(function(sl) {
+        var span = document.createElement("span");
+        span.style.cssText = "display:inline-flex;align-items:center;gap:2px;margin:2px 4px;padding:2px 8px;background:#fff;border:1px solid #1976D2;border-radius:4px;font-weight:600;font-size:12px;";
+        span.textContent = sl;
+        span.appendChild(createCopyButton(sl));
+        slDiv.appendChild(span);
+      });
+      container.appendChild(slDiv);
+    }
+
+    if (userMatches.length) {
+      var userDiv = document.createElement("div");
+      userDiv.style.cssText = "padding:8px 10px;background:#FFF3E0;border-radius:6px;margin-bottom:8px;";
+      userDiv.innerHTML = '<b style="font-size:12px;color:#E65100;">Usuarios detectados:</b> ';
+      userMatches.forEach(function(u) {
+        var span = document.createElement("span");
+        span.style.cssText = "display:inline-flex;align-items:center;gap:2px;margin:2px 4px;padding:2px 8px;background:#fff;border:1px solid #E65100;border-radius:4px;font-weight:600;font-size:12px;font-family:monospace;";
+        span.textContent = u;
+        span.appendChild(createCopyButton(u));
+        userDiv.appendChild(span);
+      });
+      container.appendChild(userDiv);
+    }
+
+    evidenciasH2.parentElement.insertBefore(container, evidenciasH2);
+  }
+
   function injectBulkButton() {
     if (document.getElementById(BULK_BTN_ID)) return;
     let container = document.querySelector(".MuiBox-root .MuiStack-root");
@@ -903,7 +970,7 @@
 
     var slHTML = "";
     if (slMatches.length) {
-      slHTML = '<div style="margin-top:6px;padding:6px 8px;background:#E3F2FD;border-radius:4px;">' +
+      slHTML = '<div style="margin-top:6px;margin-bottom:8px;padding:6px 8px;background:#E3F2FD;border-radius:4px;">' +
         '<b style="font-size:11px;color:#1976D2;">SL detectadas:</b> ';
       slMatches.forEach(function(sl) {
         slHTML += '<span class="sp-sl-copy" data-sl="' + sl + '" style="display:inline-flex;align-items:center;gap:2px;margin:2px 4px;padding:2px 8px;background:#fff;border:1px solid #1976D2;border-radius:4px;font-weight:600;font-size:12px;">' + sl + '</span>';
@@ -913,7 +980,7 @@
 
     var userHTML = "";
     if (userMatches.length) {
-      userHTML = '<div style="margin-top:6px;padding:6px 8px;background:#FFF3E0;border-radius:4px;">' +
+      userHTML = '<div style="margin-top:6px;margin-bottom:8px;padding:6px 8px;background:#FFF3E0;border-radius:4px;">' +
         '<b style="font-size:11px;color:#E65100;">Usuarios detectados:</b> ';
       userMatches.forEach(function(u) {
         userHTML += '<span class="sp-user-copy" data-user="' + u + '" style="display:inline-flex;align-items:center;gap:2px;margin:2px 4px;padding:2px 8px;background:#fff;border:1px solid #E65100;border-radius:4px;font-weight:600;font-size:12px;font-family:monospace;">' + u + '</span>';
@@ -927,8 +994,8 @@
       '<div><b>Persona:</b> ' + info.holder + (info.holderEmail ? ' (' + info.holderEmail + ')' : '') + '</div>' +
       '<div><b>Prioridad:</b> ' + info.priority + '</div>' +
       (info.desc ? '<div style="margin-top:4px;max-height:60px;overflow:auto;"><b>Desc:</b> ' + info.desc + '</div>' : '') +
-      slHTML + userHTML +
-      '</div>';
+      '</div>' +
+      slHTML + userHTML;
   }
 
   function injectSLCopyButtons(container) {
@@ -1828,6 +1895,7 @@
     if (isDetailView()) {
       injectDetailButton();
       injectIamButton();
+      injectDetailDetections();
       return;
     }
 
