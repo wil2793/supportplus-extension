@@ -1004,13 +1004,13 @@
         '<span>📁 <b>Folio:</b> <span style="color:#1976D2;font-weight:700;">' + info.uniqueCode + '</span> <span style="margin-left:8px;color:' + (STATUS_TEXT_COLORS[info.status] || '#333') + ';font-weight:700;">● ' + (info.status || "") + '</span></span>' +
         '<span>📅 <b>Fecha:</b> ' + (info.createdAt || "N/A") + '</span>' +
       '</div>' +
-      // Solicitante
-      '<div style="' + rowStyle + '">' +
-        '<span>👤 <b>Solicitante:</b> ' + (info.requester || "N/A") + '</span>' +
-      '</div>' +
       // Asunto
       '<div style="' + rowStyle + '">' +
         '<span>✉️ <b>Asunto:</b> ' + info.subject + '</span>' +
+      '</div>' +
+      // Solicitante
+      '<div style="' + rowStyle + '">' +
+        '<span>👤 <b>Solicitante:</b> ' + (info.requester || "N/A") + '</span>' +
       '</div>' +
       // Analista
       '<div style="' + rowStyle + '">' +
@@ -1073,8 +1073,8 @@
       '</div>' +
       '<div style="display:flex;">' +
         '<div style="flex:1;padding:6px 12px;border-right:1px solid #e8e8e8;">' +
-          '<div style="padding:4px 0;border-bottom:1px solid #f0f0f0;">👤 ' + (t.requesterName || "N/A") + '</div>' +
-          '<div style="padding:4px 0;">✉️ ' + subject + '</div>' +
+          '<div style="padding:4px 0;border-bottom:1px solid #f0f0f0;">✉️ ' + subject + '</div>' +
+          '<div style="padding:4px 0;">👤 ' + (t.requesterName || "N/A") + '</div>' +
         '</div>' +
         '<div style="display:flex;flex-direction:column;justify-content:center;padding:6px 12px;min-width:180px;">' +
           '<div style="padding:4px 0;border-bottom:1px solid #f0f0f0;">🔍 ' + (t.responsibleName || "Sin asignar") + '</div>' +
@@ -1085,8 +1085,9 @@
   }
 
   function renderTicketCards(container, tickets, myName, synced) {
-    var html = '';
-    tickets.forEach(function(t) { html += ticketListCardHTML(t); });
+    var html = '<div style="display:flex;flex-wrap:wrap;gap:10px;">';
+    tickets.forEach(function(t) { html += '<div style="flex:1 1 calc(50% - 5px);min-width:380px;">' + ticketListCardHTML(t) + '</div>'; });
+    html += '</div>';
     container.innerHTML = html;
 
     // Inject copy buttons
