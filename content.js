@@ -889,11 +889,18 @@
 
   function ticketSummaryHTML(info) {
     if (!info) return "";
+    var fullText = (info.subject || "") + " " + (info.desc || "");
+
+    // Detect SL codes
     var slMatches = [];
-    if (info.desc) {
-      var matches = info.desc.match(/SL\d{10,}/g);
-      if (matches) slMatches = matches.filter(function(v, i, a) { return a.indexOf(v) === i; });
-    }
+    var slRaw = fullText.match(/SL\d{10,}/g);
+    if (slRaw) slMatches = slRaw.filter(function(v, i, a) { return a.indexOf(v) === i; });
+
+    // Detect DB users (mp-, srv-, usr_, dba-, app-)
+    var userMatches = [];
+    var userRaw = fullText.match(/(?:mp-|srv-|usr_|dba-|app-)[a-zA-Z0-9_\-]+/g);
+    if (userRaw) userMatches = userRaw.filter(function(v, i, a) { return a.indexOf(v) === i; });
+
     var slHTML = "";
     if (slMatches.length) {
       slHTML = '<div style="margin-top:6px;padding:6px 8px;background:#E3F2FD;border-radius:4px;">' +
@@ -903,13 +910,24 @@
       });
       slHTML += '</div>';
     }
+
+    var userHTML = "";
+    if (userMatches.length) {
+      userHTML = '<div style="margin-top:6px;padding:6px 8px;background:#FFF3E0;border-radius:4px;">' +
+        '<b style="font-size:11px;color:#E65100;">Usuarios detectados:</b> ';
+      userMatches.forEach(function(u) {
+        userHTML += '<span class="sp-user-copy" data-user="' + u + '" style="display:inline-flex;align-items:center;gap:2px;margin:2px 4px;padding:2px 8px;background:#fff;border:1px solid #E65100;border-radius:4px;font-weight:600;font-size:12px;font-family:monospace;">' + u + '</span>';
+      });
+      userHTML += '</div>';
+    }
+
     return '<div style="background:#f5f5f5;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px;">' +
       '<div><b>Folio:</b> ' + info.uniqueCode + '</div>' +
       '<div><b>Asunto:</b> ' + info.subject + '</div>' +
       '<div><b>Persona:</b> ' + info.holder + (info.holderEmail ? ' (' + info.holderEmail + ')' : '') + '</div>' +
       '<div><b>Prioridad:</b> ' + info.priority + '</div>' +
       (info.desc ? '<div style="margin-top:4px;max-height:60px;overflow:auto;"><b>Desc:</b> ' + info.desc + '</div>' : '') +
-      slHTML +
+      slHTML + userHTML +
       '</div>';
   }
 
@@ -918,6 +936,11 @@
       if (span.querySelector(".sp-copy-btn")) return;
       var sl = span.dataset.sl;
       if (sl) span.appendChild(createCopyButton(sl));
+    });
+    container.querySelectorAll(".sp-user-copy").forEach(function(span) {
+      if (span.querySelector(".sp-copy-btn")) return;
+      var user = span.dataset.user;
+      if (user) span.appendChild(createCopyButton(user));
     });
   }
 
