@@ -1579,116 +1579,7 @@
   const QUICK_FILTER_MYASSIGNED_ID = "sp-quick-filter-myassigned";
 
   async function showMyAssignedModal() {
-    var existing = document.getElementById("sp-search-modal");
-    if (existing) existing.remove();
-
-    var myName = getLoggedUserName();
-    if (!myName) return;
-
-    var overlay = document.createElement("div");
-    overlay.id = "sp-search-modal";
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:900px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
-        '<h3 style="margin:0;">👤 Mis tickets asignados (sin cerrados)</h3>' +
-        '<button id="sp-ma-close" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Cerrar</button>' +
-      '</div>' +
-      '<div id="sp-ma-results" style="flex:1;overflow:auto;min-height:100px;"><div style="text-align:center;padding:20px;color:#888;">Buscando...</div></div>' +
-      '</div>';
-    document.body.appendChild(overlay);
-
-    document.getElementById("sp-ma-close").addEventListener("click", function() { overlay.remove(); });
-    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
-
-    var results = document.getElementById("sp-ma-results");
-    var spToken = getToken();
-    if (!spToken) { results.innerHTML = '<div style="color:#D94040;padding:12px;">No hay token</div>'; return; }
-
-    // Fetch multiple pages and filter client-side
-    var allTickets = [];
-    var page = 0;
-    var maxPages = 10;
-    try {
-      while (page < maxPages) {
-        var res = await fetch(SP_SEARCH_API + "?page=" + page + "&size=25&resolutionGroupId=19", {
-          headers: { accept: "application/json", authorization: "Bearer " + spToken },
-        });
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        var json = await res.json();
-        var data = json.data || json;
-        var tickets = data.content || [];
-        if (!tickets.length) break;
-
-        tickets.forEach(function(t) {
-          if (t.responsibleName === myName && t.ticketStatusName !== "Cerrado" && t.ticketStatusName !== "Cancelado") {
-            allTickets.push(t);
-          }
-        });
-
-        results.innerHTML = '<div style="text-align:center;padding:20px;color:#888;">Buscando... (' + allTickets.length + ' encontrados, revisando pagina ' + (page + 1) + ')</div>';
-
-        if (page >= (data.totalPages || 1) - 1) break;
-        page++;
-      }
-    } catch (err) {
-      results.innerHTML = '<div style="color:#D94040;padding:12px;">Error: ' + err.message + '</div>';
-      return;
-    }
-
-    if (!allTickets.length) {
-      results.innerHTML = '<div style="text-align:center;padding:20px;color:#888;">No tienes tickets asignados abiertos</div>';
-      return;
-    }
-
-    var synced = getCache() || {};
-    var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
-    html += '<thead><tr style="background:rgba(0,0,0,0.05);text-align:left;">' +
-      '<th style="padding:6px;">Folio</th>' +
-      '<th style="padding:6px;">Fecha</th>' +
-      '<th style="padding:6px;">Solicitante</th>' +
-      '<th style="padding:6px;">Asunto</th>' +
-      '<th style="padding:6px;">Estado</th>' +
-      '<th style="padding:6px;">Acciones</th>' +
-      '</tr></thead><tbody>';
-
-    allTickets.forEach(function(t) {
-      var statusColor = STATUS_COLORS[t.ticketStatusName] || "transparent";
-      var date = (t.createdAt || "").replace("T", " ").substring(0, 16);
-      var subject = (t.subject || "").substring(0, 40) + ((t.subject || "").length > 40 ? "..." : "");
-      html += '<tr style="background:' + statusColor + ';border-bottom:1px solid #eee;">';
-      html += '<td style="padding:6px;font-weight:600;white-space:nowrap;"><a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="color:inherit;text-decoration:none;">' + (t.uniqueCode || t.id) + '</a><span class="sp-ma-copy" data-code="' + (t.uniqueCode || "") + '"></span></td>';
-      html += '<td style="padding:6px;font-size:11px;">' + date + '</td>';
-      html += '<td style="padding:6px;">' + (t.requesterName || "") + '</td>';
-      html += '<td style="padding:6px;" title="' + (t.subject || "") + '">' + subject + '</td>';
-      html += '<td style="padding:6px;font-size:11px;">' + (t.ticketStatusName || "") + '</td>';
-      html += '<td style="padding:6px;white-space:nowrap;" class="sp-ma-actions" data-id="' + t.id + '" data-status="' + (t.ticketStatusName || "") + '" data-code="' + (t.uniqueCode || "") + '"></td>';
-      html += '</tr>';
-    });
-    html += '</tbody></table>';
-    results.innerHTML = '<div style="margin-bottom:8px;font-size:12px;color:#888;">' + allTickets.length + ' tickets asignados abiertos</div>' + html;
-
-    // Inject copy buttons
-    results.querySelectorAll(".sp-ma-copy").forEach(function(span) {
-      var code = span.dataset.code;
-      if (code) span.appendChild(createCopyButton(code));
-    });
-
-    // Inject action buttons
-    results.querySelectorAll(".sp-ma-actions").forEach(function(cell) {
-      var id = cell.dataset.id;
-      var status = cell.dataset.status;
-      var code = cell.dataset.code;
-      cell.appendChild(createCloseButton(id));
-      if (status === "Cerrado" && code && synced[code]) {
-        cell.appendChild(createSyncedBadge(synced[code]));
-      }
-      var link = document.createElement("a");
-      link.href = "/es/dashboard/tickets/" + id;
-      link.target = "_blank";
-      link.textContent = "Ir al ticket";
-      link.style.cssText = "display:inline-block;padding:4px 12px;background:#2E7D32;color:#fff;font-size:12px;font-weight:600;text-decoration:none;border-radius:4px;white-space:nowrap;margin-left:4px;";
-      cell.appendChild(link);
-    });
+    showQuickFilterModal("", "", "👤 Mis tickets asignados", "https://macropayapi.supportplus.mx/tickets/search-by-user-current-responsible");
   }
 
   function injectQuickFilterButton() {
@@ -1742,13 +1633,13 @@
         btn5.id = QUICK_FILTER_MYCREATED_ID;
         btn5.textContent = "📝 Mis creados";
         btn5.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#7B1FA2;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-        btn5.addEventListener("click", function() { showQuickFilterModal("", "requesterName=" + encodeURIComponent(myName2), "Tickets que yo cree"); });
+        btn5.addEventListener("click", function() { showQuickFilterModal("", "", "📝 Tickets que yo creé", "https://macropayapi.supportplus.mx/tickets/search-by-user-requester"); });
         parent.insertBefore(btn5, userWrapper);
       }
     }
   }
 
-  async function showQuickFilterModal(statusName, extraParams, title) {
+  async function showQuickFilterModal(statusName, extraParams, title, customApiUrl) {
     var existing = document.getElementById("sp-search-modal");
     if (existing) existing.remove();
 
@@ -1783,7 +1674,9 @@
       if (!spToken) { results.innerHTML = '<div style="color:#D94040;padding:12px;">No hay token</div>'; return; }
 
       try {
-        var url = SP_SEARCH_API + "?page=" + (currentPage - 1) + "&size=25&resolutionGroupId=19";
+        var baseUrl = customApiUrl || SP_SEARCH_API;
+        var url = baseUrl + "?page=" + (currentPage - 1) + "&size=25";
+        if (!customApiUrl) url += "&resolutionGroupId=19";
         if (statusName) url += "&ticketStatusName=" + encodeURIComponent(statusName);
         if (extraParams) url += "&" + extraParams;
         var res = await fetch(url, {
