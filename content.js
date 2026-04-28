@@ -1,7 +1,7 @@
 (function () {
   // Make loading backdrop less invasive - thin top bar instead of fullscreen
   const hideBackdrop = document.createElement("style");
-  hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } } .MuiDataGrid-cell[data-field='uniqueCode'] { min-width: 300px !important; max-width: 300px !important; } .MuiDataGrid-columnHeader[data-field='uniqueCode'] { min-width: 300px !important; max-width: 300px !important; }";
+  hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } } .MuiDataGrid-cell[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; } .MuiDataGrid-columnHeader[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; } .MuiDataGrid-cell { min-width: 180px !important; } .MuiDataGrid-columnHeader { min-width: 180px !important; }";
   document.head.appendChild(hideBackdrop);
 
   // --- Toast helpers ---
@@ -1404,10 +1404,7 @@
     input.id = "sp-quick-search-input";
     input.type = "text";
     input.placeholder = "Folio o ID...";
-    input.style.cssText = "padding:5px 10px;font-size:12px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;background:rgba(255,255,255,0.15);color:#fff;width:130px;outline:none;";
-    input.addEventListener("focus", function() { input.style.borderColor = "rgba(255,255,255,0.6)"; });
-    input.addEventListener("blur", function() { input.style.borderColor = "rgba(255,255,255,0.3)"; });
-
+    input.style.cssText = "padding:5px 10px;font-size:12px;border:1px solid #ccc;border-radius:6px;width:130px;outline:none;";
     var goBtn = document.createElement("button");
     goBtn.textContent = "→";
     goBtn.style.cssText = "padding:5px 10px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#4CAF50;color:#fff;font-weight:600;";
@@ -1571,6 +1568,7 @@
           var status = cell.dataset.status;
           var responsible = cell.dataset.responsible;
           var code = cell.dataset.code;
+          if (code) cell.appendChild(createCopyButton(code));
           if (status === "En espera") cell.appendChild(createTakeButton(id));
           if (status === "Asignado" && responsible && myName && responsible === myName) cell.appendChild(createCloseButton(id));
           if (status === "Asignado" && responsible && myName && responsible !== myName) cell.appendChild(createStealButton(id));
@@ -1725,6 +1723,7 @@
           var status = cell.dataset.status;
           var responsible = cell.dataset.responsible;
           var code = cell.dataset.code;
+          if (code) cell.appendChild(createCopyButton(code));
           if (status === "En espera") cell.appendChild(createTakeButton(id));
           if (status === "Asignado" && responsible && myName2 && responsible === myName2) cell.appendChild(createCloseButton(id));
           if (status === "Asignado" && responsible && myName2 && responsible !== myName2) cell.appendChild(createStealButton(id));
