@@ -1086,6 +1086,11 @@
           originalBtn.replaceWith(newCloseBtn);
           var row = newCloseBtn.closest(".MuiDataGrid-row");
           if (row) {
+            // Remove steal and take buttons
+            var oldSteal = row.querySelector("." + STEAL_BTN_CLASS);
+            if (oldSteal) oldSteal.remove();
+            var oldTake = row.querySelector("." + TAKE_BTN_CLASS);
+            if (oldTake) oldTake.remove();
             row.classList.add(HIGHLIGHT_CLASS);
             row.style.position = "relative";
             var indicator = document.createElement("span");
