@@ -1001,7 +1001,7 @@
     var card = '<div style="border:2px solid ' + cardBorderColor + ';border-top:5px solid ' + cardBorderColor + ';border-radius:10px;overflow:hidden;margin-bottom:16px;font-size:13px;font-family:system-ui;background:#fff;">' +
       // Folio + Fecha
       '<div style="' + rowStyle + 'justify-content:space-between;">' +
-        '<span>📁 <b>Folio:</b> <span style="color:#1976D2;font-weight:700;">' + info.uniqueCode + '</span></span>' +
+        '<span>📁 <b>Folio:</b> <span style="color:#1976D2;font-weight:700;">' + info.uniqueCode + '</span> <span style="margin-left:8px;color:' + (STATUS_TEXT_COLORS[info.status] || '#333') + ';font-weight:700;">● ' + (info.status || "") + '</span></span>' +
         '<span>📅 <b>Fecha:</b> ' + (info.createdAt || "N/A") + '</span>' +
       '</div>' +
       // Solicitante
@@ -1011,11 +1011,6 @@
       // Asunto
       '<div style="' + rowStyle + '">' +
         '<span>✉️ <b>Asunto:</b> ' + info.subject + '</span>' +
-      '</div>' +
-      // Estatus
-      '<div style="' + rowStyle + '">' +
-        '<span>✅ <b>Estatus:</b> <span style="color:' + (STATUS_TEXT_COLORS[info.status] || '#333') + ';font-weight:700;">' + (info.status || "N/A") + '</span></span>' +
-        '<span style="margin-left:16px;">⚡ <b>Prioridad:</b> ' + (info.priority || "N/A") + '</span>' +
       '</div>' +
       // Analista
       '<div style="' + rowStyle + '">' +
@@ -1073,18 +1068,16 @@
     var borderColor = STATUS_TEXT_COLORS[t.ticketStatusName] || "#2196F3";
     return '<div class="sp-list-card" data-id="' + t.id + '" data-status="' + (t.ticketStatusName || "") + '" data-responsible="' + (t.responsibleName || "") + '" data-code="' + (t.uniqueCode || "") + '" style="border:2px solid ' + borderColor + ';border-top:4px solid ' + borderColor + ';border-radius:10px;margin-bottom:10px;font-size:13px;font-family:system-ui;background:#fff;overflow:hidden;">' +
       '<div style="display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #e8e8e8;">' +
-        '<span>📁 <b>Folio:</b> <a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="color:#1976D2;font-weight:700;text-decoration:none;">' + (t.uniqueCode || t.id) + '</a> <span class="sp-card-copy" data-code="' + (t.uniqueCode || "") + '"></span></span>' +
+        '<span>📁 <b>Folio:</b> <a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="color:#1976D2;font-weight:700;text-decoration:none;">' + (t.uniqueCode || t.id) + '</a> <span class="sp-card-copy" data-code="' + (t.uniqueCode || "") + '"></span> <span style="margin-left:8px;color:' + (STATUS_TEXT_COLORS[t.ticketStatusName] || '#333') + ';font-weight:700;">● ' + (t.ticketStatusName || "") + '</span></span>' +
         '<span>📅 ' + date + '</span>' +
       '</div>' +
       '<div style="display:flex;">' +
         '<div style="flex:1;padding:6px 12px;border-right:1px solid #e8e8e8;">' +
           '<div style="padding:4px 0;border-bottom:1px solid #f0f0f0;">👤 ' + (t.requesterName || "N/A") + '</div>' +
-          '<div style="padding:4px 0;border-bottom:1px solid #f0f0f0;">✉️ ' + subject + '</div>' +
-          '<div style="padding:4px 0;">✅ <span style="color:' + (STATUS_TEXT_COLORS[t.ticketStatusName] || '#333') + ';font-weight:700;">' + (t.ticketStatusName || "") + '</span></div>' +
+          '<div style="padding:4px 0;">✉️ ' + subject + '</div>' +
         '</div>' +
         '<div style="display:flex;flex-direction:column;justify-content:center;padding:6px 12px;min-width:180px;">' +
           '<div style="padding:4px 0;border-bottom:1px solid #f0f0f0;">🔍 ' + (t.responsibleName || "Sin asignar") + '</div>' +
-          '<div style="padding:4px 0;border-bottom:1px solid #f0f0f0;">⚡ ' + (t.incidentPriorityName || "") + '</div>' +
           '<div style="padding:6px 0;display:flex;gap:4px;flex-wrap:wrap;" class="sp-card-actions"></div>' +
         '</div>' +
       '</div>' +
