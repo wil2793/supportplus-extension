@@ -1001,7 +1001,7 @@
     var card = '<div style="border:2px solid ' + cardBorderColor + ';border-top:5px solid ' + cardBorderColor + ';border-radius:10px;overflow:hidden;margin-bottom:16px;font-size:13px;font-family:system-ui;background:#fff;">' +
       // Folio + Fecha
       '<div style="' + rowStyle + 'justify-content:space-between;">' +
-        '<span>📁 <b>Folio:</b> <span style="color:#1976D2;font-weight:700;">' + info.uniqueCode + '</span> <span style="margin-left:8px;color:' + (STATUS_TEXT_COLORS[info.status] || '#333') + ';font-weight:700;">● ' + (info.status || "") + '</span></span>' +
+        '<span>📁 <b>Folio:</b> <span style="color:#1976D2;font-weight:700;">' + info.uniqueCode + '</span></span>' +
         '<span>📅 <b>Fecha:</b> ' + (info.createdAt || "N/A") + '</span>' +
       '</div>' +
       // Asunto
@@ -1015,6 +1015,10 @@
       // Analista
       '<div style="' + rowStyle + '">' +
         '<span>🔍 <b>Analista:</b> ' + info.holder + (info.holderEmail ? ' <span style="color:#888;">(' + info.holderEmail + ')</span>' : '') + '</span>' +
+      '</div>' +
+      // Estatus
+      '<div style="' + rowStyle + '">' +
+        '<span>✅ <b>Estatus:</b> <span style="color:' + (STATUS_TEXT_COLORS[info.status] || '#333') + ';font-weight:700;">' + (info.status || "N/A") + '</span></span>' +
       '</div>' +
       // Descripcion
       (info.desc ? '<div style="' + rowStyle + 'flex-direction:column;align-items:flex-start;">' +
