@@ -1061,33 +1061,36 @@
   }
 
   // --- Ticket card for list modals ---
-  function ticketListCardHTML(t) {
-    var date = (t.createdAt || "").replace("T", " ").substring(0, 16);
-    var subject = (t.subject || "").substring(0, 50) + ((t.subject || "").length > 50 ? "..." : "");
-    var statusColor = STATUS_COLORS[t.ticketStatusName] || "transparent";
-    var borderColor = STATUS_TEXT_COLORS[t.ticketStatusName] || "#2196F3";
-    return '<div class="sp-list-card" data-id="' + t.id + '" data-status="' + (t.ticketStatusName || "") + '" data-responsible="' + (t.responsibleName || "") + '" data-code="' + (t.uniqueCode || "") + '" style="border:2px solid ' + borderColor + ';border-top:4px solid ' + borderColor + ';border-radius:10px;margin-bottom:10px;font-size:13px;font-family:system-ui;background:#fff;overflow:hidden;">' +
-      '<div style="display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #e8e8e8;">' +
-        '<span>📁 <b>Folio:</b> <a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="color:#1976D2;font-weight:700;text-decoration:none;">' + (t.uniqueCode || t.id) + '</a> <span class="sp-card-copy" data-code="' + (t.uniqueCode || "") + '"></span> <span style="margin-left:8px;color:' + (STATUS_TEXT_COLORS[t.ticketStatusName] || '#333') + ';font-weight:700;">● ' + (t.ticketStatusName || "") + '</span></span>' +
-        '<span>📅 ' + date + '</span>' +
-      '</div>' +
-      '<div style="display:flex;">' +
-        '<div style="flex:1;padding:6px 12px;border-right:1px solid #e8e8e8;">' +
-          '<div style="padding:4px 0;border-bottom:1px solid #f0f0f0;">✉️ ' + subject + '</div>' +
-          '<div style="padding:4px 0;">👤 ' + (t.requesterName || "N/A") + '</div>' +
-        '</div>' +
-        '<div style="display:flex;flex-direction:column;justify-content:center;padding:6px 12px;min-width:180px;">' +
-          '<div style="padding:4px 0;border-bottom:1px solid #f0f0f0;">🔍 ' + (t.responsibleName || "Sin asignar") + '</div>' +
-          '<div style="padding:6px 0;display:flex;gap:4px;flex-wrap:wrap;" class="sp-card-actions"></div>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
-  }
-
+  // --- Render ticket list as table ---
   function renderTicketCards(container, tickets, myName, synced) {
-    var html = '<div style="display:flex;flex-wrap:wrap;gap:10px;">';
-    tickets.forEach(function(t) { html += '<div style="flex:1 1 calc(50% - 5px);min-width:380px;">' + ticketListCardHTML(t) + '</div>'; });
-    html += '</div>';
+    var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+    html += '<thead><tr style="background:rgba(0,0,0,0.05);text-align:left;">' +
+      '<th style="padding:6px;">Folio</th>' +
+      '<th style="padding:6px;">Fecha</th>' +
+      '<th style="padding:6px;">Asunto</th>' +
+      '<th style="padding:6px;">Solicitante</th>' +
+      '<th style="padding:6px;">Estado</th>' +
+      '<th style="padding:6px;">Analista</th>' +
+      '<th style="padding:6px;">Acciones</th>' +
+      '</tr></thead><tbody>';
+
+    tickets.forEach(function(t) {
+      var statusColor = STATUS_COLORS[t.ticketStatusName] || "transparent";
+      var textColor = STATUS_TEXT_COLORS[t.ticketStatusName] || "#333";
+      var date = (t.createdAt || "").replace("T", " ").substring(0, 16);
+      var subject = (t.subject || "").substring(0, 40) + ((t.subject || "").length > 40 ? "..." : "");
+      html += '<tr style="background:' + statusColor + ';border-bottom:1px solid #eee;">';
+      html += '<td style="padding:6px;font-weight:600;white-space:nowrap;"><a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="color:inherit;text-decoration:none;">' + (t.uniqueCode || t.id) + '</a><span class="sp-card-copy" data-code="' + (t.uniqueCode || "") + '"></span></td>';
+      html += '<td style="padding:6px;font-size:11px;">' + date + '</td>';
+      html += '<td style="padding:6px;" title="' + (t.subject || "") + '">' + subject + '</td>';
+      html += '<td style="padding:6px;">' + (t.requesterName || "") + '</td>';
+      html += '<td style="padding:6px;font-size:11px;font-weight:700;color:' + textColor + ';">' + (t.ticketStatusName || "") + '</td>';
+      html += '<td style="padding:6px;">' + (t.responsibleName || "Sin asignar") + '</td>';
+      html += '<td style="padding:6px;white-space:nowrap;" class="sp-card-actions" data-id="' + t.id + '" data-status="' + (t.ticketStatusName || "") + '" data-responsible="' + (t.responsibleName || "") + '" data-code="' + (t.uniqueCode || "") + '"></td>';
+      html += '</tr>';
+    });
+
+    html += '</tbody></table>';
     container.innerHTML = html;
 
     // Inject copy buttons
@@ -1097,20 +1100,18 @@
     });
 
     // Inject action buttons
-    container.querySelectorAll(".sp-list-card").forEach(function(card) {
-      var actionsDiv = card.querySelector(".sp-card-actions");
-      if (!actionsDiv) return;
-      var id = card.dataset.id;
-      var status = card.dataset.status;
-      var responsible = card.dataset.responsible;
-      var code = card.dataset.code;
+    container.querySelectorAll(".sp-card-actions").forEach(function(cell) {
+      var id = cell.dataset.id;
+      var status = cell.dataset.status;
+      var responsible = cell.dataset.responsible;
+      var code = cell.dataset.code;
 
-      if (status === "En espera") actionsDiv.appendChild(createTakeButton(id));
-      if (status === "Asignado" && responsible && myName && responsible === myName) actionsDiv.appendChild(createCloseButton(id));
-      if (status === "Asignado" && responsible && myName && responsible !== myName) actionsDiv.appendChild(createStealButton(id));
+      if (status === "En espera") cell.appendChild(createTakeButton(id));
+      if (status === "Asignado" && responsible && myName && responsible === myName) cell.appendChild(createCloseButton(id));
+      if (status === "Asignado" && responsible && myName && responsible !== myName) cell.appendChild(createStealButton(id));
       if (status === "Cerrado") {
-        if (code && synced[code]) actionsDiv.appendChild(createSyncedBadge(synced[code]));
-        else actionsDiv.appendChild(createButton(id));
+        if (code && synced[code]) cell.appendChild(createSyncedBadge(synced[code]));
+        else cell.appendChild(createButton(id));
       }
 
       // Ir al ticket button
@@ -1119,7 +1120,7 @@
       link.target = "_blank";
       link.textContent = "Ir al ticket";
       link.style.cssText = "display:inline-block;padding:4px 12px;background:#2196F3;color:#fff;font-size:11px;font-weight:600;text-decoration:none;border-radius:4px;white-space:nowrap;";
-      actionsDiv.appendChild(link);
+      cell.appendChild(link);
     });
   }
 
