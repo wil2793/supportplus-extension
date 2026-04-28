@@ -878,6 +878,22 @@
     "En espera": "rgba(255, 235, 59, 0.20)"
   };
 
+  const STATUS_TEXT_COLORS = {
+    "Asignado": "#1565C0",
+    "En validación": "#7B1FA2",
+    "En atención": "#E65100",
+    "Por aprobador": "#5D4037",
+    "Por ejecutar": "#00796B",
+    "Por revisar": "#283593",
+    "En aplicaciones": "#C2185B",
+    "Por confirmar": "#F9A825",
+    "Cerrado": "#2E7D32",
+    "Rechazado": "#C62828",
+    "Cancelado": "#616161",
+    "Reabierto": "#D84315",
+    "En espera": "#F57F17"
+  };
+
   function colorRowsByStatus() {
     document.querySelectorAll(".MuiDataGrid-row").forEach(function(row) {
       if (row.dataset.spColored) return;
@@ -996,7 +1012,7 @@
       '</div>' +
       // Estatus
       '<div style="' + rowStyle + '">' +
-        '<span>✅ <b>Estatus:</b> <span style="color:#2E7D32;font-weight:700;">' + (info.status || "N/A") + '</span></span>' +
+        '<span>✅ <b>Estatus:</b> <span style="color:' + (STATUS_TEXT_COLORS[info.status] || '#333') + ';font-weight:700;">' + (info.status || "N/A") + '</span></span>' +
         '<span style="margin-left:16px;">⚡ <b>Prioridad:</b> ' + (info.priority || "N/A") + '</span>' +
       '</div>' +
       // Analista
@@ -1061,7 +1077,7 @@
         '<div style="flex:1;padding:6px 12px;border-right:1px solid #e8e8e8;">' +
           '<div style="padding:4px 0;border-bottom:1px solid #f0f0f0;">👤 ' + (t.requesterName || "N/A") + '</div>' +
           '<div style="padding:4px 0;border-bottom:1px solid #f0f0f0;">✉️ ' + subject + '</div>' +
-          '<div style="padding:4px 0;">✅ <span style="color:#2E7D32;font-weight:700;">' + (t.ticketStatusName || "") + '</span></div>' +
+          '<div style="padding:4px 0;">✅ <span style="color:' + (STATUS_TEXT_COLORS[t.ticketStatusName] || '#333') + ';font-weight:700;">' + (t.ticketStatusName || "") + '</span></div>' +
         '</div>' +
         '<div style="display:flex;flex-direction:column;justify-content:center;padding:6px 12px;min-width:180px;">' +
           '<div style="padding:4px 0;border-bottom:1px solid #f0f0f0;">🔍 ' + (t.responsibleName || "Sin asignar") + '</div>' +
