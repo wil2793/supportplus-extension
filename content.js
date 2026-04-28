@@ -996,7 +996,9 @@
     var statusColor = STATUS_COLORS[info.status] || "rgba(0,0,0,0.05)";
     var rowStyle = 'padding:10px 14px;border-bottom:1px solid #e8e8e8;display:flex;align-items:center;gap:8px;';
 
-    var card = '<div style="border:2px solid #2196F3;border-top:5px solid #2196F3;border-radius:10px;overflow:hidden;margin-bottom:16px;font-size:13px;font-family:system-ui;background:#fff;">' +
+    var cardBorderColor = STATUS_TEXT_COLORS[info.status] || "#2196F3";
+
+    var card = '<div style="border:2px solid ' + cardBorderColor + ';border-top:5px solid ' + cardBorderColor + ';border-radius:10px;overflow:hidden;margin-bottom:16px;font-size:13px;font-family:system-ui;background:#fff;">' +
       // Folio + Fecha
       '<div style="' + rowStyle + 'justify-content:space-between;">' +
         '<span>📁 <b>Folio:</b> <span style="color:#1976D2;font-weight:700;">' + info.uniqueCode + '</span></span>' +
@@ -1068,7 +1070,8 @@
     var date = (t.createdAt || "").replace("T", " ").substring(0, 16);
     var subject = (t.subject || "").substring(0, 50) + ((t.subject || "").length > 50 ? "..." : "");
     var statusColor = STATUS_COLORS[t.ticketStatusName] || "transparent";
-    return '<div class="sp-list-card" data-id="' + t.id + '" data-status="' + (t.ticketStatusName || "") + '" data-responsible="' + (t.responsibleName || "") + '" data-code="' + (t.uniqueCode || "") + '" style="border:2px solid #2196F3;border-top:4px solid #2196F3;border-radius:10px;margin-bottom:10px;font-size:13px;font-family:system-ui;background:#fff;overflow:hidden;">' +
+    var borderColor = STATUS_TEXT_COLORS[t.ticketStatusName] || "#2196F3";
+    return '<div class="sp-list-card" data-id="' + t.id + '" data-status="' + (t.ticketStatusName || "") + '" data-responsible="' + (t.responsibleName || "") + '" data-code="' + (t.uniqueCode || "") + '" style="border:2px solid ' + borderColor + ';border-top:4px solid ' + borderColor + ';border-radius:10px;margin-bottom:10px;font-size:13px;font-family:system-ui;background:#fff;overflow:hidden;">' +
       '<div style="display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #e8e8e8;">' +
         '<span>📁 <b>Folio:</b> <a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="color:#1976D2;font-weight:700;text-decoration:none;">' + (t.uniqueCode || t.id) + '</a> <span class="sp-card-copy" data-code="' + (t.uniqueCode || "") + '"></span></span>' +
         '<span>📅 ' + date + '</span>' +
