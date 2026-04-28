@@ -1,7 +1,7 @@
 (function () {
   // Make loading backdrop less invasive - thin top bar instead of fullscreen
   const hideBackdrop = document.createElement("style");
-  hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } } .MuiDataGrid-cell[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; } .MuiDataGrid-columnHeader[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; } .MuiDataGrid-cell { min-width: 180px !important; } .MuiDataGrid-columnHeader { min-width: 180px !important; }";
+  hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } } .MuiDataGrid-cell[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; } .MuiDataGrid-columnHeader[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; }";
   document.head.appendChild(hideBackdrop);
 
   // --- Toast helpers ---
@@ -1549,7 +1549,7 @@
           var date = (t.createdAt || "").replace("T", " ").substring(0, 16);
           var subject = (t.subject || "").substring(0, 40) + ((t.subject || "").length > 40 ? "..." : "");
           html += '<tr style="background:' + statusColor + ';border-bottom:1px solid #eee;">';
-          html += '<td style="padding:6px;font-weight:600;"><a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="color:inherit;text-decoration:none;">' + (t.uniqueCode || t.id) + '</a></td>';
+          html += '<td style="padding:6px;font-weight:600;white-space:nowrap;"><a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="color:inherit;text-decoration:none;">' + (t.uniqueCode || t.id) + '</a><span class="sp-modal-copy" data-code="' + (t.uniqueCode || "") + '"></span></td>';
           html += '<td style="padding:6px;font-size:11px;">' + date + '</td>';
           html += '<td style="padding:6px;">' + (t.requesterName || "") + '</td>';
           html += '<td style="padding:6px;" title="' + (t.subject || "") + '">' + subject + '</td>';
@@ -1562,13 +1562,18 @@
         html += '</tbody></table>';
         results.innerHTML = html;
 
+        // Inject copy buttons next to folio
+        results.querySelectorAll(".sp-modal-copy").forEach(function(span) {
+          var code = span.dataset.code;
+          if (code) span.appendChild(createCopyButton(code));
+        });
+
         // Inject action buttons in results
         results.querySelectorAll(".sp-modal-actions").forEach(function(cell) {
           var id = cell.dataset.id;
           var status = cell.dataset.status;
           var responsible = cell.dataset.responsible;
           var code = cell.dataset.code;
-          if (code) cell.appendChild(createCopyButton(code));
           if (status === "En espera") cell.appendChild(createTakeButton(id));
           if (status === "Asignado" && responsible && myName && responsible === myName) cell.appendChild(createCloseButton(id));
           if (status === "Asignado" && responsible && myName && responsible !== myName) cell.appendChild(createStealButton(id));
@@ -1704,7 +1709,7 @@
           var requesterName = (t.requesterName || "").substring(0, 20) + ((t.requesterName || "").length > 20 ? "..." : "");
 
           html += '<tr style="background:' + statusColor + ';border-bottom:1px solid #eee;">';
-          html += '<td style="padding:6px;font-weight:600;"><a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="color:inherit;text-decoration:none;">' + (t.uniqueCode || t.id) + '</a></td>';
+          html += '<td style="padding:6px;font-weight:600;white-space:nowrap;"><a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="color:inherit;text-decoration:none;">' + (t.uniqueCode || t.id) + '</a><span class="sp-search-copy" data-code="' + (t.uniqueCode || "") + '"></span></td>';
           html += '<td style="padding:6px;font-size:11px;">' + date + '</td>';
           html += '<td style="padding:6px;" title="' + (t.requesterName || "") + '">' + requesterName + '</td>';
           html += '<td style="padding:6px;" title="' + (t.subject || "") + '">' + subject + '</td>';
@@ -1717,13 +1722,18 @@
         html += '</tbody></table>';
         results.innerHTML = html;
 
+        // Inject copy buttons next to folio
+        results.querySelectorAll(".sp-search-copy").forEach(function(span) {
+          var code = span.dataset.code;
+          if (code) span.appendChild(createCopyButton(code));
+        });
+
         // Inject action buttons
         results.querySelectorAll(".sp-search-actions").forEach(function(cell) {
           var id = cell.dataset.id;
           var status = cell.dataset.status;
           var responsible = cell.dataset.responsible;
           var code = cell.dataset.code;
-          if (code) cell.appendChild(createCopyButton(code));
           if (status === "En espera") cell.appendChild(createTakeButton(id));
           if (status === "Asignado" && responsible && myName2 && responsible === myName2) cell.appendChild(createCloseButton(id));
           if (status === "Asignado" && responsible && myName2 && responsible !== myName2) cell.appendChild(createStealButton(id));
