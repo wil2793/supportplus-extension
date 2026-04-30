@@ -1768,13 +1768,14 @@
     overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:900px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
         '<h3 style="margin:0;">' + modalTitle + '</h3>' +
-        '<button id="sp-qf-close" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Cerrar</button>' +
+        '<div style="display:flex;gap:8px;"><button id="sp-qf-refresh" style="padding:6px 14px;border:1px solid #2196F3;border-radius:6px;background:#fff;color:#2196F3;cursor:pointer;font-size:13px;">🔄 Actualizar</button><button id="sp-qf-close" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Cerrar</button></div>' +
       '</div>' +
       '<div id="sp-qf-results" style="flex:1;overflow:auto;min-height:100px;"><div style="text-align:center;padding:20px;color:#888;">Buscando...</div></div>' +
       '<div id="sp-qf-paging" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:#888;"></div>' +
       '</div>';
     document.body.appendChild(overlay);
 
+    document.getElementById("sp-qf-refresh").addEventListener("click", function() { if (activeModalRefresh) activeModalRefresh(); });
     document.getElementById("sp-qf-close").addEventListener("click", function() { activeModalRefresh = null; overlay.remove(); });
     overlay.addEventListener("click", function(e) { if (e.target === overlay) { activeModalRefresh = null; overlay.remove(); } });
 
@@ -1859,6 +1860,7 @@
       '</div>' +
       '<div style="display:flex;gap:8px;margin-bottom:12px;">' +
         '<button id="sp-sf-search" style="flex:1;padding:10px;border:none;border-radius:6px;background:#7B1FA2;color:#fff;cursor:pointer;font-size:14px;">🔍 Buscar</button>' +
+        '<button id="sp-sf-refresh" style="padding:10px 14px;border:1px solid #2196F3;border-radius:6px;background:#fff;color:#2196F3;cursor:pointer;font-size:14px;">🔄</button>' +
         '<button id="sp-sf-close" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cerrar</button>' +
       '</div>' +
       '<div id="sp-sf-results" style="flex:1;overflow:auto;min-height:100px;"></div>' +
@@ -1866,6 +1868,7 @@
       '</div>';
     document.body.appendChild(overlay);
 
+    document.getElementById("sp-sf-refresh").addEventListener("click", function() { if (activeModalRefresh) activeModalRefresh(); });
     document.getElementById("sp-sf-close").addEventListener("click", function() { activeModalRefresh = null; overlay.remove(); });
     overlay.addEventListener("click", function(e) { if (e.target === overlay) { activeModalRefresh = null; overlay.remove(); } });
 
