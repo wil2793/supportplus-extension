@@ -1790,6 +1790,7 @@
   const QUICK_FILTER_ATTENTION_ID = "sp-quick-filter-attention";
   const QUICK_FILTER_MYCREATED_ID = "sp-quick-filter-mycreated";
   const QUICK_FILTER_MYASSIGNED_ID = "sp-quick-filter-myassigned";
+  const QUICK_FILTER_MYPENDING_ID = "sp-quick-filter-mypending";
 
   async function showMyAssignedModal() {
     showQuickFilterModal("", "", "👤 Mis tickets asignados", "https://macropayapi.supportplus.mx/tickets/search-by-user-current-responsible");
@@ -1849,6 +1850,15 @@
         btn5.addEventListener("click", function() { showQuickFilterModal("", "", "📝 Tickets que yo creé", "https://macropayapi.supportplus.mx/tickets/search-by-user-requester"); });
         parent.insertBefore(btn5, userWrapper);
       }
+    }
+
+    if (!document.getElementById(QUICK_FILTER_MYPENDING_ID)) {
+      var btn6 = document.createElement("button");
+      btn6.id = QUICK_FILTER_MYPENDING_ID;
+      btn6.textContent = "📋 Mis pendientes";
+      btn6.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#D94040;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+      btn6.addEventListener("click", function() { showQuickFilterModal("Asignado", "", "📋 Mis pendientes", "https://macropayapi.supportplus.mx/tickets/search-by-user-current-responsible"); });
+      parent.insertBefore(btn6, userWrapper);
     }
   }
 
