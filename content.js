@@ -899,14 +899,13 @@
 
   function colorRowsByStatus() {
     document.querySelectorAll(".MuiDataGrid-row").forEach(function(row) {
-      if (row.dataset.spColored) return;
       var statusCell = row.querySelector('[data-field="ticketStatusName"]');
       if (!statusCell) return;
       var status = statusCell.textContent.trim();
-      var color = STATUS_COLORS[status];
-      if (color) {
+      var color = STATUS_COLORS[status] || "transparent";
+      if (row.dataset.spStatus !== status) {
         row.style.backgroundColor = color;
-        row.dataset.spColored = "1";
+        row.dataset.spStatus = status;
       }
     });
   }
@@ -1081,7 +1080,7 @@
       '<th style="padding:6px;">Solicitante</th>' +
       '<th style="padding:6px;">Estado</th>' +
       '<th style="padding:6px;">Analista</th>' +
-      '<th style="padding:6px;">Acciones</th>' +
+      '<th style="padding:6px;min-width:200px;">Acciones</th>' +
       '</tr></thead><tbody>';
 
     tickets.forEach(function(t) {
@@ -1096,7 +1095,7 @@
       html += '<td style="padding:6px;">' + (t.requesterName || "") + '</td>';
       html += '<td style="padding:6px;font-size:11px;font-weight:700;color:' + textColor + ';">' + (t.ticketStatusName || "") + '</td>';
       html += '<td style="padding:6px;">' + (t.responsibleName || "Sin asignar") + '</td>';
-      html += '<td style="padding:6px;white-space:nowrap;" class="sp-card-actions" data-id="' + t.id + '" data-status="' + (t.ticketStatusName || "") + '" data-responsible="' + (t.responsibleName || "") + '" data-code="' + (t.uniqueCode || "") + '"></td>';
+      html += '<td style="padding:8px;white-space:nowrap;display:flex;align-items:center;gap:6px;flex-wrap:wrap;" class="sp-card-actions" data-id="' + t.id + '" data-status="' + (t.ticketStatusName || "") + '" data-responsible="' + (t.responsibleName || "") + '" data-code="' + (t.uniqueCode || "") + '"></td>';
       html += '</tr>';
     });
 
@@ -1616,6 +1615,7 @@
   // --- Custom search ---
   const SEARCH_BTN_ID = "sp-search-btn";
   const SP_SEARCH_API = "https://macropayapi.supportplus.mx/tickets/search-by-level-and-resolution-groups";
+  var activeModalRefresh = null;
 
   function injectSearchButton() {
     if (document.getElementById(SEARCH_BTN_ID)) return;
@@ -1775,10 +1775,11 @@
       '</div>';
     document.body.appendChild(overlay);
 
-    document.getElementById("sp-qf-close").addEventListener("click", function() { overlay.remove(); });
-    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+    document.getElementById("sp-qf-close").addEventListener("click", function() { activeModalRefresh = null; overlay.remove(); });
+    overlay.addEventListener("click", function(e) { if (e.target === overlay) { activeModalRefresh = null; overlay.remove(); } });
 
     var currentPage = 1;
+    activeModalRefresh = doQuickSearch;
     await doQuickSearch();
 
     async function doQuickSearch() {
@@ -1865,11 +1866,11 @@
       '</div>';
     document.body.appendChild(overlay);
 
-    document.getElementById("sp-sf-close").addEventListener("click", function() { overlay.remove(); });
-    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+    document.getElementById("sp-sf-close").addEventListener("click", function() { activeModalRefresh = null; overlay.remove(); });
+    overlay.addEventListener("click", function(e) { if (e.target === overlay) { activeModalRefresh = null; overlay.remove(); } });
 
     var currentPage = 1;
-    document.getElementById("sp-sf-search").addEventListener("click", function() { currentPage = 1; doSearch(); });
+    document.getElementById("sp-sf-search").addEventListener("click", function() { currentPage = 1; activeModalRefresh = doSearch; doSearch(); });
 
     async function doSearch() {
       var results = document.getElementById("sp-sf-results");
@@ -2246,5 +2247,6 @@
     syncPromise = null;
     localStorage.removeItem(CACHE_KEY);
     ensureSyncStarted().then(() => injectButtons());
+    if (activeModalRefresh) activeModalRefresh();
   });
 })();
