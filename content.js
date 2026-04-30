@@ -1137,9 +1137,19 @@
     var existing = document.getElementById("sp-take-modal");
     if (existing) existing.remove();
 
-    // Fetch info first
+    // Fetch info and Monday groups
     var info = await fetchTicketInfo(ticketId);
     var summaryHTML = ticketSummaryHTML(info);
+    var mondayToken = await getMondayToken();
+    var boardId = await getMondayBoardId();
+    var groups = [];
+    if (mondayToken && boardId) {
+      try {
+        var gData = await mondayQuery(mondayToken, 'query ($boardId: [ID!]!) { boards(ids: $boardId) { groups { id title } } }', { boardId });
+        groups = gData.boards[0]?.groups || [];
+      } catch(e) {}
+    }
+    var groupOpts = '<option value="">-- No migrar --</option>' + groups.map(function(g) { return '<option value="' + g.id + '">' + g.title + '</option>'; }).join("");
 
     var overlay = document.createElement("div");
     overlay.id = "sp-take-modal";
@@ -1149,6 +1159,11 @@
       summaryHTML +
       '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario (opcional)</label>' +
       '<textarea id="sp-take-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:80px;resize:vertical;box-sizing:border-box;margin-bottom:12px;" placeholder="Escribe un comentario..."></textarea>' +
+      '<div style="margin-bottom:12px;"><label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="sp-take-done"> <b>Ticket realizado</b></label></div>' +
+      '<div id="sp-take-migrate-section" style="display:none;margin-bottom:12px;">' +
+        '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Migrar a Monday</label>' +
+        '<select id="sp-take-group" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;">' + groupOpts + '</select>' +
+      '</div>' +
       '<div id="sp-take-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
       '<div style="display:flex;gap:8px;">' +
         '<button id="sp-take-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">✊ Tomar ticket</button>' +
@@ -1168,6 +1183,27 @@
     var confirmBtn = document.getElementById("sp-take-confirm");
     var cancelBtn = document.getElementById("sp-take-cancel");
     var msg = document.getElementById("sp-take-msg");
+    var doneCheck = document.getElementById("sp-take-done");
+    var migrateSection = document.getElementById("sp-take-migrate-section");
+    var takeGroupSelect = document.getElementById("sp-take-group");
+
+    doneCheck.addEventListener("change", function() {
+      migrateSection.style.display = doneCheck.checked ? "block" : "none";
+      if (doneCheck.checked && takeGroupSelect.value) {
+        confirmBtn.textContent = "Tomar, cerrar y migrar";
+      } else if (doneCheck.checked) {
+        confirmBtn.textContent = "Tomar y cerrar";
+      } else {
+        confirmBtn.textContent = "✊ Tomar ticket";
+      }
+    });
+    takeGroupSelect.addEventListener("change", function() {
+      if (doneCheck.checked && takeGroupSelect.value) {
+        confirmBtn.textContent = "Tomar, cerrar y migrar";
+      } else if (doneCheck.checked) {
+        confirmBtn.textContent = "Tomar y cerrar";
+      }
+    });
 
     cancelBtn.addEventListener("click", function() { overlay.remove(); });
     overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
@@ -1204,28 +1240,84 @@
         if (!res.ok) throw new Error("HTTP " + res.status);
         var json = await res.json();
         if (json.success) {
-          var newCloseBtn = createCloseButton(ticketId);
-          originalBtn.replaceWith(newCloseBtn);
-          var row = newCloseBtn.closest(".MuiDataGrid-row");
-          if (row) {
-            // Remove steal and take buttons
-            var oldSteal = row.querySelector("." + STEAL_BTN_CLASS);
-            if (oldSteal) oldSteal.remove();
-            var oldTake = row.querySelector("." + TAKE_BTN_CLASS);
-            if (oldTake) oldTake.remove();
-            row.classList.add(HIGHLIGHT_CLASS);
-            row.style.position = "relative";
-            var indicator = document.createElement("span");
-            indicator.textContent = "❗";
-            indicator.style.cssText = "position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:14px;z-index:1;pointer-events:none;";
-            row.appendChild(indicator);
-            var statusCell = row.querySelector('[data-field="ticketStatusName"]');
-            if (statusCell) statusCell.textContent = "Asignado";
+          // If "Ticket realizado" is checked, also close and optionally migrate
+          if (doneCheck.checked) {
+            // Add comment if provided
+            if (comment) {
+              await fetch(SP_API + "/comment/" + ticketId, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                body: JSON.stringify({ content: "<p>" + comment + "</p>", internal: false }),
+              });
+            }
+            // Close ticket
+            var closeRes = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+              body: JSON.stringify({ nextTicketStatusId: 9, ticketCommentRequest: null }),
+            });
+            if (!closeRes.ok) throw new Error("Error al cerrar: HTTP " + closeRes.status);
+
+            // Migrate if group selected
+            var selectedGroup = takeGroupSelect.value;
+            if (selectedGroup && mondayToken && boardId) {
+              var ticketRes = await fetch(SP_API + "/" + ticketId, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+              var ticketJson = await ticketRes.json();
+              var ticket = ticketJson.data || ticketJson;
+              var holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
+              var users = await getMondayUsers(mondayToken);
+              var personValue = {};
+              if (holderEmail) { var userId = users[holderEmail.toLowerCase()]; if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] }; }
+              var url = BASE_URL + "/" + ticketId;
+              var desc = (ticket.description || "").replace(/<[^>]*>/g, "");
+              var itemName = ticket.subject || "Sin asunto";
+              var createdDate = new Date(ticket.createdAt).toISOString().slice(0, 10);
+              var spPriority = (ticket.incidentPriorityName || ticket.incidentPriority?.name || "").toLowerCase().trim();
+              var priorityIndex = PRIORITY_MAP[spPriority] ?? PRIORITY_MAP["medio"];
+              var columnValues = JSON.stringify({
+                descripci_n_mkn9e5f4: { text: desc }, ...(personValue.personsAndTeams ? { multiple_person_mm25nvfq: personValue } : {}),
+                status: { index: 1 }, priority_mkn9kbe9: { index: priorityIndex },
+                cronograma_mkn9hwe3: { from: createdDate, to: createdDate },
+                link_mknkdctz: { url: url, text: ticket.uniqueCode || url }, text_mm2c9nhc: ticket.uniqueCode || ticketId,
+              });
+              var result = await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $groupId: String!, $itemName: String!, $columnValues: JSON!) { create_item(board_id: $boardId, group_id: $groupId, item_name: $itemName, column_values: $columnValues) { id } }', { boardId: boardId, groupId: selectedGroup, itemName: itemName, columnValues: columnValues });
+              addToCache(ticket.uniqueCode || ticketId, result.create_item.id);
+            }
+
+            // Update UI
+            var row = originalBtn.closest(".MuiDataGrid-row");
+            if (row) {
+              var synced = getCache() || {};
+              var uc = info?.uniqueCode || ticketId;
+              if (selectedGroup && synced[uc]) { originalBtn.replaceWith(createSyncedBadge(synced[uc])); }
+              else { originalBtn.replaceWith(createButton(ticketId)); }
+              var oldSteal = row.querySelector("." + STEAL_BTN_CLASS); if (oldSteal) oldSteal.remove();
+              var oldTake = row.querySelector("." + TAKE_BTN_CLASS); if (oldTake) oldTake.remove();
+              var oldClose = row.querySelector("." + CLOSE_BTN_CLASS); if (oldClose) oldClose.remove();
+              var statusCell = row.querySelector('[data-field="ticketStatusName"]'); if (statusCell) statusCell.textContent = "Cerrado";
+            }
+            showSuccessToast(selectedGroup ? "Ticket tomado, cerrado y migrado" : "Ticket tomado y cerrado");
+          } else {
+            // Just take
+            var newCloseBtn = createCloseButton(ticketId);
+            originalBtn.replaceWith(newCloseBtn);
+            var row = newCloseBtn.closest(".MuiDataGrid-row");
+            if (row) {
+              var oldSteal = row.querySelector("." + STEAL_BTN_CLASS); if (oldSteal) oldSteal.remove();
+              var oldTake = row.querySelector("." + TAKE_BTN_CLASS); if (oldTake) oldTake.remove();
+              row.classList.add(HIGHLIGHT_CLASS);
+              row.style.position = "relative";
+              var indicator = document.createElement("span");
+              indicator.textContent = "❗";
+              indicator.style.cssText = "position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:14px;z-index:1;pointer-events:none;";
+              row.appendChild(indicator);
+              var statusCell = row.querySelector('[data-field="ticketStatusName"]'); if (statusCell) statusCell.textContent = "Asignado";
+            }
+            showSuccessToast("Ticket tomado");
           }
-          showSuccessToast("Ticket tomado");
           if (isDetailView()) {
             setTimeout(function() { window.location.reload(); }, 1500);
-          } else {
+          } else if (!doneCheck.checked) {
             window.open("/es/dashboard/tickets/" + ticketId, "_blank");
           }
         } else {
@@ -1297,7 +1389,7 @@
     ]);
     var summaryHTML = ticketSummaryHTML(info);
     var groups = groupsData?.boards?.[0]?.groups || [];
-    var groupOpts = '<option value="">-- No migrar --</option>' + groups.map(function(g) { return '<option value="' + g.id + '">' + g.title + '</option>'; }).join("");
+    var groupOpts = '<option value="">-- Selecciona destino --</option>' + groups.map(function(g) { return '<option value="' + g.id + '">' + g.title + '</option>'; }).join("");
 
     var overlay = document.createElement("div");
     overlay.id = "sp-close-modal-single";
@@ -1307,7 +1399,7 @@
       summaryHTML +
       '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario (opcional)</label>' +
       '<textarea id="sp-close-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:60px;resize:vertical;box-sizing:border-box;margin-bottom:12px;" placeholder="Escribe un comentario..."></textarea>' +
-      '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Migrar a Monday (opcional)</label>' +
+      '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Migrar a Monday <span style="color:#D94040;">*</span></label>' +
       '<select id="sp-close-group" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:12px;font-size:13px;">' + groupOpts + '</select>' +
       '<div id="sp-close-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
       '<div style="display:flex;gap:8px;">' +
@@ -1343,6 +1435,10 @@
 
     confirmBtn.addEventListener("click", async function() {
       var selectedGroup = groupSelect.value;
+      if (!selectedGroup) {
+        msg.textContent = "Selecciona un destino en Monday para migrar.";
+        return;
+      }
       var commentText = document.getElementById("sp-close-comment").value.trim();
       overlay.remove();
       originalBtn.disabled = true;
