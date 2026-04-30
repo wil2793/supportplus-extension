@@ -1923,7 +1923,10 @@
         var totalElements = data.totalElements || 0;
 
         if (!tickets.length) {
-          results.innerHTML = '<div style="text-align:center;padding:20px;color:#888;">Sin tickets con estado: ' + statusName + '</div>';
+          var emptyMsg = customApiUrl && modalTitle.indexOf("pendientes") !== -1
+            ? '🎉 ¡Sin tickets pendientes! Ponte a jalar que no te pagan por estar de florero 🌵'
+            : 'Sin tickets con estado: ' + (statusName || "todos");
+          results.innerHTML = '<div style="text-align:center;padding:20px;color:#888;">' + emptyMsg + '</div>';
           return;
         }
 
