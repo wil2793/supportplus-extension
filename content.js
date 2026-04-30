@@ -1828,6 +1828,14 @@
       parent.insertBefore(btn3, userWrapper);
     }
 
+    if (!document.getElementById("sp-filter-separator") && !document.getElementById(QUICK_FILTER_MYASSIGNED_ID)) {
+      var sep = document.createElement("span");
+      sep.id = "sp-filter-separator";
+      sep.textContent = "|";
+      sep.style.cssText = "color:rgba(255,255,255,0.4);font-size:16px;margin-right:8px;";
+      parent.insertBefore(sep, userWrapper);
+    }
+
     if (!document.getElementById(QUICK_FILTER_MYASSIGNED_ID)) {
       var myName = getLoggedUserName();
       if (myName) {
