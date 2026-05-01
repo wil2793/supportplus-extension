@@ -1231,7 +1231,7 @@
           responsibleProfileId: profileId,
           resolutionGroup: { label: "Infraestructura DBA", value: 19 }
         };
-        if (comment) body.ticketCommentRequest = { internal: false, content: comment };
+        if (comment && !doneCheck.checked) body.ticketCommentRequest = { internal: false, content: comment };
         var res = await fetch(SP_API + "/reassign/" + ticketId, {
           method: "PUT",
           headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
