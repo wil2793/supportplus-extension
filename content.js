@@ -599,6 +599,81 @@
     evidenciasH2.parentElement.insertBefore(container, evidenciasH2);
   }
 
+  const REASSIGN_APP_BTN_ID = "sp-reassign-app-btn";
+
+  function injectReassignAppButton() {
+    if (document.getElementById(REASSIGN_APP_BTN_ID)) return;
+    if (!isDetailView()) return;
+    var ticketId = getDetailTicketId();
+    if (!ticketId) return;
+
+    // Find "Información del ticket" h1
+    var h1 = null;
+    document.querySelectorAll("h1.MuiTypography-h1").forEach(function(el) {
+      if (el.textContent.trim() === "Información del ticket") h1 = el;
+    });
+    if (!h1) return;
+
+    var btn = document.createElement("button");
+    btn.id = REASSIGN_APP_BTN_ID;
+    btn.textContent = "🔀 Reasignar a Aplicaciones";
+    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#C62828;color:#fff;font-weight:600;white-space:nowrap;margin-left:12px;vertical-align:middle;";
+    btn.addEventListener("click", function() { showReassignAppModal(ticketId); });
+    h1.parentElement.appendChild(btn);
+  }
+
+  function showReassignAppModal(ticketId) {
+    var existing = document.getElementById("sp-reassign-app-modal");
+    if (existing) existing.remove();
+
+    var overlay = document.createElement("div");
+    overlay.id = "sp-reassign-app-modal";
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:420px;width:90%;font-family:system-ui;text-align:center;">' +
+      '<h3 style="margin:0 0 16px;color:#C62828;">⚠️ Reasignar a Aplicaciones</h3>' +
+      '<p style="font-size:14px;color:#555;margin:0 0 8px;">Este ticket dejará de ser nuestro y pasará a mejor vida con el equipo de Aplicaciones.</p>' +
+      '<p style="font-size:13px;color:#888;margin:0 0 20px;">🪦 Descanse en paz... o no, depende de Aplicaciones.</p>' +
+      '<div id="sp-reassign-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button id="sp-reassign-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#C62828;color:#fff;cursor:pointer;font-size:14px;">Sí, reasignar</button>' +
+        '<button id="sp-reassign-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
+      '</div></div>';
+    document.body.appendChild(overlay);
+
+    document.getElementById("sp-reassign-cancel").addEventListener("click", function() { overlay.remove(); });
+    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+    document.getElementById("sp-reassign-confirm").addEventListener("click", async function() {
+      overlay.remove();
+      showLoadingToast("Reasignando a Aplicaciones...");
+
+      var spToken = getToken();
+      try {
+        var res = await fetch(SP_API + "/reassign/" + ticketId, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+          body: JSON.stringify({
+            ticketCommentRequest: { internal: false, content: "Se reasigna ticket" },
+            resolutionGroupId: 53,
+            serviceId: null,
+            responsibleProfileId: null,
+            resolutionGroup: { label: "Soporte Aplicativos y Sistemas (general)", value: 53 }
+          }),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var json = await res.json();
+        if (json.success) {
+          showSuccessToast("Ticket reasignado a Aplicaciones 🪦");
+          setTimeout(function() { window.location.reload(); }, 1500);
+        } else {
+          throw new Error("No success");
+        }
+      } catch (err) {
+        showErrorToast("Error: " + err.message);
+      }
+    });
+  }
+
   function injectBulkButton() {
     if (document.getElementById(BULK_BTN_ID)) return;
     let container = document.querySelector(".MuiBox-root .MuiStack-root");
@@ -2217,6 +2292,7 @@
       injectDetailButton();
       injectIamButton();
       injectDetailDetections();
+      injectReassignAppButton();
       return;
     }
 
