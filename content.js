@@ -1729,16 +1729,24 @@
 
   const DASHBOARD_BTN_ID = "sp-dashboard-btn";
 
+  var dashboardData = null;
+  var dashboardFrom = "";
+  var dashboardTo = "";
+
   function injectDashboardButton() {
     if (document.getElementById(DASHBOARD_BTN_ID)) return;
     var searchBtn = document.getElementById(SEARCH_BTN_ID);
     if (!searchBtn) return;
 
+    var now = new Date();
+    dashboardFrom = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-01T00:00";
+    dashboardTo = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + "T23:59";
+
     var btn = document.createElement("button");
     btn.id = DASHBOARD_BTN_ID;
     btn.textContent = "📊 Dashboard";
     btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#00796B;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-    btn.addEventListener("click", showDashboardModal);
+    btn.addEventListener("click", handleDashboardClick);
     searchBtn.parentElement.insertBefore(btn, searchBtn);
 
     var sep = document.createElement("span");
@@ -1747,13 +1755,89 @@
     searchBtn.parentElement.insertBefore(sep, searchBtn);
   }
 
-  async function showDashboardModal() {
+  async function handleDashboardClick() {
+    var btn = document.getElementById(DASHBOARD_BTN_ID);
+    if (!btn) return;
+
+    // If data already loaded, show modal directly
+    if (dashboardData) {
+      showDashboardModal();
+      return;
+    }
+
+    // Load data in background
+    btn.disabled = true;
+    btn.textContent = "⏳ Creando dashboard...";
+    btn.style.background = "#999";
+
+    var spToken = getToken();
+    if (!spToken) { showErrorToast("No hay token"); btn.textContent = "📊 Dashboard"; btn.style.background = "#00796B"; btn.disabled = false; return; }
+
+    var allTickets = [];
+    var page = 0;
+    try {
+      while (true) {
+        var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?page=" + page + "&size=100&resolutionGroupId=19";
+        if (dashboardFrom) url += "&initDate=" + dashboardFrom;
+        if (dashboardTo) url += "&endDate=" + dashboardTo;
+        var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var json = await res.json();
+        var data = json.data || json;
+        var tickets = data.content || [];
+        tickets.forEach(function(t) { if (t.ticketStatusName === "Cerrado") allTickets.push(t); });
+        btn.textContent = "⏳ Cargando... " + allTickets.length + " tickets";
+        if (page >= (data.totalPages || 1) - 1) break;
+        page++;
+      }
+    } catch (err) {
+      showErrorToast("Error: " + err.message);
+      btn.textContent = "📊 Dashboard";
+      btn.style.background = "#00796B";
+      btn.disabled = false;
+      return;
+    }
+
+    dashboardData = allTickets;
+    btn.textContent = "📊 Ver dashboard";
+    btn.style.background = "#00796B";
+    btn.disabled = false;
+    showSuccessToast("Dashboard listo: " + allTickets.length + " tickets cerrados");
+  }
+
+  function buildDashboardChart(allTickets) {
+    if (!allTickets.length) return '<div style="text-align:center;padding:40px;color:#888;">Sin tickets cerrados en este periodo</div>';
+
+    var counts = {};
+    allTickets.forEach(function(t) {
+      var name = t.responsibleName || "Sin asignar";
+      counts[name] = (counts[name] || 0) + 1;
+    });
+    var sorted = Object.entries(counts).sort(function(a, b) { return b[1] - a[1]; });
+    var maxCount = sorted[0][1];
+    var colors = ["#1976D2", "#2E7D32", "#D94040", "#7B1FA2", "#E65100", "#00796B", "#C2185B", "#F57F17", "#283593", "#5D4037"];
+
+    var html = '<div style="margin-bottom:12px;font-size:13px;color:#888;">Total: <b>' + allTickets.length + '</b> tickets cerrados</div>';
+    sorted.forEach(function(entry, i) {
+      var name = entry[0];
+      var count = entry[1];
+      var pct = Math.round((count / maxCount) * 100);
+      var color = colors[i % colors.length];
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
+        '<div style="width:180px;font-size:12px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + name + '">' + name + '</div>' +
+        '<div style="flex:1;background:#eee;border-radius:4px;height:24px;overflow:hidden;">' +
+          '<div style="width:' + pct + '%;background:' + color + ';height:100%;border-radius:4px;transition:width 0.5s;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;">' +
+            '<span style="color:#fff;font-size:11px;font-weight:700;">' + count + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    });
+    return html;
+  }
+
+  function showDashboardModal() {
     var existing = document.getElementById("sp-dashboard-modal");
     if (existing) existing.remove();
-
-    var now = new Date();
-    var firstDay = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-01T00:00";
-    var today = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + "T23:59";
 
     var overlay = document.createElement("div");
     overlay.id = "sp-dashboard-modal";
@@ -1765,90 +1849,29 @@
       '</div>' +
       '<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">' +
         '<label style="font-size:12px;">Desde:</label>' +
-        '<input id="sp-dash-from" type="datetime-local" value="' + firstDay + '" style="padding:5px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;">' +
+        '<input id="sp-dash-from" type="datetime-local" value="' + dashboardFrom + '" style="padding:5px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;">' +
         '<label style="font-size:12px;">Hasta:</label>' +
-        '<input id="sp-dash-to" type="datetime-local" value="' + today + '" style="padding:5px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;">' +
-        '<button id="sp-dash-refresh" style="padding:5px 14px;font-size:12px;border:none;border-radius:6px;background:#00796B;color:#fff;cursor:pointer;font-weight:600;">Consultar</button>' +
+        '<input id="sp-dash-to" type="datetime-local" value="' + dashboardTo + '" style="padding:5px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;">' +
+        '<button id="sp-dash-refresh" style="padding:5px 14px;font-size:12px;border:none;border-radius:6px;background:#00796B;color:#fff;cursor:pointer;font-weight:600;">Regenerar</button>' +
       '</div>' +
-      '<div id="sp-dash-results" style="flex:1;overflow:auto;min-height:200px;"><div style="text-align:center;padding:40px;color:#888;">Cargando...</div></div>' +
+      '<div id="sp-dash-results" style="flex:1;overflow:auto;min-height:200px;"></div>' +
       '</div>';
     document.body.appendChild(overlay);
 
+    document.getElementById("sp-dash-results").innerHTML = buildDashboardChart(dashboardData || []);
+
     document.getElementById("sp-dash-close").addEventListener("click", function() { overlay.remove(); });
     overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
-    document.getElementById("sp-dash-refresh").addEventListener("click", loadDashboard);
 
-    await loadDashboard();
-
-    async function loadDashboard() {
-      var results = document.getElementById("sp-dash-results");
-      results.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">Consultando tickets...</div>';
-
-      var spToken = getToken();
-      if (!spToken) { results.innerHTML = '<div style="color:#D94040;padding:12px;">No hay token</div>'; return; }
-
-      var from = document.getElementById("sp-dash-from").value;
-      var to = document.getElementById("sp-dash-to").value;
-
-      // Fetch all closed tickets in date range
-      var allTickets = [];
-      var page = 0;
-      try {
-        while (true) {
-          var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?page=" + page + "&size=100&resolutionGroupId=19";
-          if (from) url += "&initDate=" + from;
-          if (to) url += "&endDate=" + to;
-          var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
-          if (!res.ok) throw new Error("HTTP " + res.status);
-          var json = await res.json();
-          var data = json.data || json;
-          var tickets = data.content || [];
-          tickets.forEach(function(t) { if (t.ticketStatusName === "Cerrado") allTickets.push(t); });
-          results.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">Consultando... ' + allTickets.length + ' tickets</div>';
-          if (page >= 1 || page >= (data.totalPages || 1) - 1) break;
-          page++;
-        }
-      } catch (err) {
-        results.innerHTML = '<div style="color:#D94040;padding:12px;">Error: ' + err.message + '</div>';
-        return;
-      }
-
-      if (!allTickets.length) {
-        results.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">Sin tickets cerrados en este periodo</div>';
-        return;
-      }
-
-      // Count by analyst
-      var counts = {};
-      allTickets.forEach(function(t) {
-        var name = t.responsibleName || "Sin asignar";
-        counts[name] = (counts[name] || 0) + 1;
-      });
-
-      // Sort by count descending
-      var sorted = Object.entries(counts).sort(function(a, b) { return b[1] - a[1]; });
-      var maxCount = sorted[0][1];
-
-      // Build chart
-      var colors = ["#1976D2", "#2E7D32", "#D94040", "#7B1FA2", "#E65100", "#00796B", "#C2185B", "#F57F17", "#283593", "#5D4037"];
-      var html = '<div style="margin-bottom:12px;font-size:13px;color:#888;">Total: <b>' + allTickets.length + '</b> tickets cerrados</div>';
-      sorted.forEach(function(entry, i) {
-        var name = entry[0];
-        var count = entry[1];
-        var pct = Math.round((count / maxCount) * 100);
-        var color = colors[i % colors.length];
-        html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
-          '<div style="width:180px;font-size:12px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + name + '">' + name + '</div>' +
-          '<div style="flex:1;background:#eee;border-radius:4px;height:24px;overflow:hidden;">' +
-            '<div style="width:' + pct + '%;background:' + color + ';height:100%;border-radius:4px;transition:width 0.5s;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;">' +
-              '<span style="color:#fff;font-size:11px;font-weight:700;">' + count + '</span>' +
-            '</div>' +
-          '</div>' +
-        '</div>';
-      });
-
-      results.innerHTML = html;
-    }
+    document.getElementById("sp-dash-refresh").addEventListener("click", function() {
+      dashboardFrom = document.getElementById("sp-dash-from").value;
+      dashboardTo = document.getElementById("sp-dash-to").value;
+      dashboardData = null;
+      overlay.remove();
+      var btn = document.getElementById(DASHBOARD_BTN_ID);
+      if (btn) btn.textContent = "📊 Dashboard";
+      handleDashboardClick();
+    });
   }
 
   const QUICK_SEARCH_ID = "sp-quick-search";
