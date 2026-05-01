@@ -1795,7 +1795,7 @@
       var page = 0;
       try {
         while (true) {
-          var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?page=" + page + "&size=100&resolutionGroupId=19&ticketStatusName=Cerrado";
+          var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?page=" + page + "&size=1000&resolutionGroupId=19&ticketStatusName=Cerrado";
           if (from) url += "&initDate=" + from;
           if (to) url += "&endDate=" + to;
           var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
