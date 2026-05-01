@@ -1731,15 +1731,20 @@
 
   function injectDashboardButton() {
     if (document.getElementById(DASHBOARD_BTN_ID)) return;
-    var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
-    if (!userWrapper) return;
+    var searchBtn = document.getElementById(SEARCH_BTN_ID);
+    if (!searchBtn) return;
 
     var btn = document.createElement("button");
     btn.id = DASHBOARD_BTN_ID;
     btn.textContent = "📊 Dashboard";
-    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#00796B;color:#fff;font-weight:600;white-space:nowrap;margin-right:12px;";
+    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#00796B;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
     btn.addEventListener("click", showDashboardModal);
-    userWrapper.parentElement.insertBefore(btn, userWrapper);
+    searchBtn.parentElement.insertBefore(btn, searchBtn);
+
+    var sep = document.createElement("span");
+    sep.style.cssText = "color:rgba(255,255,255,0.4);font-size:16px;margin-right:8px;";
+    sep.textContent = "|";
+    searchBtn.parentElement.insertBefore(sep, searchBtn);
   }
 
   async function showDashboardModal() {
