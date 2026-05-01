@@ -645,10 +645,29 @@
 
     document.getElementById("sp-reassign-confirm").addEventListener("click", async function() {
       overlay.remove();
-      showLoadingToast("Reasignando a Aplicaciones...");
+      showLoadingToast("Tomando ticket para reasignar...");
 
       var spToken = getToken();
       try {
+        // Step 1: Take the ticket first
+        var profileId = await getMyProfileId();
+        if (!profileId) throw new Error("No se pudo obtener tu perfil");
+        var takeRes = await fetch(SP_API + "/reassign/" + ticketId, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+          body: JSON.stringify({
+            resolutionGroupId: 19,
+            serviceId: null,
+            responsibleProfileId: profileId,
+            resolutionGroup: { label: "Infraestructura DBA", value: 19 }
+          }),
+        });
+        if (!takeRes.ok) throw new Error("Error al tomar: HTTP " + takeRes.status);
+        var takeJson = await takeRes.json();
+        if (!takeJson.success) throw new Error("No se pudo tomar el ticket");
+
+        // Step 2: Reassign to Aplicaciones
+        showLoadingToast("Reasignando a Aplicaciones...");
         var res = await fetch(SP_API + "/reassign/" + ticketId, {
           method: "PUT",
           headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
@@ -663,8 +682,17 @@
         if (!res.ok) throw new Error("HTTP " + res.status);
         var json = await res.json();
         if (json.success) {
-          showSuccessToast("Ticket reasignado a Aplicaciones 🪦");
-          setTimeout(function() { window.location.reload(); }, 1500);
+          var successOverlay = document.createElement("div");
+          successOverlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+          successOverlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:360px;width:90%;font-family:system-ui;text-align:center;">' +
+            '<h3 style="margin:0 0 12px;color:#2E7D32;">✅ Ticket reasignado</h3>' +
+            '<p style="font-size:14px;color:#555;margin:0 0 16px;">El ticket fue reasignado a Aplicaciones exitosamente. 🪦 Descanse en paz.</p>' +
+            '<button id="sp-reassign-ok" style="width:100%;padding:10px;border:none;border-radius:6px;background:#2E7D32;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">Aceptar</button>' +
+          '</div>';
+          document.body.appendChild(successOverlay);
+          document.getElementById("sp-reassign-ok").addEventListener("click", function() {
+            window.location.href = "/es/dashboard/tickets";
+          });
         } else {
           throw new Error("No success");
         }
@@ -1804,22 +1832,43 @@
 
   const DASHBOARD_BTN_ID = "sp-dashboard-btn";
 
-  var dashboardData = null;
-  var dashboardFrom = "";
-  var dashboardTo = "";
+  const DASHBOARD_CACHE_KEY = "sp_dashboard_cache";
+
+  function loadDashboardCache() {
+    try {
+      var raw = localStorage.getItem(DASHBOARD_CACHE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch(e) { return null; }
+  }
+
+  function saveDashboardCache(data, from, to) {
+    localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify({ data: data, from: from, to: to, ts: Date.now() }));
+  }
+
+  function clearDashboardCache() {
+    localStorage.removeItem(DASHBOARD_CACHE_KEY);
+  }
+
+  var cached = loadDashboardCache();
+  var dashboardData = cached ? cached.data : null;
+  var dashboardFrom = cached ? cached.from : "";
+  var dashboardTo = cached ? cached.to : "";
 
   function injectDashboardButton() {
     if (document.getElementById(DASHBOARD_BTN_ID)) return;
     var searchBtn = document.getElementById(SEARCH_BTN_ID);
     if (!searchBtn) return;
 
-    var now = new Date();
-    dashboardFrom = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-01T00:00";
-    dashboardTo = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + "T23:59";
+    if (!dashboardFrom || !dashboardTo) {
+      var now = new Date();
+      dashboardFrom = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-01T00:00";
+      dashboardTo = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + "T23:59";
+    }
 
     var btn = document.createElement("button");
     btn.id = DASHBOARD_BTN_ID;
-    btn.textContent = "📊 Dashboard";
+    btn.textContent = dashboardData ? "📊 Ver dashboard" : "📊 Dashboard";
     btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#00796B;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
     btn.addEventListener("click", handleDashboardClick);
     searchBtn.parentElement.insertBefore(btn, searchBtn);
@@ -1844,6 +1893,7 @@
     btn.disabled = true;
     btn.textContent = "⏳ Creando dashboard...";
     btn.style.background = "#999";
+    showSuccessToast("📊 Generando dashboard, esto puede tardar un momento. Puedes seguir trabajando mientras tanto.");
 
     var spToken = getToken();
     if (!spToken) { showErrorToast("No hay token"); btn.textContent = "📊 Dashboard"; btn.style.background = "#00796B"; btn.disabled = false; return; }
@@ -1874,6 +1924,7 @@
     }
 
     dashboardData = allTickets;
+    saveDashboardCache(allTickets, dashboardFrom, dashboardTo);
     btn.textContent = "📊 Ver dashboard";
     btn.style.background = "#00796B";
     btn.disabled = false;
@@ -1942,6 +1993,7 @@
       dashboardFrom = document.getElementById("sp-dash-from").value;
       dashboardTo = document.getElementById("sp-dash-to").value;
       dashboardData = null;
+      clearDashboardCache();
       overlay.remove();
       var btn = document.getElementById(DASHBOARD_BTN_ID);
       if (btn) btn.textContent = "📊 Dashboard";
