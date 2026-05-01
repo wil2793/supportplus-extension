@@ -1795,7 +1795,7 @@
       var page = 0;
       try {
         while (true) {
-          var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?page=" + page + "&size=1000&resolutionGroupId=19";
+          var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?page=" + page + "&size=100&resolutionGroupId=19";
           if (from) url += "&initDate=" + from;
           if (to) url += "&endDate=" + to;
           var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
@@ -1805,7 +1805,7 @@
           var tickets = data.content || [];
           tickets.forEach(function(t) { if (t.ticketStatusName === "Cerrado") allTickets.push(t); });
           results.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">Consultando... ' + allTickets.length + ' tickets</div>';
-          if (page >= (data.totalPages || 1) - 1) break;
+          if (page >= 1 || page >= (data.totalPages || 1) - 1) break;
           page++;
         }
       } catch (err) {
