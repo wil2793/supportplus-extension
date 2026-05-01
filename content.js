@@ -691,7 +691,7 @@
           '</div>';
           document.body.appendChild(successOverlay);
           document.getElementById("sp-reassign-ok").addEventListener("click", function() {
-            window.location.href = "/es/dashboard/tickets";
+            window.location.href = "/es/dashboard/tickets-mesa";
           });
         } else {
           throw new Error("No success");
