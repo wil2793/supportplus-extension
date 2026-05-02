@@ -1851,6 +1851,12 @@
   }
 
   var cached = loadDashboardCache();
+  // Invalidate cache if not from today
+  if (cached) {
+    var cacheDate = new Date(cached.ts).toDateString();
+    var todayDate = new Date().toDateString();
+    if (cacheDate !== todayDate) { clearDashboardCache(); cached = null; }
+  }
   var dashboardData = cached ? cached.data : null;
   var dashboardFrom = cached ? cached.from : "";
   var dashboardTo = cached ? cached.to : "";
