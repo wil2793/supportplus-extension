@@ -76,6 +76,21 @@
     return { month: monthIdx, year: parseInt(m[2]) };
   }
 
+  // Check if a ticket date matches the configured board period
+  async function canMigrateTicket(ticketCreatedAt) {
+    try {
+      var mondayToken = await getMondayToken();
+      var boardId = await getMondayBoardId();
+      if (!mondayToken || !boardId) return false;
+      var boardData = await mondayQuery(mondayToken, 'query ($boardId: [ID!]!) { boards(ids: $boardId) { name } }', { boardId });
+      var boardName = boardData.boards[0]?.name || "";
+      var boardDate = parseBoardDate(boardName);
+      if (!boardDate) return true; // No date pattern, allow
+      var ticketDate = new Date(ticketCreatedAt);
+      return ticketDate.getMonth() === boardDate.month && ticketDate.getFullYear() === boardDate.year;
+    } catch(e) { return true; } // On error, allow
+  }
+
   function getToken() { return localStorage.getItem("token"); }
   function getMondayToken() {
     return new Promise((r, reject) => {
@@ -1361,9 +1376,13 @@
             });
             if (!closeRes.ok) throw new Error("Error al cerrar: HTTP " + closeRes.status);
 
-            // Migrate if group selected
+            // Migrate if group selected and ticket matches board period
             var selectedGroup = takeGroupSelect.value;
-            if (selectedGroup && mondayToken && boardId) {
+            var canMigrateTake = selectedGroup ? await canMigrateTicket(info.createdAt) : false;
+            if (selectedGroup && !canMigrateTake) {
+              showErrorToast("Ticket tomado y cerrado, pero NO migrado: no corresponde al mes del board.");
+            }
+            if (selectedGroup && canMigrateTake && mondayToken && boardId) {
               var ticketRes = await fetch(SP_API + "/" + ticketId, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
               var ticketJson = await ticketRes.json();
               var ticket = ticketJson.data || ticketJson;
@@ -1399,7 +1418,7 @@
               var oldClose = row.querySelector("." + CLOSE_BTN_CLASS); if (oldClose) oldClose.remove();
               var statusCell = row.querySelector('[data-field="ticketStatusName"]'); if (statusCell) statusCell.textContent = "Cerrado";
             }
-            showSuccessToast(selectedGroup ? "Ticket tomado, cerrado y migrado" : "Ticket tomado y cerrado");
+            showSuccessToast(selectedGroup && canMigrateTake ? "Ticket tomado, cerrado y migrado" : "Ticket tomado y cerrado");
           } else {
             // Just take
             var newCloseBtn = createCloseButton(ticketId);
@@ -1568,7 +1587,13 @@
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
 
-        if (selectedGroup && mondayToken && boardId && info) {
+        // Check if ticket matches board period before migrating
+        var canMigrate = selectedGroup ? await canMigrateTicket(info.createdAt) : false;
+        if (selectedGroup && !canMigrate) {
+          showErrorToast("Ticket cerrado, pero NO migrado: no corresponde al mes del board configurado.");
+        }
+
+        if (selectedGroup && canMigrate && mondayToken && boardId && info) {
           var ticketRes = await fetch(SP_API + "/" + ticketId, {
             headers: { accept: "application/json", authorization: "Bearer " + spToken },
           });
