@@ -426,6 +426,7 @@
         const stealBtn = document.createElement("button");
         stealBtn.id = DETAIL_BTN_ID;
         stealBtn.textContent = "🥷 Robar ticket";
+        stealBtn.title = "Asignado a: " + holderName;
         stealBtn.style.cssText =
           "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#E65100;color:#fff;font-weight:600;white-space:nowrap;";
         stealBtn.addEventListener("mouseenter", () => { if (!stealBtn.disabled) stealBtn.textContent = "💀 Robar ticket"; });
@@ -621,6 +622,12 @@
     if (!isDetailView()) return;
     var ticketId = getDetailTicketId();
     if (!ticketId) return;
+
+    // Don't show if ticket is closed
+    var chipLabels = document.querySelectorAll(".MuiChip-label");
+    var isClosed = false;
+    chipLabels.forEach(function(el) { if (el.textContent.trim() === "Cerrado") isClosed = true; });
+    if (isClosed) return;
 
     // Find "Información del ticket" h1
     var h1 = null;
@@ -1189,7 +1196,7 @@
 
   // --- Ticket card for list modals ---
   // --- Render ticket list as table ---
-  function renderTicketCards(container, tickets, myName, synced) {
+  function renderTicketCards(container, tickets, myName, synced, boardDate) {
     var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
     html += '<thead><tr style="background:rgba(0,0,0,0.05);text-align:left;">' +
       '<th style="padding:6px;">Folio</th>' +
@@ -1235,10 +1242,17 @@
 
       if (status === "En espera") cell.appendChild(createTakeButton(id));
       if (status === "Asignado" && responsible && myName && responsible === myName) cell.appendChild(createCloseButton(id));
-      if (status === "Asignado" && responsible && myName && responsible !== myName) cell.appendChild(createStealButton(id));
+      if (status === "Asignado" && responsible && myName && responsible !== myName) cell.appendChild(createStealButton(id, responsible));
       if (status === "Cerrado") {
         if (code && synced[code]) cell.appendChild(createSyncedBadge(synced[code]));
-        else cell.appendChild(createButton(id));
+        else {
+          // Check if ticket date matches board
+          var dateCell = cell.closest("tr")?.querySelector("td:nth-child(2)");
+          var dText = dateCell ? dateCell.textContent.trim() : "";
+          var dMatch = dText.match(/(\d{4})-(\d{2})/);
+          var matches = !boardDate || !dMatch || (parseInt(dMatch[2]) - 1 === boardDate.month && parseInt(dMatch[1]) === boardDate.year);
+          if (matches) cell.appendChild(createButton(id));
+        }
       }
 
       // Ir al ticket button
@@ -1453,11 +1467,11 @@
     });
   }
 
-  function createStealButton(ticketId) {
+  function createStealButton(ticketId, responsibleName) {
     const btn = document.createElement("button");
     btn.className = STEAL_BTN_CLASS;
     btn.textContent = "🥷 Robar";
-    btn.title = "Robar ticket";
+    btn.title = responsibleName ? "Asignado a: " + responsibleName : "Robar ticket";
     btn.style.cssText =
       "padding:2px 8px;font-size:11px;cursor:pointer;border:1px solid #E65100;border-radius:4px;background:#E65100;color:#fff;margin-left:6px;white-space:nowrap;";
     btn.addEventListener("mouseenter", function() { if (!btn.disabled) btn.textContent = "💀 Robar"; });
@@ -2237,7 +2251,7 @@
 
         var myName = getLoggedUserName();
         var synced = getCache() || {};
-        renderTicketCards(results, tickets, myName, synced);
+        renderTicketCards(results, tickets, myName, synced, cachedBoardDate);
 
         paging.innerHTML = '<span>' + totalElements + ' tickets | Pag ' + currentPage + ' de ' + totalPages + '</span>' +
           '<div style="display:flex;gap:4px;">' +
@@ -2341,7 +2355,7 @@
 
         var myName2 = getLoggedUserName();
         var synced2 = getCache() || {};
-        renderTicketCards(results, tickets, myName2, synced2);
+        renderTicketCards(results, tickets, myName2, synced2, cachedBoardDate);
 
         paging.innerHTML = '<span>' + totalElements + ' resultados | Pag ' + currentPage + ' de ' + totalPages + '</span>' +
           '<div style="display:flex;gap:4px;">' +
@@ -2362,8 +2376,35 @@
 
   const STATUS_FILTER_ID = "sp-status-filter";
 
+  var cachedBoardDate = null;
+  var boardDateLoaded = false;
+
+  async function getBoardDate() {
+    if (boardDateLoaded) return cachedBoardDate;
+    try {
+      var mondayToken = await getMondayToken();
+      var boardId = await getMondayBoardId();
+      if (mondayToken && boardId) {
+        var bd = await mondayQuery(mondayToken, 'query ($boardId: [ID!]!) { boards(ids: $boardId) { name } }', { boardId });
+        cachedBoardDate = parseBoardDate(bd.boards[0]?.name || "");
+      }
+    } catch(e) {}
+    boardDateLoaded = true;
+    return cachedBoardDate;
+  }
+
+  function ticketMatchesBoard(dateText, boardDate) {
+    if (!boardDate) return true;
+    var m = dateText.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (!m) return true;
+    var month = parseInt(m[2]) - 1;
+    var year = parseInt(m[3]);
+    return month === boardDate.month && year === boardDate.year;
+  }
+
   async function injectButtons() {
     const synced = await ensureSyncStarted();
+    var boardDate = await getBoardDate();
 
     // Header buttons - always inject regardless of view
     injectSearchButton();
@@ -2421,7 +2462,7 @@
         const responsibleName = responsibleCell ? responsibleCell.textContent.trim() : "";
         const myName = getLoggedUserName();
         if (responsibleName && myName && responsibleName !== myName) {
-          container.appendChild(createStealButton(ticketId));
+          container.appendChild(createStealButton(ticketId, responsibleName));
         }
       }
 
@@ -2449,7 +2490,12 @@
         if (uniqueCode && synced[uniqueCode]) {
           container.appendChild(createSyncedBadge(synced[uniqueCode]));
         } else {
-          container.appendChild(createButton(ticketId));
+          // Only show migrate button if ticket matches board period
+          var dateCell = row.querySelector('[data-field="createdAt"]');
+          var dateText = dateCell ? dateCell.textContent.trim() : "";
+          if (ticketMatchesBoard(dateText, boardDate)) {
+            container.appendChild(createButton(ticketId));
+          }
         }
       }
     });
