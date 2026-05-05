@@ -1105,7 +1105,8 @@
         priority: t.incidentPriority?.name || "",
         status: t.ticketStatus?.name || "",
         requester: t.ticketInfo?.fullName || "",
-        createdAt: t.createdAt ? t.createdAt.replace("T", " ").substring(0, 16) : ""
+        createdAt: t.createdAt || "",
+        createdAtFormatted: t.createdAt ? t.createdAt.replace("T", " ").substring(0, 16) : ""
       };
     } catch (e) { return null; }
   }
@@ -1139,7 +1140,7 @@
       // Folio + Fecha
       '<div style="' + rowStyle + 'justify-content:space-between;">' +
         '<span>📁 <b>Folio:</b> <span style="color:#1976D2;font-weight:700;">' + info.uniqueCode + '</span></span>' +
-        '<span>📅 <b>Fecha:</b> ' + (info.createdAt || "N/A") + '</span>' +
+        '<span>📅 <b>Fecha:</b> ' + (info.createdAtFormatted || "N/A") + '</span>' +
       '</div>' +
       // Asunto
       '<div style="' + rowStyle + '">' +
