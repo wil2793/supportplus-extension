@@ -563,9 +563,9 @@
     var subjectText = subjectEl ? subjectEl.textContent : "";
     var fullText = subjectText + " " + descText;
 
-    // Detect SL
+    // Detect SL and PR codes
     var slMatches = [];
-    var slRaw = fullText.match(/SL\d{10,}/g);
+    var slRaw = fullText.match(/(?:SL|PR)\d{10,}/g);
     if (slRaw) slMatches = slRaw.filter(function(v, i, a) { return a.indexOf(v) === i; });
 
     // Detect users
@@ -588,7 +588,7 @@
     if (slMatches.length) {
       var slDiv = document.createElement("div");
       slDiv.style.cssText = "padding:8px 10px;background:#E3F2FD;border-radius:6px;margin-bottom:8px;";
-      slDiv.innerHTML = '<b style="font-size:12px;color:#1976D2;">SL detectadas:</b> ';
+      slDiv.innerHTML = '<b style="font-size:12px;color:#1976D2;">SL/PR detectadas:</b> ';
       slMatches.forEach(function(sl) {
         var span = document.createElement("span");
         span.style.cssText = "display:inline-flex;align-items:center;gap:2px;margin:2px 4px;padding:2px 8px;background:#fff;border:1px solid #1976D2;border-radius:4px;font-weight:600;font-size:12px;";
@@ -1109,9 +1109,9 @@
     if (!info) return "";
     var fullText = (info.subject || "") + " " + (info.desc || "");
 
-    // Detect SL codes
+    // Detect SL and PR codes
     var slMatches = [];
-    var slRaw = fullText.match(/SL\d{10,}/g);
+    var slRaw = fullText.match(/(?:SL|PR)\d{10,}/g);
     if (slRaw) slMatches = slRaw.filter(function(v, i, a) { return a.indexOf(v) === i; });
 
     // Detect DB users
@@ -1163,7 +1163,7 @@
     var slHTML = "";
     if (slMatches.length) {
       slHTML = '<div style="margin-bottom:8px;padding:8px 10px;background:#E3F2FD;border-radius:6px;border-left:4px solid #1976D2;">' +
-        '<b style="font-size:11px;color:#1976D2;">📋 SL detectadas:</b> ';
+        '<b style="font-size:11px;color:#1976D2;">📋 SL/PR detectadas:</b> ';
       slMatches.forEach(function(sl) {
         slHTML += '<span class="sp-sl-copy" data-sl="' + sl + '" style="display:inline-flex;align-items:center;gap:2px;margin:2px 4px;padding:2px 8px;background:#fff;border:1px solid #1976D2;border-radius:4px;font-weight:600;font-size:12px;">' + sl + '</span>';
       });
