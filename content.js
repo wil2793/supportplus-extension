@@ -393,7 +393,7 @@
       // Check if ticket matches board period
       var boardDateDetail = await getBoardDate();
       var ticketDateDetail = new Date(info.createdAt || "");
-      var matchesBoard = !boardDateDetail || (ticketDateDetail.getMonth() === boardDateDetail.month && ticketDateDetail.getFullYear() === boardDateDetail.year);
+      var matchesBoard = !boardDateDetail || isNaN(ticketDateDetail.getTime()) || (ticketDateDetail.getMonth() === boardDateDetail.month && ticketDateDetail.getFullYear() === boardDateDetail.year);
 
       if (matchesBoard) {
         const btn = document.createElement("button");
