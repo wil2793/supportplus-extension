@@ -390,27 +390,21 @@
       const chip = container.querySelector(".MuiChip-root");
       container.insertBefore(badge, chip);
     } else if (isClosed) {
-      // Check if ticket matches board period
-      var boardDateDetail = await getBoardDate();
-      var ticketDateDetail = new Date(info.createdAt || "");
-      var matchesBoard = !boardDateDetail || isNaN(ticketDateDetail.getTime()) || (ticketDateDetail.getMonth() === boardDateDetail.month && ticketDateDetail.getFullYear() === boardDateDetail.year);
-
-      if (matchesBoard) {
-        const btn = document.createElement("button");
-        btn.id = DETAIL_BTN_ID;
-        btn.textContent = "🙂 Migrar a Monday";
-        btn.style.cssText =
-          "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#D94040;color:#fff;font-weight:600;white-space:nowrap;";
-        btn.addEventListener("mouseenter", () => { if (!btn.disabled) btn.textContent = "🫡 Migrar a Monday"; });
-        btn.addEventListener("mouseleave", () => { if (!btn.disabled) btn.textContent = "🙂 Migrar a Monday"; });
-        btn.addEventListener("click", () => {
-          btn.textContent = "⏳ Migrando...";
-          btn.disabled = true;
-          handleMondayClick(ticketId).finally(() => { btn.textContent = "🙂 Migrar a Monday"; btn.disabled = false; });
-        });
-        const chip2 = container.querySelector(".MuiChip-root");
-        container.insertBefore(btn, chip2);
-      }
+      // Show migrate button
+      const btn = document.createElement("button");
+      btn.id = DETAIL_BTN_ID;
+      btn.textContent = "🙂 Migrar a Monday";
+      btn.style.cssText =
+        "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#D94040;color:#fff;font-weight:600;white-space:nowrap;";
+      btn.addEventListener("mouseenter", () => { if (!btn.disabled) btn.textContent = "🫡 Migrar a Monday"; });
+      btn.addEventListener("mouseleave", () => { if (!btn.disabled) btn.textContent = "🙂 Migrar a Monday"; });
+      btn.addEventListener("click", () => {
+        btn.textContent = "⏳ Migrando...";
+        btn.disabled = true;
+        handleMondayClick(ticketId).finally(() => { btn.textContent = "🙂 Migrar a Monday"; btn.disabled = false; });
+      });
+      const chip2 = container.querySelector(".MuiChip-root");
+      container.insertBefore(btn, chip2);
     } else if (isWaiting) {
       const takeBtn = document.createElement("button");
       takeBtn.id = DETAIL_BTN_ID;
