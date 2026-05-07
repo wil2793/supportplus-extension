@@ -1060,16 +1060,27 @@
     }
 
     try {
-      // Get DBA profiles
-      var profilesRes = await fetch(SP_API + "/active-profiles-by-resolution-group/19", {
-        headers: { accept: "application/json", authorization: "Bearer " + spToken },
-      });
-      if (!profilesRes.ok) throw new Error("HTTP " + profilesRes.status);
-      var profilesJson = await profilesRes.json();
+      // Get DBA profiles (cached in localStorage)
+      var TEAM_CACHE_KEY = "sp_team_profiles";
       var TEAM_BLACKLIST = [150, 153, 318];
-      var profiles = (profilesJson.data || profilesJson).filter(function(p) {
-        return p.roleName !== "GERENTE DE OPERACIONES TI" && TEAM_BLACKLIST.indexOf(p.profileId) === -1;
-      });
+      var profiles = null;
+
+      try {
+        var cached = localStorage.getItem(TEAM_CACHE_KEY);
+        if (cached) profiles = JSON.parse(cached);
+      } catch(e) {}
+
+      if (!profiles) {
+        var profilesRes = await fetch(SP_API + "/active-profiles-by-resolution-group/19", {
+          headers: { accept: "application/json", authorization: "Bearer " + spToken },
+        });
+        if (!profilesRes.ok) throw new Error("HTTP " + profilesRes.status);
+        var profilesJson = await profilesRes.json();
+        profiles = (profilesJson.data || profilesJson).filter(function(p) {
+          return p.roleName !== "GERENTE DE OPERACIONES TI" && TEAM_BLACKLIST.indexOf(p.profileId) === -1;
+        });
+        localStorage.setItem(TEAM_CACHE_KEY, JSON.stringify(profiles));
+      }
 
       var myName = getLoggedUserName();
 
