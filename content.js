@@ -1074,7 +1074,7 @@
 
       // Fetch tickets for each member in parallel
       var fetches = profiles.map(function(p) {
-        return fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=19&responsibleName=" + encodeURIComponent(p.profileFullName), {
+        return fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=19&responsibleProfileId=" + p.profileId, {
           headers: { accept: "application/json", authorization: "Bearer " + spToken },
         }).then(function(r) { return r.json(); }).then(function(json) {
           var tickets = (json.data || json).content || [];
