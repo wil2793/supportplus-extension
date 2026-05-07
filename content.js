@@ -1043,7 +1043,6 @@
   async function loadTeamPanel() {
     if (isDetailView()) return;
     if (teamPanelLoading) return;
-    if (document.getElementById(TEAM_PANEL_ID)) return;
     teamPanelLoading = true;
     var grid = document.querySelector(".MuiDataGrid-root");
     if (!grid) return;
