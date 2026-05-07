@@ -1143,9 +1143,13 @@
     teamPanelLoading = false;
   }
 
+  var teamRefreshing = false;
+
   function refreshTeamPanel() {
+    if (teamRefreshing) return;
+    teamRefreshing = true;
     var panel = document.getElementById(TEAM_PANEL_ID);
-    if (!panel) { loadTeamPanel(); return; }
+    if (!panel) { teamRefreshing = false; loadTeamPanel(); return; }
 
     var spToken = getToken();
     if (!spToken) return;
@@ -1160,6 +1164,7 @@
       { profileId: 294, profileFullName: "William Israel Alpuche Jimenez" }
     ];
 
+    var pending = profiles.length;
     profiles.forEach(function(p) {
       fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=19&responsibleProfileId=" + p.profileId, {
         headers: { accept: "application/json", authorization: "Bearer " + spToken },
@@ -1191,7 +1196,7 @@
           });
           listEl.innerHTML = html;
         }
-      }).catch(function() {});
+      }).catch(function() {}).finally(function() { pending--; if (pending <= 0) teamRefreshing = false; });
     });
   }
 
