@@ -1068,8 +1068,9 @@
       });
       if (!profilesRes.ok) throw new Error("HTTP " + profilesRes.status);
       var profilesJson = await profilesRes.json();
+      var TEAM_BLACKLIST = [150, 153, 318];
       var profiles = (profilesJson.data || profilesJson).filter(function(p) {
-        return p.roleName !== "GERENTE DE OPERACIONES TI";
+        return p.roleName !== "GERENTE DE OPERACIONES TI" && TEAM_BLACKLIST.indexOf(p.profileId) === -1;
       });
 
       // Fetch tickets for each member in parallel
