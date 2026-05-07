@@ -1045,10 +1045,10 @@
     if (teamPanelLoading) return;
     teamPanelLoading = true;
     var grid = document.querySelector(".MuiDataGrid-root");
-    if (!grid) return;
+    if (!grid) { teamPanelLoading = false; return; }
 
     var spToken = getToken();
-    if (!spToken) return;
+    if (!spToken) { teamPanelLoading = false; return; }
 
     // Get or create panel container
     var panel = document.getElementById(TEAM_PANEL_ID);
@@ -1058,7 +1058,6 @@
       panel.style.cssText = "margin-bottom:12px;overflow-x:auto;font-family:system-ui;";
       grid.parentElement.insertBefore(panel, grid);
     }
-    panel.innerHTML = '<div style="text-align:center;padding:12px;color:#888;font-size:12px;">Cargando panel del equipo...</div>';
 
     try {
       // Get DBA profiles
@@ -1072,54 +1071,73 @@
         return p.roleName !== "GERENTE DE OPERACIONES TI" && TEAM_BLACKLIST.indexOf(p.profileId) === -1;
       });
 
-      // Fetch tickets for each member in parallel
-      var fetches = profiles.map(function(p) {
-        return fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=19&responsibleProfileId=" + p.profileId, {
-          headers: { accept: "application/json", authorization: "Bearer " + spToken },
-        }).then(function(r) { return r.json(); }).then(function(json) {
-          var tickets = (json.data || json).content || [];
-          return {
-            name: p.profileFullName,
-            tickets: tickets.filter(function(t) { return t.ticketStatusName === "Asignado" || t.ticketStatusName === "En atención"; })
-          };
-        }).catch(function() { return { name: p.profileFullName, tickets: [] }; });
-      });
-
-      var results = await Promise.all(fetches);
       var myName = getLoggedUserName();
 
-      // Build panel HTML
-      var html = '<div style="display:flex;gap:8px;min-width:max-content;">';
-      results.forEach(function(member) {
-        var isMe = myName && member.name === myName;
+      // Render empty columns immediately
+      var containerDiv = document.createElement("div");
+      containerDiv.style.cssText = "display:flex;gap:8px;min-width:max-content;";
+      panel.innerHTML = "";
+      panel.appendChild(containerDiv);
+
+      profiles.forEach(function(p) {
+        var isMe = myName && p.profileFullName === myName;
         var borderColor = isMe ? "#D94040" : "#ddd";
         var headerBg = isMe ? "#D94040" : "#2196F3";
-        var firstName = member.name.split(" ")[0];
+        var firstName = p.profileFullName.split(" ")[0];
 
-        html += '<div style="min-width:180px;max-width:220px;border:2px solid ' + borderColor + ';border-radius:8px;overflow:hidden;flex-shrink:0;">';
-        html += '<div style="background:' + headerBg + ';color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">' + firstName + ' <span style="opacity:0.7;">(' + member.tickets.length + ')</span></div>';
-        html += '<div style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;">';
-
-        if (!member.tickets.length) {
-          html += '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
-        } else {
-          member.tickets.forEach(function(t) {
-            var statusColor = STATUS_TEXT_COLORS[t.ticketStatusName] || "#333";
-            html += '<a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;text-decoration:none;color:inherit;font-size:10px;line-height:1.3;">';
-            html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
-            html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-            html += '<div style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</div>';
-            html += '</a>';
-          });
-        }
-
-        html += '</div></div>';
+        var col = document.createElement("div");
+        col.id = "sp-team-col-" + p.profileId;
+        col.style.cssText = "min-width:180px;max-width:220px;border:2px solid " + borderColor + ";border-radius:8px;overflow:hidden;flex-shrink:0;";
+        col.innerHTML = '<div style="background:' + headerBg + ';color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">' + firstName + ' <span class="sp-team-count" style="opacity:0.7;">(...)</span></div>' +
+          '<div class="sp-team-tickets" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;"><div style="text-align:center;padding:8px;color:#aaa;font-size:10px;">⏳</div></div>';
+        containerDiv.appendChild(col);
       });
-      html += '</div>';
 
-      panel.innerHTML = html;
+      // Fetch tickets for each member individually and update as they arrive
+      profiles.forEach(function(p) {
+        fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=19&responsibleProfileId=" + p.profileId, {
+          headers: { accept: "application/json", authorization: "Bearer " + spToken },
+        }).then(function(r) { return r.json(); }).then(function(json) {
+          var tickets = ((json.data || json).content || []).filter(function(t) {
+            return t.ticketStatusName === "Asignado" || t.ticketStatusName === "En atención";
+          });
+
+          var col = document.getElementById("sp-team-col-" + p.profileId);
+          if (!col) return;
+
+          // Update count
+          var countEl = col.querySelector(".sp-team-count");
+          if (countEl) countEl.textContent = "(" + tickets.length + ")";
+
+          // Update tickets list
+          var listEl = col.querySelector(".sp-team-tickets");
+          if (!listEl) return;
+
+          if (!tickets.length) {
+            listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
+          } else {
+            var html = "";
+            tickets.forEach(function(t) {
+              var statusColor = STATUS_TEXT_COLORS[t.ticketStatusName] || "#333";
+              html += '<a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;text-decoration:none;color:inherit;font-size:10px;line-height:1.3;">';
+              html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
+              html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
+              html += '<div style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</div>';
+              html += '</a>';
+            });
+            listEl.innerHTML = html;
+          }
+        }).catch(function() {
+          var col = document.getElementById("sp-team-col-" + p.profileId);
+          if (col) {
+            var listEl = col.querySelector(".sp-team-tickets");
+            if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#D94040;font-size:10px;">Error</div>';
+          }
+        });
+      });
+
     } catch (err) {
-      panel.innerHTML = '<div style="color:#D94040;padding:8px;font-size:12px;">Error cargando panel: ' + err.message + '</div>';
+      panel.innerHTML = '<div style="color:#D94040;padding:8px;font-size:12px;">Error: ' + err.message + '</div>';
     }
     teamPanelLoading = false;
   }
