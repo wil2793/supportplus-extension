@@ -358,7 +358,7 @@
       uniqueCode = ticket.uniqueCode || "";
       isClosed = ticket.ticketStatus?.type?.name === "Cerrado" || ticket.ticketStatus?.name === "Cerrado";
       isWaiting = ticket.ticketStatus?.name === "En espera";
-      isAssigned = ticket.ticketStatus?.name === "Asignado";
+      isAssigned = ticket.ticketStatus?.name === "Asignado" || ticket.ticketStatus?.name === "En atención";
       holderName = ticket.ticketHolder?.ticketHolderLog?.fullName || "";
       console.log("[SP Monday] Detail ticket status:", ticket.ticketStatus?.name, "| type:", ticket.ticketStatus?.type?.name, "| closed:", isClosed, "| waiting:", isWaiting, "| assigned:", isAssigned, "| holder:", holderName);
     } catch (e) { return; }
@@ -1407,8 +1407,8 @@
       var code = cell.dataset.code;
 
       if (status === "En espera") cell.appendChild(createTakeButton(id));
-      if (status === "Asignado" && responsible && myName && responsible === myName) cell.appendChild(createCloseButton(id));
-      if (status === "Asignado" && responsible && myName && responsible !== myName) cell.appendChild(createStealButton(id, responsible));
+      if ((status === "Asignado" || status === "En atención") && responsible && myName && responsible === myName) cell.appendChild(createCloseButton(id));
+      if ((status === "Asignado" || status === "En atención") && responsible && myName && responsible !== myName) cell.appendChild(createStealButton(id, responsible));
       if (status === "Cerrado") {
         if (code && synced[code]) cell.appendChild(createSyncedBadge(synced[code]));
         else {
@@ -2622,8 +2622,8 @@
         container.appendChild(createTakeButton(ticketId));
       }
 
-      // Inject steal button for "Asignado" tickets not assigned to me
-      if (statusText === "Asignado" && !row.querySelector("." + STEAL_BTN_CLASS)) {
+      // Inject steal button for "Asignado"/"En atención" tickets not assigned to me
+      if ((statusText === "Asignado" || statusText === "En atención") && !row.querySelector("." + STEAL_BTN_CLASS)) {
         const responsibleCell = row.querySelector('[data-field="responsibleName"]');
         const responsibleName = responsibleCell ? responsibleCell.textContent.trim() : "";
         const myName = getLoggedUserName();
@@ -2632,8 +2632,8 @@
         }
       }
 
-      // Inject close button for "Asignado" tickets assigned to me
-      if (statusText === "Asignado" && !row.querySelector("." + CLOSE_BTN_CLASS)) {
+      // Inject close button for "Asignado"/"En atención" tickets assigned to me
+      if ((statusText === "Asignado" || statusText === "En atención") && !row.querySelector("." + CLOSE_BTN_CLASS)) {
         const responsibleCell2 = row.querySelector('[data-field="responsibleName"]');
         const responsibleName2 = responsibleCell2 ? responsibleCell2.textContent.trim() : "";
         const myName2 = getLoggedUserName();
@@ -2643,7 +2643,7 @@
       }
 
       // Clean up close button if status changed
-      if (statusText !== "Asignado") {
+      if (statusText !== "Asignado" && statusText !== "En atención") {
         const oldClose = row.querySelector("." + CLOSE_BTN_CLASS);
         if (oldClose) oldClose.remove();
       }
