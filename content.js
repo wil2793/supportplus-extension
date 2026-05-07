@@ -1061,27 +1061,16 @@
     }
 
     try {
-      // Get DBA profiles (cached in localStorage)
-      var TEAM_CACHE_KEY = "sp_team_profiles";
-      var TEAM_BLACKLIST = [150, 153, 318];
-      var profiles = null;
-
-      try {
-        var cached = localStorage.getItem(TEAM_CACHE_KEY);
-        if (cached) profiles = JSON.parse(cached);
-      } catch(e) {}
-
-      if (!profiles) {
-        var profilesRes = await fetch(SP_API + "/active-profiles-by-resolution-group/19", {
-          headers: { accept: "application/json", authorization: "Bearer " + spToken },
-        });
-        if (!profilesRes.ok) throw new Error("HTTP " + profilesRes.status);
-        var profilesJson = await profilesRes.json();
-        profiles = (profilesJson.data || profilesJson).filter(function(p) {
-          return p.roleName !== "GERENTE DE OPERACIONES TI" && TEAM_BLACKLIST.indexOf(p.profileId) === -1;
-        });
-        localStorage.setItem(TEAM_CACHE_KEY, JSON.stringify(profiles));
-      }
+      // DBA team members (hardcoded)
+      var profiles = [
+        { profileId: 138, profileFullName: "Rickey Oswaldo Ehuan Vargas" },
+        { profileId: 141, profileFullName: "Wille Hans Ditte Morales Sanchez" },
+        { profileId: 144, profileFullName: "Jorge Luis Balam Vargas" },
+        { profileId: 146, profileFullName: "Eduardo Emmanuel Ravell May" },
+        { profileId: 148, profileFullName: "Gamaliel Uriel Tzab Novelo" },
+        { profileId: 190, profileFullName: "Ariel Jesus Fernandez Mena" },
+        { profileId: 294, profileFullName: "William Israel Alpuche Jimenez" }
+      ];
 
       var myName = getLoggedUserName();
 
