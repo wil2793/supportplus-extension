@@ -1090,7 +1090,7 @@
         col.id = "sp-team-col-" + p.profileId;
         col.style.cssText = "min-width:180px;max-width:220px;border:2px solid " + borderColor + ";border-radius:8px;overflow:hidden;flex-shrink:0;";
         col.innerHTML = '<div style="background:' + headerBg + ';color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">' + firstName + ' <span class="sp-team-count" style="opacity:0.7;">(...)</span></div>' +
-          '<div class="sp-team-tickets" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;"><div style="text-align:center;padding:8px;color:#aaa;font-size:10px;">⏳</div></div>';
+          '<div class="sp-team-tickets" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>';
         containerDiv.appendChild(col);
       });
 
