@@ -1076,7 +1076,7 @@
 
       // Render empty columns immediately
       var containerDiv = document.createElement("div");
-      containerDiv.style.cssText = "display:flex;gap:8px;min-width:max-content;";
+      containerDiv.style.cssText = "display:flex;gap:8px;justify-content:center;";
       panel.innerHTML = "";
       panel.appendChild(containerDiv);
 
