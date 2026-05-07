@@ -1143,6 +1143,58 @@
     teamPanelLoading = false;
   }
 
+  function refreshTeamPanel() {
+    var panel = document.getElementById(TEAM_PANEL_ID);
+    if (!panel) { loadTeamPanel(); return; }
+
+    var spToken = getToken();
+    if (!spToken) return;
+
+    var profiles = [
+      { profileId: 138, profileFullName: "Rickey Oswaldo Ehuan Vargas" },
+      { profileId: 141, profileFullName: "Wille Hans Ditte Morales Sanchez" },
+      { profileId: 144, profileFullName: "Jorge Luis Balam Vargas" },
+      { profileId: 146, profileFullName: "Eduardo Emmanuel Ravell May" },
+      { profileId: 148, profileFullName: "Gamaliel Uriel Tzab Novelo" },
+      { profileId: 190, profileFullName: "Ariel Jesus Fernandez Mena" },
+      { profileId: 294, profileFullName: "William Israel Alpuche Jimenez" }
+    ];
+
+    profiles.forEach(function(p) {
+      fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=19&responsibleProfileId=" + p.profileId, {
+        headers: { accept: "application/json", authorization: "Bearer " + spToken },
+      }).then(function(r) { return r.json(); }).then(function(json) {
+        var tickets = ((json.data || json).content || []).filter(function(t) {
+          return t.ticketStatusName === "Asignado" || t.ticketStatusName === "En atención";
+        });
+
+        var col = document.getElementById("sp-team-col-" + p.profileId);
+        if (!col) return;
+
+        var countEl = col.querySelector(".sp-team-count");
+        if (countEl) countEl.textContent = "(" + tickets.length + ")";
+
+        var listEl = col.querySelector(".sp-team-tickets");
+        if (!listEl) return;
+
+        if (!tickets.length) {
+          listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
+        } else {
+          var html = "";
+          tickets.forEach(function(t) {
+            var statusColor = STATUS_TEXT_COLORS[t.ticketStatusName] || "#333";
+            html += '<a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;text-decoration:none;color:inherit;font-size:10px;line-height:1.3;">';
+            html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
+            html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
+            html += '<div style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</div>';
+            html += '</a>';
+          });
+          listEl.innerHTML = html;
+        }
+      }).catch(function() {});
+    });
+  }
+
   // --- Take ticket (reassign) ---
   let myProfileId = null;
   async function getMyProfileId() {
@@ -2831,9 +2883,6 @@
     localStorage.removeItem(CACHE_KEY);
     ensureSyncStarted().then(() => injectButtons());
     if (activeModalRefresh) activeModalRefresh();
-    var oldPanel = document.getElementById(TEAM_PANEL_ID);
-    if (oldPanel) oldPanel.remove();
-    teamPanelLoading = false;
-    loadTeamPanel();
+    refreshTeamPanel();
   });
 })();
