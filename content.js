@@ -1040,6 +1040,18 @@
   const TEAM_PANEL_ID = "sp-team-panel";
   var teamPanelLoading = false;
 
+  const DBA_PROFILES = [
+    { profileId: 138, profileFullName: "Rickey Oswaldo Ehuan Vargas" },
+    { profileId: 141, profileFullName: "Wille Hans Ditte Morales Sanchez" },
+    { profileId: 144, profileFullName: "Jorge Luis Balam Vargas" },
+    { profileId: 146, profileFullName: "Eduardo Emmanuel Ravell May" },
+    { profileId: 148, profileFullName: "Gamaliel Uriel Tzab Novelo" },
+    { profileId: 190, profileFullName: "Ariel Jesus Fernandez Mena" },
+    { profileId: 294, profileFullName: "William Israel Alpuche Jimenez" }
+  ];
+  const DBA_PROFILE_NAMES = {};
+  DBA_PROFILES.forEach(function(p) { DBA_PROFILE_NAMES[p.profileId] = p.profileFullName; });
+
   async function loadTeamPanel() {
     if (isDetailView()) return;
     if (teamPanelLoading) return;
@@ -1062,15 +1074,7 @@
 
     try {
       // DBA team members (hardcoded)
-      var profiles = [
-        { profileId: 138, profileFullName: "Rickey Oswaldo Ehuan Vargas" },
-        { profileId: 141, profileFullName: "Wille Hans Ditte Morales Sanchez" },
-        { profileId: 144, profileFullName: "Jorge Luis Balam Vargas" },
-        { profileId: 146, profileFullName: "Eduardo Emmanuel Ravell May" },
-        { profileId: 148, profileFullName: "Gamaliel Uriel Tzab Novelo" },
-        { profileId: 190, profileFullName: "Ariel Jesus Fernandez Mena" },
-        { profileId: 294, profileFullName: "William Israel Alpuche Jimenez" }
-      ];
+      var profiles = DBA_PROFILES;
 
       var myName = getLoggedUserName();
 
@@ -1222,7 +1226,7 @@
 
       // Fetch tickets for each member individually and update as they arrive
       profiles.forEach(function(p) {
-        fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=19&responsibleProfileId=" + p.profileId, {
+        fetch(SP_SEARCH_API + "?responsibleName=" + encodeURIComponent(p.profileFullName), {
           headers: { accept: "application/json", authorization: "Bearer " + spToken },
         }).then(function(r) { return r.json(); }).then(function(json) {
           var tickets = ((json.data || json).content || []).filter(function(t) {
@@ -1306,19 +1310,11 @@
     var spToken = getToken();
     if (!spToken) return;
 
-    var profiles = [
-      { profileId: 138, profileFullName: "Rickey Oswaldo Ehuan Vargas" },
-      { profileId: 141, profileFullName: "Wille Hans Ditte Morales Sanchez" },
-      { profileId: 144, profileFullName: "Jorge Luis Balam Vargas" },
-      { profileId: 146, profileFullName: "Eduardo Emmanuel Ravell May" },
-      { profileId: 148, profileFullName: "Gamaliel Uriel Tzab Novelo" },
-      { profileId: 190, profileFullName: "Ariel Jesus Fernandez Mena" },
-      { profileId: 294, profileFullName: "William Israel Alpuche Jimenez" }
-    ];
+    var profiles = DBA_PROFILES;
 
     var pending = profiles.length;
     profiles.forEach(function(p) {
-      fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=19&responsibleProfileId=" + p.profileId, {
+      fetch(SP_SEARCH_API + "?responsibleName=" + encodeURIComponent(p.profileFullName), {
         headers: { accept: "application/json", authorization: "Bearer " + spToken },
       }).then(function(r) { return r.json(); }).then(function(json) {
         var tickets = ((json.data || json).content || []).filter(function(t) {
@@ -1358,7 +1354,9 @@
   function refreshTeamColumn(profileId) {
     var spToken = getToken();
     if (!spToken) return;
-    fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=19&responsibleProfileId=" + profileId, {
+    var name = DBA_PROFILE_NAMES[profileId];
+    if (!name) return;
+    fetch(SP_SEARCH_API + "?responsibleName=" + encodeURIComponent(name), {
       headers: { accept: "application/json", authorization: "Bearer " + spToken },
     }).then(function(r) { return r.json(); }).then(function(json) {
       var tickets = ((json.data || json).content || []).filter(function(t) {
