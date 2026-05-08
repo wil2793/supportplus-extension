@@ -1138,9 +1138,16 @@
 
         // Don't reassign if dropped on the same column it came from
         var sourceCol = panel.querySelector('.sp-team-ticket[data-ticket-id="' + ticketId + '"]');
+        var sourceProfileId = null;
         if (sourceCol) {
           var sourceZone = sourceCol.closest(".sp-team-tickets");
           if (sourceZone && sourceZone.dataset.profileId === targetProfileId) return;
+          sourceProfileId = sourceZone ? sourceZone.dataset.profileId : null;
+        }
+
+        // Optimistic UI: move the ticket element immediately
+        if (sourceCol) {
+          dropZone.appendChild(sourceCol);
         }
 
         showLoadingToast("Reasignando ticket...");
@@ -1159,10 +1166,15 @@
           var json = await res.json();
           if (json.success) {
             showSuccessToast("Ticket reasignado");
-            refreshTeamPanel();
+            // Only refresh the two affected columns
+            refreshTeamColumn(targetProfileId);
+            if (sourceProfileId) refreshTeamColumn(sourceProfileId);
           } else { throw new Error("No success"); }
         } catch (err) {
           showErrorToast("Error: " + err.message);
+          // Revert: refresh both columns to restore correct state
+          refreshTeamColumn(targetProfileId);
+          if (sourceProfileId) refreshTeamColumn(sourceProfileId);
         }
       });
 
@@ -1270,6 +1282,42 @@
         }
       }).catch(function() {}).finally(function() { pending--; if (pending <= 0) teamRefreshing = false; });
     });
+  }
+
+  function refreshTeamColumn(profileId) {
+    var spToken = getToken();
+    if (!spToken) return;
+    fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=19&responsibleProfileId=" + profileId, {
+      headers: { accept: "application/json", authorization: "Bearer " + spToken },
+    }).then(function(r) { return r.json(); }).then(function(json) {
+      var tickets = ((json.data || json).content || []).filter(function(t) {
+        return t.ticketStatusName === "Asignado" || t.ticketStatusName === "En atención";
+      });
+
+      var col = document.getElementById("sp-team-col-" + profileId);
+      if (!col) return;
+
+      var countEl = col.querySelector(".sp-team-count");
+      if (countEl) countEl.textContent = "(" + tickets.length + ")";
+
+      var listEl = col.querySelector(".sp-team-tickets");
+      if (!listEl) return;
+
+      if (!tickets.length) {
+        listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
+      } else {
+        var html = "";
+        tickets.forEach(function(t) {
+          var statusColor = STATUS_TEXT_COLORS[t.ticketStatusName] || "#333";
+          html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:10px;line-height:1.3;cursor:grab;">';
+          html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
+          html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
+          html += '<div style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</div>';
+          html += '</div>';
+        });
+        listEl.innerHTML = html;
+      }
+    }).catch(function() {});
   }
 
   // --- Take ticket (reassign) ---
