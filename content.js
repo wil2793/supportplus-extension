@@ -1158,10 +1158,14 @@
         // Don't reassign if dropped on the same column it came from
         var sourceCol = panel.querySelector('.sp-team-ticket[data-ticket-id="' + ticketId + '"]');
         var sourceProfileId = null;
+        var fromTable = false;
         if (sourceCol) {
           var sourceZone = sourceCol.closest(".sp-team-tickets");
           if (sourceZone && sourceZone.dataset.profileId === targetProfileId) return;
           sourceProfileId = sourceZone ? sourceZone.dataset.profileId : null;
+        } else {
+          // Drag came from the main table
+          fromTable = true;
         }
 
         // Optimistic UI: move the ticket element immediately
@@ -1188,14 +1192,31 @@
             // Only refresh the two affected columns
             refreshTeamColumn(targetProfileId);
             if (sourceProfileId && sourceProfileId !== "unassigned") refreshTeamColumn(sourceProfileId);
-            if (sourceProfileId === "unassigned") refreshUnassignedColumn();
+            if (sourceProfileId === "unassigned" || fromTable) refreshUnassignedColumn();
+            // If from table, also refresh the main table buttons
+            if (fromTable) {
+              var tableRow = document.querySelector('.MuiDataGrid-row[data-id="' + ticketId + '"]');
+              if (tableRow) {
+                var statusCell = tableRow.querySelector('[data-field="ticketStatusName"]');
+                if (statusCell) statusCell.textContent = "Asignado";
+                var takeBtn = tableRow.querySelector("." + TAKE_BTN_CLASS);
+                if (takeBtn) takeBtn.remove();
+                var folioEl = tableRow.querySelector('[data-field="uniqueCode"] p.MuiTypography-body1');
+                if (folioEl) { folioEl.removeAttribute("draggable"); folioEl.style.cursor = ""; }
+                tableRow.style.opacity = "1";
+              }
+            }
           } else { throw new Error("No success"); }
         } catch (err) {
           showErrorToast("Error: " + err.message);
           // Revert: refresh both columns to restore correct state
           refreshTeamColumn(targetProfileId);
           if (sourceProfileId && sourceProfileId !== "unassigned") refreshTeamColumn(sourceProfileId);
-          if (sourceProfileId === "unassigned") refreshUnassignedColumn();
+          if (sourceProfileId === "unassigned" || fromTable) refreshUnassignedColumn();
+          if (fromTable) {
+            var tableRow = document.querySelector('.MuiDataGrid-row[data-id="' + ticketId + '"]');
+            if (tableRow) tableRow.style.opacity = "1";
+          }
         }
       });
 
@@ -2767,6 +2788,28 @@
     return month === boardDate.month && year === boardDate.year;
   }
 
+  function makeWaitingRowsDraggable() {
+    document.querySelectorAll(".MuiDataGrid-row").forEach(function(row) {
+      var ticketId = row.getAttribute("data-id");
+      if (!ticketId) return;
+      var statusCell = row.querySelector('[data-field="ticketStatusName"]');
+      if (!statusCell || statusCell.textContent.trim() !== "En espera") return;
+      var folioEl = row.querySelector('[data-field="uniqueCode"] p.MuiTypography-body1');
+      if (!folioEl || folioEl.getAttribute("draggable") === "true") return;
+
+      folioEl.setAttribute("draggable", "true");
+      folioEl.style.cursor = "grab";
+      folioEl.addEventListener("dragstart", function(e) {
+        e.dataTransfer.setData("text/plain", ticketId);
+        e.dataTransfer.effectAllowed = "move";
+        row.style.opacity = "0.4";
+      });
+      folioEl.addEventListener("dragend", function() {
+        row.style.opacity = "1";
+      });
+    });
+  }
+
   async function injectButtons() {
     const synced = await ensureSyncStarted();
     var boardDate = await getBoardDate();
@@ -2866,6 +2909,7 @@
     });
     highlightMyRows();
     colorRowsByStatus();
+    makeWaitingRowsDraggable();
     injectBulkButton();
     injectBulkCloseButton();
     injectNewTicketButton();
