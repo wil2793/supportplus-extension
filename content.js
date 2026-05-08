@@ -1673,9 +1673,13 @@
     overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:420px;width:90%;font-family:system-ui;">' +
       '<h3 style="margin:0 0 16px;">🤚 Tomar ticket #' + ticketId + '</h3>' +
       summaryHTML +
-      '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario (opcional)</label>' +
-      '<textarea id="sp-take-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:80px;resize:vertical;box-sizing:border-box;margin-bottom:12px;" placeholder="Escribe un comentario..."></textarea>' +
+      '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario al tomar</label>' +
+      '<textarea id="sp-take-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:60px;resize:vertical;box-sizing:border-box;margin-bottom:12px;" placeholder="se revisa"></textarea>' +
       '<div style="margin-bottom:12px;"><label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="sp-take-done"> <b>Ticket realizado</b></label></div>' +
+      '<div id="sp-take-close-comment-section" style="display:none;margin-bottom:12px;">' +
+        '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario antes de cerrar (opcional)</label>' +
+        '<textarea id="sp-take-close-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:60px;resize:vertical;box-sizing:border-box;" placeholder="Comentario de cierre..."></textarea>' +
+      '</div>' +
       '<div id="sp-take-migrate-section" style="display:none;margin-bottom:12px;">' +
         '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Migrar a Monday</label>' +
         '<select id="sp-take-group" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;">' + groupOpts + '</select>' +
@@ -1701,10 +1705,12 @@
     var msg = document.getElementById("sp-take-msg");
     var doneCheck = document.getElementById("sp-take-done");
     var migrateSection = document.getElementById("sp-take-migrate-section");
+    var closeCommentSection = document.getElementById("sp-take-close-comment-section");
     var takeGroupSelect = document.getElementById("sp-take-group");
 
     doneCheck.addEventListener("change", function() {
       migrateSection.style.display = doneCheck.checked ? "block" : "none";
+      closeCommentSection.style.display = doneCheck.checked ? "block" : "none";
       if (doneCheck.checked && takeGroupSelect.value) {
         confirmBtn.textContent = "Tomar, cerrar y migrar";
       } else if (doneCheck.checked) {
@@ -1725,7 +1731,8 @@
     overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
 
     confirmBtn.addEventListener("click", async function() {
-      var comment = document.getElementById("sp-take-comment").value.trim();
+      var comment = document.getElementById("sp-take-comment").value.trim() || "se revisa";
+      var closeComment = doneCheck.checked ? (document.getElementById("sp-take-close-comment").value.trim()) : "";
       overlay.remove();
       originalBtn.disabled = true;
       originalBtn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
@@ -1747,7 +1754,7 @@
           responsibleProfileId: profileId,
           resolutionGroup: { label: "Infraestructura DBA", value: 19 }
         };
-        if (comment && !doneCheck.checked) body.ticketCommentRequest = { internal: false, content: comment };
+        body.ticketCommentRequest = { internal: false, content: comment };
         var res = await fetch(SP_API + "/reassign/" + ticketId, {
           method: "PUT",
           headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
@@ -1758,12 +1765,12 @@
         if (json.success) {
           // If "Ticket realizado" is checked, also close and optionally migrate
           if (doneCheck.checked) {
-            // Add comment if provided
-            if (comment) {
+            // Add close comment if provided
+            if (closeComment) {
               await fetch(SP_API + "/comment/" + ticketId, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                body: JSON.stringify({ content: "<p>" + comment + "</p>", internal: false }),
+                body: JSON.stringify({ content: "<p>" + closeComment + "</p>", internal: false }),
               });
             }
             // Close ticket
