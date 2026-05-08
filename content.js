@@ -2890,4 +2890,9 @@
     if (activeModalRefresh) activeModalRefresh();
     refreshTeamPanel();
   });
+
+  // --- Auto-refresh team panel every 60 seconds ---
+  setInterval(function() {
+    if (!isDetailView()) refreshTeamPanel();
+  }, 60000);
 })();
