@@ -1136,6 +1136,13 @@
         var targetProfileId = dropZone.dataset.profileId;
         if (!ticketId || !targetProfileId) return;
 
+        // Don't reassign if dropped on the same column it came from
+        var sourceCol = panel.querySelector('.sp-team-ticket[data-ticket-id="' + ticketId + '"]');
+        if (sourceCol) {
+          var sourceZone = sourceCol.closest(".sp-team-tickets");
+          if (sourceZone && sourceZone.dataset.profileId === targetProfileId) return;
+        }
+
         showLoadingToast("Reasignando ticket...");
         try {
           var res = await fetch(SP_API + "/reassign/" + ticketId, {
