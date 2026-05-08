@@ -1090,8 +1090,73 @@
         col.id = "sp-team-col-" + p.profileId;
         col.style.cssText = "min-width:180px;max-width:220px;border:2px solid " + borderColor + ";border-radius:8px;overflow:hidden;flex-shrink:0;";
         col.innerHTML = '<div style="background:' + headerBg + ';color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">' + firstName + ' <span class="sp-team-count" style="opacity:0.7;">(...)</span></div>' +
-          '<div class="sp-team-tickets" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>';
+          '<div class="sp-team-tickets" data-profile-id="' + p.profileId + '" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>';
         containerDiv.appendChild(col);
+      });
+
+      // Setup drag and drop + click to open
+      var dragStartPos = null;
+      panel.addEventListener("click", function(e) {
+        var ticket = e.target.closest(".sp-team-ticket");
+        if (!ticket) return;
+        // Only open if it wasn't a drag (mouse didn't move much)
+        if (dragStartPos && (Math.abs(e.clientX - dragStartPos.x) > 5 || Math.abs(e.clientY - dragStartPos.y) > 5)) return;
+        var ticketId = ticket.dataset.ticketId;
+        if (ticketId) window.open("/es/dashboard/tickets/" + ticketId, "_blank");
+      });
+      panel.addEventListener("mousedown", function(e) {
+        dragStartPos = { x: e.clientX, y: e.clientY };
+      });
+      panel.addEventListener("dragstart", function(e) {
+        var ticket = e.target.closest(".sp-team-ticket");
+        if (!ticket) return;
+        e.dataTransfer.setData("text/plain", ticket.dataset.ticketId);
+        ticket.style.opacity = "0.4";
+        dragStartPos = null; // Nullify so click doesn't fire after drag
+      });
+      panel.addEventListener("dragend", function(e) {
+        var ticket = e.target.closest(".sp-team-ticket");
+        if (ticket) ticket.style.opacity = "1";
+      });
+      panel.addEventListener("dragover", function(e) {
+        e.preventDefault();
+        var dropZone = e.target.closest(".sp-team-tickets");
+        if (dropZone) dropZone.style.background = "#e3f2fd";
+      });
+      panel.addEventListener("dragleave", function(e) {
+        var dropZone = e.target.closest(".sp-team-tickets");
+        if (dropZone) dropZone.style.background = "#fafafa";
+      });
+      panel.addEventListener("drop", async function(e) {
+        e.preventDefault();
+        var dropZone = e.target.closest(".sp-team-tickets");
+        if (!dropZone) return;
+        dropZone.style.background = "#fafafa";
+        var ticketId = e.dataTransfer.getData("text/plain");
+        var targetProfileId = dropZone.dataset.profileId;
+        if (!ticketId || !targetProfileId) return;
+
+        showLoadingToast("Reasignando ticket...");
+        try {
+          var res = await fetch(SP_API + "/reassign/" + ticketId, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+            body: JSON.stringify({
+              resolutionGroupId: 19,
+              serviceId: null,
+              responsibleProfileId: parseInt(targetProfileId),
+              resolutionGroup: { label: "Infraestructura DBA", value: 19 }
+            }),
+          });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          var json = await res.json();
+          if (json.success) {
+            showSuccessToast("Ticket reasignado");
+            refreshTeamPanel();
+          } else { throw new Error("No success"); }
+        } catch (err) {
+          showErrorToast("Error: " + err.message);
+        }
       });
 
       // Fetch tickets for each member individually and update as they arrive
@@ -1120,11 +1185,11 @@
             var html = "";
             tickets.forEach(function(t) {
               var statusColor = STATUS_TEXT_COLORS[t.ticketStatusName] || "#333";
-              html += '<a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;text-decoration:none;color:inherit;font-size:10px;line-height:1.3;">';
+              html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:10px;line-height:1.3;cursor:grab;">';
               html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
               html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
               html += '<div style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</div>';
-              html += '</a>';
+              html += '</div>';
             });
             listEl.innerHTML = html;
           }
@@ -1188,11 +1253,11 @@
           var html = "";
           tickets.forEach(function(t) {
             var statusColor = STATUS_TEXT_COLORS[t.ticketStatusName] || "#333";
-            html += '<a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;text-decoration:none;color:inherit;font-size:10px;line-height:1.3;">';
+            html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:10px;line-height:1.3;cursor:grab;">';
             html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
             html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
             html += '<div style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</div>';
-            html += '</a>';
+            html += '</div>';
           });
           listEl.innerHTML = html;
         }
