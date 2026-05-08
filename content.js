@@ -1253,7 +1253,7 @@
               html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:10px;line-height:1.3;cursor:grab;">';
               html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
               html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-              html += '<div style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</div>';
+              html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
               html += '</div>';
             });
             listEl.innerHTML = html;
@@ -1286,7 +1286,7 @@
             html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:10px;line-height:1.3;cursor:grab;">';
             html += '<div style="font-weight:600;color:#E65100;">' + (t.uniqueCode || "") + '</div>';
             html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-            html += '<div style="color:#FF8F00;font-weight:600;font-size:9px;">En espera</div>';
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#FF8F00;font-weight:600;font-size:9px;">En espera</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
             html += '</div>';
           });
           listEl.innerHTML = html;
@@ -1339,7 +1339,7 @@
             html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:10px;line-height:1.3;cursor:grab;">';
             html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
             html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-            html += '<div style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</div>';
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
             html += '</div>';
           });
           listEl.innerHTML = html;
@@ -1381,7 +1381,7 @@
           html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:10px;line-height:1.3;cursor:grab;">';
           html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
           html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-          html += '<div style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</div>';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
           html += '</div>';
         });
         listEl.innerHTML = html;
@@ -1410,7 +1410,7 @@
           html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:10px;line-height:1.3;cursor:grab;">';
           html += '<div style="font-weight:600;color:#E65100;">' + (t.uniqueCode || "") + '</div>';
           html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-          html += '<div style="color:#FF8F00;font-weight:600;font-size:9px;">En espera</div>';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#FF8F00;font-weight:600;font-size:9px;">En espera</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
           html += '</div>';
         });
         listEl.innerHTML = html;
