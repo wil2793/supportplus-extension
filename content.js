@@ -1066,9 +1066,20 @@
   };
 
   var currentTeamArea = "dba"; // default
+  const GERENTE_NAME = "Rickey Oswaldo Ehuan Vargas";
+
+  function isGerente() {
+    return getLoggedUserName() === GERENTE_NAME;
+  }
 
   function getTeamConfig() {
     return TEAM_AREAS[currentTeamArea] || TEAM_AREAS.dba;
+  }
+
+  // Returns all areas if gerente, otherwise just the configured one
+  function getActiveAreas() {
+    if (isGerente()) return Object.values(TEAM_AREAS);
+    return [getTeamConfig()];
   }
 
   function loadTeamArea() {
@@ -1113,37 +1124,51 @@
     }
 
     try {
-      // DBA team members (hardcoded)
-      var profiles = getTeamConfig().profiles;
-
+      var areas = getActiveAreas();
       var myName = getLoggedUserName();
 
       // Render empty columns immediately
       var containerDiv = document.createElement("div");
-      containerDiv.style.cssText = "display:flex;gap:8px;justify-content:center;";
+      containerDiv.style.cssText = "display:flex;gap:8px;justify-content:center;flex-wrap:wrap;";
       panel.innerHTML = "";
       panel.appendChild(containerDiv);
 
-      // "Sin asignar" column at the left
-      var unassignedCol = document.createElement("div");
-      unassignedCol.id = "sp-team-col-unassigned";
-      unassignedCol.style.cssText = "min-width:180px;max-width:220px;border:2px solid #FF8F00;border-radius:8px;overflow:hidden;flex-shrink:0;";
-      unassignedCol.innerHTML = '<div class="sp-team-header" data-profile-id="unassigned" style="background:#FF8F00;color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">⏳ Sin asignar <span class="sp-team-count" style="opacity:0.7;">(...)</span></div>' +
-        '<div class="sp-team-tickets" data-profile-id="unassigned" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>';
-      containerDiv.appendChild(unassignedCol);
+      // "Sin asignar" column at the left (for each area)
+      areas.forEach(function(area, areaIdx) {
+        if (areaIdx > 0) {
+          var sep = document.createElement("div");
+          sep.style.cssText = "width:3px;background:#ddd;border-radius:2px;margin:0 4px;align-self:stretch;";
+          containerDiv.appendChild(sep);
+        }
 
-      profiles.forEach(function(p) {
-        var isMe = myName && p.profileFullName === myName;
-        var borderColor = isMe ? "#D94040" : "#ddd";
-        var headerBg = isMe ? "#D94040" : "#2196F3";
-        var firstName = p.profileFullName.split(" ")[0];
+        // Area label if gerente
+        if (areas.length > 1) {
+          var areaLabel = document.createElement("div");
+          areaLabel.style.cssText = "min-width:180px;max-width:220px;display:flex;flex-direction:column;justify-content:center;align-items:center;flex-shrink:0;";
+          areaLabel.innerHTML = '<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:11px;font-weight:700;color:#555;letter-spacing:1px;">' + (areaIdx === 0 ? '🗄️ DBA' : '📦 APPS') + '</div>';
+          containerDiv.appendChild(areaLabel);
+        }
 
-        var col = document.createElement("div");
-        col.id = "sp-team-col-" + p.profileId;
-        col.style.cssText = "min-width:180px;max-width:220px;border:2px solid " + borderColor + ";border-radius:8px;overflow:hidden;flex-shrink:0;";
-        col.innerHTML = '<div class="sp-team-header" data-profile-id="' + p.profileId + '" style="background:' + headerBg + ';color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">' + firstName + ' <span class="sp-team-count" style="opacity:0.7;">(...)</span></div>' +
-          '<div class="sp-team-tickets" data-profile-id="' + p.profileId + '" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>';
-        containerDiv.appendChild(col);
+        var unassignedCol = document.createElement("div");
+        unassignedCol.id = "sp-team-col-unassigned-" + area.resolutionGroupId;
+        unassignedCol.style.cssText = "min-width:180px;max-width:220px;border:2px solid #FF8F00;border-radius:8px;overflow:hidden;flex-shrink:0;";
+        unassignedCol.innerHTML = '<div class="sp-team-header" data-profile-id="unassigned" style="background:#FF8F00;color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">⏳ Sin asignar <span class="sp-team-count" style="opacity:0.7;">(...)</span></div>' +
+          '<div class="sp-team-tickets" data-profile-id="unassigned" data-area-group="' + area.resolutionGroupId + '" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>';
+        containerDiv.appendChild(unassignedCol);
+
+        area.profiles.forEach(function(p) {
+          var isMe = myName && p.profileFullName === myName;
+          var borderColor = isMe ? "#D94040" : "#ddd";
+          var headerBg = isMe ? "#D94040" : (areaIdx === 0 ? "#2196F3" : "#7B1FA2");
+          var firstName = p.profileFullName.split(" ")[0];
+
+          var col = document.createElement("div");
+          col.id = "sp-team-col-" + p.profileId;
+          col.style.cssText = "min-width:180px;max-width:220px;border:2px solid " + borderColor + ";border-radius:8px;overflow:hidden;flex-shrink:0;";
+          col.innerHTML = '<div class="sp-team-header" data-profile-id="' + p.profileId + '" style="background:' + headerBg + ';color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">' + firstName + ' <span class="sp-team-count" style="opacity:0.7;">(...)</span></div>' +
+            '<div class="sp-team-tickets" data-profile-id="' + p.profileId + '" data-area-group="' + area.resolutionGroupId + '" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>';
+          containerDiv.appendChild(col);
+        });
       });
 
       // Setup drag and drop + click to open
@@ -1217,16 +1242,20 @@
           dropZone.appendChild(sourceCol);
         }
 
+        // Determine area from the drop zone
+        var dropAreaGroupId = parseInt(dropZone.dataset.areaGroup) || getTeamConfig().resolutionGroupId;
+        var dropAreaConfig = Object.values(TEAM_AREAS).find(function(a) { return a.resolutionGroupId === dropAreaGroupId; }) || getTeamConfig();
+
         showLoadingToast("Reasignando ticket...");
         try {
           var res = await fetch(SP_API + "/reassign/" + ticketId, {
             method: "PUT",
             headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
             body: JSON.stringify({
-              resolutionGroupId: getTeamConfig().resolutionGroupId,
+              resolutionGroupId: dropAreaConfig.resolutionGroupId,
               serviceId: null,
               responsibleProfileId: parseInt(targetProfileId),
-              resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId }
+              resolutionGroup: { label: dropAreaConfig.resolutionGroupLabel, value: dropAreaConfig.resolutionGroupId }
             }),
           });
           if (!res.ok) throw new Error("HTTP " + res.status);
@@ -1265,73 +1294,73 @@
       });
 
       // Fetch tickets for each member individually and update as they arrive
-      profiles.forEach(function(p) {
-        fetch(SP_SEARCH_API + "?responsibleProfileId=" + p.profileId + "&ticketStatusName=Asignado", {
+      areas.forEach(function(area) {
+        area.profiles.forEach(function(p) {
+          fetch(SP_SEARCH_API + "?responsibleProfileId=" + p.profileId + "&ticketStatusName=Asignado", {
+            headers: { accept: "application/json", authorization: "Bearer " + spToken },
+          }).then(function(r) { return r.json(); }).then(function(json) {
+            var tickets = ((json.data || json).content || []).filter(function(t) {
+              return t.ticketStatusName === "Asignado" || t.ticketStatusName === "En atención";
+            });
+
+            var col = document.getElementById("sp-team-col-" + p.profileId);
+            if (!col) return;
+
+            var countEl = col.querySelector(".sp-team-count");
+            if (countEl) countEl.textContent = "(" + tickets.length + ")";
+
+            var listEl = col.querySelector(".sp-team-tickets");
+            if (!listEl) return;
+
+            if (!tickets.length) {
+              listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
+            } else {
+              var html = "";
+              tickets.forEach(function(t) {
+                var statusColor = STATUS_TEXT_COLORS[t.ticketStatusName] || "#333";
+                html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:10px;line-height:1.3;cursor:grab;">';
+                html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
+                html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
+                html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
+                html += '</div>';
+              });
+              listEl.innerHTML = html;
+            }
+          }).catch(function() {
+            var col = document.getElementById("sp-team-col-" + p.profileId);
+            if (col) {
+              var listEl = col.querySelector(".sp-team-tickets");
+              if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#D94040;font-size:10px;">Error</div>';
+            }
+          });
+        });
+
+        // Fetch unassigned tickets (En espera) per area
+        fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=" + area.resolutionGroupId + "&ticketStatusName=En%20espera", {
           headers: { accept: "application/json", authorization: "Bearer " + spToken },
         }).then(function(r) { return r.json(); }).then(function(json) {
-          var tickets = ((json.data || json).content || []).filter(function(t) {
-            return t.ticketStatusName === "Asignado" || t.ticketStatusName === "En atención";
-          });
-
-          var col = document.getElementById("sp-team-col-" + p.profileId);
+          var tickets = (json.data || json).content || [];
+          var col = document.getElementById("sp-team-col-unassigned-" + area.resolutionGroupId);
           if (!col) return;
-
-          // Update count
           var countEl = col.querySelector(".sp-team-count");
           if (countEl) countEl.textContent = "(" + tickets.length + ")";
-
-          // Update tickets list
           var listEl = col.querySelector(".sp-team-tickets");
           if (!listEl) return;
-
           if (!tickets.length) {
             listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
           } else {
             var html = "";
             tickets.forEach(function(t) {
-              var statusColor = STATUS_TEXT_COLORS[t.ticketStatusName] || "#333";
-              html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:10px;line-height:1.3;cursor:grab;">';
-              html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
+              html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:10px;line-height:1.3;cursor:grab;">';
+              html += '<div style="font-weight:600;color:#E65100;">' + (t.uniqueCode || "") + '</div>';
               html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-              html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
+              html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#FF8F00;font-weight:600;font-size:9px;">En espera</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
               html += '</div>';
             });
             listEl.innerHTML = html;
           }
-        }).catch(function() {
-          var col = document.getElementById("sp-team-col-" + p.profileId);
-          if (col) {
-            var listEl = col.querySelector(".sp-team-tickets");
-            if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#D94040;font-size:10px;">Error</div>';
-          }
-        });
+        }).catch(function() {});
       });
-
-      // Fetch unassigned tickets (En espera)
-      fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=" + getTeamConfig().resolutionGroupId + "&ticketStatusName=En%20espera", {
-        headers: { accept: "application/json", authorization: "Bearer " + spToken },
-      }).then(function(r) { return r.json(); }).then(function(json) {
-        var tickets = (json.data || json).content || [];
-        var col = document.getElementById("sp-team-col-unassigned");
-        if (!col) return;
-        var countEl = col.querySelector(".sp-team-count");
-        if (countEl) countEl.textContent = "(" + tickets.length + ")";
-        var listEl = col.querySelector(".sp-team-tickets");
-        if (!listEl) return;
-        if (!tickets.length) {
-          listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
-        } else {
-          var html = "";
-          tickets.forEach(function(t) {
-            html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:10px;line-height:1.3;cursor:grab;">';
-            html += '<div style="font-weight:600;color:#E65100;">' + (t.uniqueCode || "") + '</div>';
-            html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-            html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#FF8F00;font-weight:600;font-size:9px;">En espera</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
-            html += '</div>';
-          });
-          listEl.innerHTML = html;
-        }
-      }).catch(function() {});
 
     } catch (err) {
       panel.innerHTML = '<div style="color:#D94040;padding:8px;font-size:12px;">Error: ' + err.message + '</div>';
@@ -1350,10 +1379,12 @@
     var spToken = getToken();
     if (!spToken) return;
 
-    var profiles = getTeamConfig().profiles;
+    var areas = getActiveAreas();
+    var allProfiles = [];
+    areas.forEach(function(a) { allProfiles = allProfiles.concat(a.profiles); });
 
-    var pending = profiles.length;
-    profiles.forEach(function(p) {
+    var pending = allProfiles.length;
+    allProfiles.forEach(function(p) {
       fetch(SP_SEARCH_API + "?responsibleProfileId=" + p.profileId + "&ticketStatusName=Asignado", {
         headers: { accept: "application/json", authorization: "Bearer " + spToken },
       }).then(function(r) { return r.json(); }).then(function(json) {
@@ -1432,30 +1463,33 @@
   function refreshUnassignedColumn() {
     var spToken = getToken();
     if (!spToken) return;
-    fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=" + getTeamConfig().resolutionGroupId + "&ticketStatusName=En%20espera", {
-      headers: { accept: "application/json", authorization: "Bearer " + spToken },
-    }).then(function(r) { return r.json(); }).then(function(json) {
-      var tickets = (json.data || json).content || [];
-      var col = document.getElementById("sp-team-col-unassigned");
-      if (!col) return;
-      var countEl = col.querySelector(".sp-team-count");
-      if (countEl) countEl.textContent = "(" + tickets.length + ")";
-      var listEl = col.querySelector(".sp-team-tickets");
-      if (!listEl) return;
-      if (!tickets.length) {
-        listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
-      } else {
-        var html = "";
-        tickets.forEach(function(t) {
-          html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:10px;line-height:1.3;cursor:grab;">';
-          html += '<div style="font-weight:600;color:#E65100;">' + (t.uniqueCode || "") + '</div>';
-          html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-          html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#FF8F00;font-weight:600;font-size:9px;">En espera</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
-          html += '</div>';
-        });
-        listEl.innerHTML = html;
-      }
-    }).catch(function() {});
+    var areas = getActiveAreas();
+    areas.forEach(function(area) {
+      fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=" + area.resolutionGroupId + "&ticketStatusName=En%20espera", {
+        headers: { accept: "application/json", authorization: "Bearer " + spToken },
+      }).then(function(r) { return r.json(); }).then(function(json) {
+        var tickets = (json.data || json).content || [];
+        var col = document.getElementById("sp-team-col-unassigned-" + area.resolutionGroupId);
+        if (!col) return;
+        var countEl = col.querySelector(".sp-team-count");
+        if (countEl) countEl.textContent = "(" + tickets.length + ")";
+        var listEl = col.querySelector(".sp-team-tickets");
+        if (!listEl) return;
+        if (!tickets.length) {
+          listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
+        } else {
+          var html = "";
+          tickets.forEach(function(t) {
+            html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:10px;line-height:1.3;cursor:grab;">';
+            html += '<div style="font-weight:600;color:#E65100;">' + (t.uniqueCode || "") + '</div>';
+            html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#FF8F00;font-weight:600;font-size:9px;">En espera</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
+            html += '</div>';
+          });
+          listEl.innerHTML = html;
+        }
+      }).catch(function() {});
+    });
   }
 
   // --- Take ticket (reassign) ---
