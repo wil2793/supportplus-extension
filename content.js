@@ -679,10 +679,10 @@
           method: "PUT",
           headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
           body: JSON.stringify({
-            resolutionGroupId: 19,
+            resolutionGroupId: getTeamConfig().resolutionGroupId,
             serviceId: null,
             responsibleProfileId: profileId,
-            resolutionGroup: { label: "Infraestructura DBA", value: 19 }
+            resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId }
           }),
         });
         if (!takeRes.ok) throw new Error("Error al tomar: HTTP " + takeRes.status);
@@ -1040,17 +1040,57 @@
   const TEAM_PANEL_ID = "sp-team-panel";
   var teamPanelLoading = false;
 
-  const DBA_PROFILES = [
-    { profileId: 138, profileFullName: "Rickey Oswaldo Ehuan Vargas" },
-    { profileId: 141, profileFullName: "Wille Hans Ditte Morales Sanchez" },
-    { profileId: 144, profileFullName: "Jorge Luis Balam Vargas" },
-    { profileId: 146, profileFullName: "Eduardo Emmanuel Ravell May" },
-    { profileId: 148, profileFullName: "Gamaliel Uriel Tzab Novelo" },
-    { profileId: 190, profileFullName: "Ariel Jesus Fernandez Mena" },
-    { profileId: 294, profileFullName: "William Israel Alpuche Jimenez" }
-  ];
+  const TEAM_AREAS = {
+    dba: {
+      resolutionGroupId: 19,
+      resolutionGroupLabel: "Infraestructura DBA",
+      profiles: [
+        { profileId: 138, profileFullName: "Rickey Oswaldo Ehuan Vargas" },
+        { profileId: 141, profileFullName: "Wille Hans Ditte Morales Sanchez" },
+        { profileId: 144, profileFullName: "Jorge Luis Balam Vargas" },
+        { profileId: 146, profileFullName: "Eduardo Emmanuel Ravell May" },
+        { profileId: 148, profileFullName: "Gamaliel Uriel Tzab Novelo" },
+        { profileId: 190, profileFullName: "Ariel Jesus Fernandez Mena" },
+        { profileId: 294, profileFullName: "William Israel Alpuche Jimenez" }
+      ]
+    },
+    aplicaciones: {
+      resolutionGroupId: 22,
+      resolutionGroupLabel: "Aplicaciones - Liberación e Implementación",
+      profiles: [
+        { profileId: 135, profileFullName: "Omar Francisco Canul Mutul" },
+        { profileId: 187, profileFullName: "Eduardo Emanuel Herrera Pech" },
+        { profileId: 303, profileFullName: "Aaron Isaac Dorantes Ku" }
+      ]
+    }
+  };
+
+  var currentTeamArea = "dba"; // default
+
+  function getTeamConfig() {
+    return TEAM_AREAS[currentTeamArea] || TEAM_AREAS.dba;
+  }
+
+  function loadTeamArea() {
+    return new Promise(function(resolve) {
+      try {
+        chrome.storage.local.get("teamArea", function(result) {
+          currentTeamArea = result.teamArea || "dba";
+          resolve();
+        });
+      } catch(e) { resolve(); }
+    });
+  }
+
+  const DBA_PROFILES = TEAM_AREAS.dba.profiles;
   const DBA_PROFILE_NAMES = {};
   DBA_PROFILES.forEach(function(p) { DBA_PROFILE_NAMES[p.profileId] = p.profileFullName; });
+
+  // Build a global profile name map for all areas
+  const ALL_PROFILE_NAMES = {};
+  Object.values(TEAM_AREAS).forEach(function(area) {
+    area.profiles.forEach(function(p) { ALL_PROFILE_NAMES[p.profileId] = p.profileFullName; });
+  });
 
   async function loadTeamPanel() {
     if (isDetailView()) return;
@@ -1074,7 +1114,7 @@
 
     try {
       // DBA team members (hardcoded)
-      var profiles = DBA_PROFILES;
+      var profiles = getTeamConfig().profiles;
 
       var myName = getLoggedUserName();
 
@@ -1183,10 +1223,10 @@
             method: "PUT",
             headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
             body: JSON.stringify({
-              resolutionGroupId: 19,
+              resolutionGroupId: getTeamConfig().resolutionGroupId,
               serviceId: null,
               responsibleProfileId: parseInt(targetProfileId),
-              resolutionGroup: { label: "Infraestructura DBA", value: 19 }
+              resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId }
             }),
           });
           if (!res.ok) throw new Error("HTTP " + res.status);
@@ -1268,7 +1308,7 @@
       });
 
       // Fetch unassigned tickets (En espera)
-      fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=19&ticketStatusName=En%20espera", {
+      fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=" + getTeamConfig().resolutionGroupId + "&ticketStatusName=En%20espera", {
         headers: { accept: "application/json", authorization: "Bearer " + spToken },
       }).then(function(r) { return r.json(); }).then(function(json) {
         var tickets = (json.data || json).content || [];
@@ -1310,7 +1350,7 @@
     var spToken = getToken();
     if (!spToken) return;
 
-    var profiles = DBA_PROFILES;
+    var profiles = getTeamConfig().profiles;
 
     var pending = profiles.length;
     profiles.forEach(function(p) {
@@ -1354,7 +1394,7 @@
   function refreshTeamColumn(profileId) {
     var spToken = getToken();
     if (!spToken) return;
-    var name = DBA_PROFILE_NAMES[profileId];
+    var name = ALL_PROFILE_NAMES[profileId];
     if (!name) return;
     fetch(SP_SEARCH_API + "?responsibleProfileId=" + profileId + "&ticketStatusName=Asignado", {
       headers: { accept: "application/json", authorization: "Bearer " + spToken },
@@ -1392,7 +1432,7 @@
   function refreshUnassignedColumn() {
     var spToken = getToken();
     if (!spToken) return;
-    fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=19&ticketStatusName=En%20espera", {
+    fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=" + getTeamConfig().resolutionGroupId + "&ticketStatusName=En%20espera", {
       headers: { accept: "application/json", authorization: "Bearer " + spToken },
     }).then(function(r) { return r.json(); }).then(function(json) {
       var tickets = (json.data || json).content || [];
@@ -1427,7 +1467,7 @@
     const myName = getLoggedUserName();
     if (!myName) return null;
     try {
-      const res = await fetch(SP_API.replace("/tickets/web", "") + "/tickets/web/active-profiles-by-resolution-group/19", {
+      const res = await fetch(SP_API.replace("/tickets/web", "") + "/tickets/web/active-profiles-by-resolution-group/" + getTeamConfig().resolutionGroupId, {
         headers: { accept: "application/json", authorization: "Bearer " + spToken },
       });
       if (!res.ok) return null;
@@ -1749,10 +1789,10 @@
       var spToken = getToken();
       try {
         var body = {
-          resolutionGroupId: 19,
+          resolutionGroupId: getTeamConfig().resolutionGroupId,
           serviceId: null,
           responsibleProfileId: profileId,
-          resolutionGroup: { label: "Infraestructura DBA", value: 19 }
+          resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId }
         };
         body.ticketCommentRequest = { internal: false, content: comment };
         var res = await fetch(SP_API + "/reassign/" + ticketId, {
@@ -2338,7 +2378,7 @@
     var page = 0;
     try {
       while (true) {
-        var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?page=" + page + "&size=100&resolutionGroupId=19";
+        var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?page=" + page + "&size=100&resolutionGroupId=" + getTeamConfig().resolutionGroupId;
         if (dashboardFrom) url += "&initDate=" + dashboardFrom;
         if (dashboardTo) url += "&endDate=" + dashboardTo;
         var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
@@ -2468,7 +2508,7 @@
       if (!spToken) { showErrorToast("No hay token"); goBtn.textContent = "→"; goBtn.disabled = false; return; }
 
       try {
-        var res = await fetch(SP_SEARCH_API + "?uniqueCode=" + encodeURIComponent(val) + "&resolutionGroupId=19&page=0&size=1", {
+        var res = await fetch(SP_SEARCH_API + "?uniqueCode=" + encodeURIComponent(val) + "&resolutionGroupId=" + getTeamConfig().resolutionGroupId + "&page=0&size=1", {
           headers: { accept: "application/json", authorization: "Bearer " + spToken },
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
@@ -2619,7 +2659,7 @@
       try {
         var baseUrl = customApiUrl || SP_SEARCH_API;
         var url = baseUrl + "?page=" + (currentPage - 1) + "&size=25";
-        if (!customApiUrl) url += "&resolutionGroupId=19";
+        if (!customApiUrl) url += "&resolutionGroupId=" + getTeamConfig().resolutionGroupId;
         if (statusName) url += "&ticketStatusName=" + encodeURIComponent(statusName);
         if (extraParams) url += "&" + extraParams;
         var res = await fetch(url, {
@@ -2711,7 +2751,7 @@
       var spToken = getToken();
       if (!spToken) { results.innerHTML = '<div style="color:#D94040;padding:12px;">No hay token de SupportPlus</div>'; return; }
 
-      var params = "page=" + (currentPage - 1) + "&size=25&resolutionGroupId=19";
+      var params = "page=" + (currentPage - 1) + "&size=25&resolutionGroupId=" + getTeamConfig().resolutionGroupId;
       var code = document.getElementById("sp-sf-code").value.trim();
       var requester = document.getElementById("sp-sf-requester").value.trim();
       var status = document.getElementById("sp-sf-status").value;
@@ -3128,7 +3168,9 @@
     injectTimeout = setTimeout(injectButtons, 200);
   });
   observer.observe(document.body, { childList: true, subtree: true });
-  ensureSyncStarted().then(() => injectButtons());
+  loadTeamArea().then(function() {
+    ensureSyncStarted().then(() => injectButtons());
+  });
 
   // --- Re-sync on page focus ---
   window.addEventListener("focus", () => {
