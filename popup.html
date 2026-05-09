@@ -34,9 +34,12 @@
 
   <button id="loadBoards" style="background:#555;margin-bottom:4px;">🔄 Cargar boards</button>
   <label>Board</label>
-  <select id="mondayBoardId" style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:8px;">
-    <option value="">-- Primero carga los boards --</option>
-  </select>
+  <div style="position:relative;">
+    <input type="text" id="boardSearch" placeholder="Buscar board..." style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;">
+    <div id="boardResults" style="position:absolute;top:100%;left:0;right:0;max-height:200px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:4px;display:none;z-index:10;font-size:12px;"></div>
+  </div>
+  <div id="selectedBoard" style="font-size:11px;color:#555;margin:4px 0 8px;min-height:16px;"></div>
+  <input type="hidden" id="mondayBoardId">
 
   <button id="saveToken" style="background:#D94040;">💾 Guardar configuración</button>
   <div id="mondayStatus"></div>

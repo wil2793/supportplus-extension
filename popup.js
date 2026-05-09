@@ -1,24 +1,28 @@
 const $ = (id) => document.getElementById(id);
 
 // --- Load saved config ---
-chrome.storage.local.get(["mondayToken", "mondayBoardId", "teamArea"], ({ mondayToken, mondayBoardId, teamArea }) => {
+chrome.storage.local.get(["mondayToken", "mondayBoardId", "mondayBoardName", "teamArea"], ({ mondayToken, mondayBoardId, mondayBoardName, teamArea }) => {
   if (teamArea) {
     $("teamArea").value = teamArea;
   }
   if (mondayToken) {
     $("mondayToken").value = mondayToken;
   }
+  if (mondayBoardId) {
+    $("mondayBoardId").value = mondayBoardId;
+    $("selectedBoard").textContent = "✅ " + (mondayBoardName || mondayBoardId);
+    $("boardSearch").value = mondayBoardName || "";
+  }
   if (mondayToken && mondayBoardId) {
-    // Auto-load boards and preselect
-    loadBoards(mondayToken, mondayBoardId);
     $("mondayStatus").innerHTML = '<span class="saved">✅ Configuración guardada</span>';
   }
 });
 
 // --- Load boards from Monday API ---
-async function loadBoards(token, selectedId) {
-  const select = $("mondayBoardId");
-  select.innerHTML = '<option value="">Cargando boards...</option>';
+let allBoards = [];
+
+async function loadBoards(token) {
+  $("mondayStatus").textContent = "Cargando boards...";
   try {
     const res = await fetch("https://api.monday.com/v2", {
       method: "POST",
@@ -27,24 +31,53 @@ async function loadBoards(token, selectedId) {
     });
     const json = await res.json();
     if (json.errors) throw new Error(json.errors[0].message);
-    const currentYear = new Date().getFullYear().toString();
-    const boards = json.data.boards
-      .filter((b) => b.name.startsWith("Tickets DBA") && b.name.includes(currentYear))
-      .sort((a, b) => a.name.localeCompare(b.name));
-    select.innerHTML = '<option value="">-- Selecciona un board --</option>';
-    boards.forEach((b) => {
-      const opt = document.createElement("option");
-      opt.value = b.id;
-      opt.textContent = b.name;
-      if (b.id === selectedId) opt.selected = true;
-      select.appendChild(opt);
-    });
-    $("mondayStatus").textContent = `${boards.length} boards cargados`;
+    allBoards = json.data.boards.sort((a, b) => a.name.localeCompare(b.name));
+    $("mondayStatus").textContent = allBoards.length + " boards cargados. Escribe para buscar.";
+    filterBoards();
   } catch (e) {
-    select.innerHTML = '<option value="">Error al cargar</option>';
     $("mondayStatus").textContent = "❌ " + e.message;
   }
 }
+
+function filterBoards() {
+  const query = $("boardSearch").value.toLowerCase().trim();
+  const results = $("boardResults");
+  if (!query || !allBoards.length) {
+    results.style.display = "none";
+    return;
+  }
+  const filtered = allBoards.filter(b => b.name.toLowerCase().includes(query)).slice(0, 20);
+  if (!filtered.length) {
+    results.innerHTML = '<div style="padding:6px 8px;color:#888;">Sin resultados</div>';
+    results.style.display = "block";
+    return;
+  }
+  results.innerHTML = filtered.map(b =>
+    '<div class="board-option" data-id="' + b.id + '" data-name="' + b.name.replace(/"/g, '&quot;') + '" style="padding:6px 8px;cursor:pointer;border-bottom:1px solid #f0f0f0;">' + b.name + '</div>'
+  ).join("");
+  results.style.display = "block";
+}
+
+// Board search input
+$("boardSearch").addEventListener("input", filterBoards);
+$("boardSearch").addEventListener("focus", filterBoards);
+
+// Click on board result
+$("boardResults").addEventListener("click", (e) => {
+  const opt = e.target.closest(".board-option");
+  if (!opt) return;
+  $("mondayBoardId").value = opt.dataset.id;
+  $("boardSearch").value = opt.dataset.name;
+  $("selectedBoard").textContent = "✅ " + opt.dataset.name;
+  $("boardResults").style.display = "none";
+});
+
+// Hide results on click outside
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#boardSearch") && !e.target.closest("#boardResults")) {
+    $("boardResults").style.display = "none";
+  }
+});
 
 // --- Load boards button ---
 $("loadBoards").addEventListener("click", () => {
@@ -57,10 +90,11 @@ $("loadBoards").addEventListener("click", () => {
 $("saveToken").addEventListener("click", () => {
   const token = $("mondayToken").value.trim();
   const boardId = $("mondayBoardId").value;
+  const boardName = $("boardSearch").value.trim();
   const teamArea = $("teamArea").value;
   if (!token) return ($("mondayStatus").textContent = "⚠️ Ingresa un token");
-  if (!boardId) return ($("mondayStatus").textContent = "⚠️ Selecciona un board");
-  chrome.storage.local.set({ mondayToken: token, mondayBoardId: boardId, teamArea: teamArea }, () => {
+  if (!boardId) return ($("mondayStatus").textContent = "⚠️ Busca y selecciona un board");
+  chrome.storage.local.set({ mondayToken: token, mondayBoardId: boardId, mondayBoardName: boardName, teamArea: teamArea }, () => {
     $("mondayStatus").innerHTML = '<span class="saved">✅ Configuración guardada</span>';
   });
 });
