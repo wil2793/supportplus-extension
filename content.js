@@ -1296,7 +1296,7 @@
       // Fetch tickets for each member individually and update as they arrive
       areas.forEach(function(area) {
         area.profiles.forEach(function(p) {
-          fetch(SP_SEARCH_API + "?responsibleProfileId=" + p.profileId + "&ticketStatusName=Asignado", {
+          fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + p.profileId + "&ticketStatusName=Asignado", {
             headers: { accept: "application/json", authorization: "Bearer " + spToken },
           }).then(function(r) { return r.json(); }).then(function(json) {
             var tickets = ((json.data || json).content || []).filter(function(t) {
@@ -1385,7 +1385,7 @@
 
     var pending = allProfiles.length;
     allProfiles.forEach(function(p) {
-      fetch(SP_SEARCH_API + "?responsibleProfileId=" + p.profileId + "&ticketStatusName=Asignado", {
+      fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + p.profileId + "&ticketStatusName=Asignado", {
         headers: { accept: "application/json", authorization: "Bearer " + spToken },
       }).then(function(r) { return r.json(); }).then(function(json) {
         var tickets = ((json.data || json).content || []).filter(function(t) {
@@ -1427,7 +1427,7 @@
     if (!spToken) return;
     var name = ALL_PROFILE_NAMES[profileId];
     if (!name) return;
-    fetch(SP_SEARCH_API + "?responsibleProfileId=" + profileId + "&ticketStatusName=Asignado", {
+    fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + profileId + "&ticketStatusName=Asignado", {
       headers: { accept: "application/json", authorization: "Bearer " + spToken },
     }).then(function(r) { return r.json(); }).then(function(json) {
       var tickets = ((json.data || json).content || []).filter(function(t) {
