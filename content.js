@@ -1296,12 +1296,12 @@
       // Fetch tickets for each member individually and update as they arrive
       areas.forEach(function(area) {
         area.profiles.forEach(function(p) {
-          fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + p.profileId + "&ticketStatusName=Asignado", {
-            headers: { accept: "application/json", authorization: "Bearer " + spToken },
-          }).then(function(r) { return r.json(); }).then(function(json) {
-            var tickets = ((json.data || json).content || []).filter(function(t) {
-              return t.ticketStatusName === "Asignado" || t.ticketStatusName === "En atención";
-            });
+          var TEAM_API = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + p.profileId;
+          Promise.all([
+            fetch(TEAM_API + "&ticketStatusName=Asignado", { headers: { accept: "application/json", authorization: "Bearer " + spToken } }).then(function(r) { return r.json(); }),
+            fetch(TEAM_API + "&ticketStatusName=En%20atenci%C3%B3n", { headers: { accept: "application/json", authorization: "Bearer " + spToken } }).then(function(r) { return r.json(); })
+          ]).then(function(results) {
+            var tickets = ((results[0].data || results[0]).content || []).concat((results[1].data || results[1]).content || []);
 
             var col = document.getElementById("sp-team-col-" + p.profileId);
             if (!col) return;
@@ -1385,12 +1385,12 @@
 
     var pending = allProfiles.length;
     allProfiles.forEach(function(p) {
-      fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + p.profileId + "&ticketStatusName=Asignado", {
-        headers: { accept: "application/json", authorization: "Bearer " + spToken },
-      }).then(function(r) { return r.json(); }).then(function(json) {
-        var tickets = ((json.data || json).content || []).filter(function(t) {
-          return t.ticketStatusName === "Asignado" || t.ticketStatusName === "En atención";
-        });
+      var TEAM_API = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + p.profileId;
+      Promise.all([
+        fetch(TEAM_API + "&ticketStatusName=Asignado", { headers: { accept: "application/json", authorization: "Bearer " + spToken } }).then(function(r) { return r.json(); }),
+        fetch(TEAM_API + "&ticketStatusName=En%20atenci%C3%B3n", { headers: { accept: "application/json", authorization: "Bearer " + spToken } }).then(function(r) { return r.json(); })
+      ]).then(function(results) {
+        var tickets = ((results[0].data || results[0]).content || []).concat((results[1].data || results[1]).content || []);
 
         var col = document.getElementById("sp-team-col-" + p.profileId);
         if (!col) return;
@@ -1427,12 +1427,12 @@
     if (!spToken) return;
     var name = ALL_PROFILE_NAMES[profileId];
     if (!name) return;
-    fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + profileId + "&ticketStatusName=Asignado", {
-      headers: { accept: "application/json", authorization: "Bearer " + spToken },
-    }).then(function(r) { return r.json(); }).then(function(json) {
-      var tickets = ((json.data || json).content || []).filter(function(t) {
-        return t.ticketStatusName === "Asignado" || t.ticketStatusName === "En atención";
-      });
+    var TEAM_API = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + profileId;
+    Promise.all([
+      fetch(TEAM_API + "&ticketStatusName=Asignado", { headers: { accept: "application/json", authorization: "Bearer " + spToken } }).then(function(r) { return r.json(); }),
+      fetch(TEAM_API + "&ticketStatusName=En%20atenci%C3%B3n", { headers: { accept: "application/json", authorization: "Bearer " + spToken } }).then(function(r) { return r.json(); })
+    ]).then(function(results) {
+      var tickets = ((results[0].data || results[0]).content || []).concat((results[1].data || results[1]).content || []);
 
       var col = document.getElementById("sp-team-col-" + profileId);
       if (!col) return;

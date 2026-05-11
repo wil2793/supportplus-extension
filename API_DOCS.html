@@ -1,0 +1,933 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SupportPlus API - Documentación</title>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 40px 20px;
+        color: #333;
+        line-height: 1.6;
+      }
+      h1 {
+        color: #d94040;
+        border-bottom: 3px solid #d94040;
+        padding-bottom: 10px;
+      }
+      h2 {
+        color: #1976d2;
+        margin-top: 40px;
+        border-bottom: 1px solid #e0e0e0;
+        padding-bottom: 8px;
+      }
+      h3 {
+        color: #555;
+      }
+      code {
+        background: #f5f5f5;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 13px;
+      }
+      pre {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 16px;
+        border-radius: 8px;
+        overflow-x: auto;
+        font-size: 13px;
+      }
+      pre code {
+        background: none;
+        padding: 0;
+        color: inherit;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0;
+        font-size: 14px;
+      }
+      th {
+        background: #f5f5f5;
+        text-align: left;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+      }
+      td {
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+      }
+      tr:nth-child(even) {
+        background: #fafafa;
+      }
+      .endpoint {
+        background: #e3f2fd;
+        padding: 10px 16px;
+        border-radius: 6px;
+        font-family: monospace;
+        font-size: 14px;
+        margin: 8px 0;
+      }
+      .method {
+        font-weight: 700;
+        color: #fff;
+        padding: 3px 8px;
+        border-radius: 4px;
+        margin-right: 8px;
+      }
+      .get {
+        background: #2e7d32;
+      }
+      .post {
+        background: #1976d2;
+      }
+      .put {
+        background: #e65100;
+      }
+      .patch {
+        background: #7b1fa2;
+      }
+      hr {
+        border: none;
+        border-top: 1px solid #eee;
+        margin: 30px 0;
+      }
+      .info-box {
+        background: #fff3e0;
+        border-left: 4px solid #ff8f00;
+        padding: 12px 16px;
+        border-radius: 4px;
+        margin: 12px 0;
+        font-size: 14px;
+      }
+      @media print {
+        body {
+          padding: 20px;
+        }
+        pre {
+          font-size: 11px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>SupportPlus API - Documentación</h1>
+
+    <p>
+      <strong>Base URL:</strong> <code>https://macropayapi.supportplus.mx</code>
+    </p>
+
+    <div class="info-box">
+      <strong>Autenticación:</strong> Todas las peticiones requieren los
+      headers:<br />
+      <code>Authorization: Bearer {token}</code><br />
+      <code>Accept: application/json</code><br /><br />
+      El token se obtiene del <code>localStorage.getItem("token")</code> en la
+      sesión activa de <code>macropay.supportplus.mx</code>.
+    </div>
+
+    <hr />
+
+    <h2>1. Detalle de Ticket</h2>
+
+    <div class="endpoint">
+      <span class="method get">GET</span> /tickets/web/{ticketId}
+    </div>
+
+    <p>Obtiene la información completa de un ticket.</p>
+
+    <h3>Parámetros URL</h3>
+    <table>
+      <tr>
+        <th>Parámetro</th>
+        <th>Tipo</th>
+        <th>Descripción</th>
+      </tr>
+      <tr>
+        <td>ticketId</td>
+        <td>number</td>
+        <td>ID del ticket</td>
+      </tr>
+    </table>
+
+    <h3>Ejemplo de petición</h3>
+    <pre><code>GET /tickets/web/290646</code></pre>
+
+    <h3>Ejemplo de respuesta</h3>
+    <pre><code>{
+  "data": {
+    "id": 290646,
+    "uniqueCode": "26-SOL0289200",
+    "subject": "Repoblar información",
+    "description": "&lt;p&gt;Buen día: por este medio solicito...&lt;/p&gt;",
+    "createdAt": "2026-05-08T13:29:00",
+    "ticketStatus": {
+      "id": 1,
+      "name": "En espera",
+      "type": { "name": "En espera" }
+    },
+    "ticketHolder": {
+      "ticketHolderLog": {
+        "fullName": "William Israel Alpuche Jimenez",
+        "email": "william.alpuche@macropay.mx"
+      }
+    },
+    "ticketInfo": {
+      "fullName": "CESAR ABRAHAM SANCHEZ GOMEZ"
+    },
+    "incidentPriority": { "name": "Bajo" },
+    "incidentPriorityName": "Bajo",
+    "resolutionGroup": { "id": 19, "name": "Infraestructura DBA" },
+    "service": { "id": 965, "name": "DEV", "children": [] }
+  }
+}</code></pre>
+
+    <hr />
+
+    <h2>2. Reasignar Ticket</h2>
+
+    <div class="endpoint">
+      <span class="method put">PUT</span> /tickets/web/reassign/{ticketId}
+    </div>
+
+    <p>Reasigna un ticket a otro analista o grupo de resolución.</p>
+
+    <h3>Parámetros URL</h3>
+    <table>
+      <tr>
+        <th>Parámetro</th>
+        <th>Tipo</th>
+        <th>Descripción</th>
+      </tr>
+      <tr>
+        <td>ticketId</td>
+        <td>number</td>
+        <td>ID del ticket</td>
+      </tr>
+    </table>
+
+    <h3>Payload</h3>
+    <pre><code>{
+  "resolutionGroupId": 19,
+  "serviceId": null,
+  "responsibleProfileId": 294,
+  "resolutionGroup": {
+    "label": "Infraestructura DBA",
+    "value": 19
+  },
+  "ticketCommentRequest": {
+    "internal": false,
+    "content": "se revisa"
+  }
+}</code></pre>
+
+    <h3>Campos del payload</h3>
+    <table>
+      <tr>
+        <th>Campo</th>
+        <th>Tipo</th>
+        <th>Descripción</th>
+      </tr>
+      <tr>
+        <td>resolutionGroupId</td>
+        <td>number</td>
+        <td>
+          ID del grupo destino (19=DBA, 22=Aplicaciones, 53=Soporte Aplicativos)
+        </td>
+      </tr>
+      <tr>
+        <td>serviceId</td>
+        <td>number/null</td>
+        <td>ID del servicio (generalmente null)</td>
+      </tr>
+      <tr>
+        <td>responsibleProfileId</td>
+        <td>number/null</td>
+        <td>ID del perfil del analista destino</td>
+      </tr>
+      <tr>
+        <td>resolutionGroup</td>
+        <td>object</td>
+        <td>Label y value del grupo</td>
+      </tr>
+      <tr>
+        <td>ticketCommentRequest</td>
+        <td>object/null</td>
+        <td>Comentario opcional al reasignar</td>
+      </tr>
+    </table>
+
+    <h3>Ejemplo de respuesta</h3>
+    <pre><code>{
+  "success": true
+}</code></pre>
+
+    <hr />
+
+    <h2>3. Cerrar Ticket</h2>
+
+    <div class="endpoint">
+      <span class="method patch">PATCH</span>
+      /tickets/web/update-ticket-status-with-optional-comment/{ticketId}
+    </div>
+
+    <p>
+      Cambia el estatus de un ticket. Se usa para cerrar (nextTicketStatusId:
+      9).
+    </p>
+
+    <h3>Parámetros URL</h3>
+    <table>
+      <tr>
+        <th>Parámetro</th>
+        <th>Tipo</th>
+        <th>Descripción</th>
+      </tr>
+      <tr>
+        <td>ticketId</td>
+        <td>number</td>
+        <td>ID del ticket</td>
+      </tr>
+    </table>
+
+    <h3>Payload</h3>
+    <pre><code>{
+  "nextTicketStatusId": 9,
+  "ticketCommentRequest": null
+}</code></pre>
+
+    <h3>Campos del payload</h3>
+    <table>
+      <tr>
+        <th>Campo</th>
+        <th>Tipo</th>
+        <th>Descripción</th>
+      </tr>
+      <tr>
+        <td>nextTicketStatusId</td>
+        <td>number</td>
+        <td>ID del estatus destino (9 = Cerrado)</td>
+      </tr>
+      <tr>
+        <td>ticketCommentRequest</td>
+        <td>object/null</td>
+        <td>Comentario opcional</td>
+      </tr>
+    </table>
+
+    <h3>Ejemplo de respuesta</h3>
+    <pre><code>{
+  "success": true
+}</code></pre>
+
+    <hr />
+
+    <h2>4. Agregar Comentario</h2>
+
+    <div class="endpoint">
+      <span class="method post">POST</span> /tickets/web/comment/{ticketId}
+    </div>
+
+    <p>Agrega un comentario a un ticket.</p>
+
+    <h3>Parámetros URL</h3>
+    <table>
+      <tr>
+        <th>Parámetro</th>
+        <th>Tipo</th>
+        <th>Descripción</th>
+      </tr>
+      <tr>
+        <td>ticketId</td>
+        <td>number</td>
+        <td>ID del ticket</td>
+      </tr>
+    </table>
+
+    <h3>Payload</h3>
+    <pre><code>{
+  "content": "&lt;p&gt;se revisa&lt;/p&gt;",
+  "internal": false
+}</code></pre>
+
+    <h3>Campos del payload</h3>
+    <table>
+      <tr>
+        <th>Campo</th>
+        <th>Tipo</th>
+        <th>Descripción</th>
+      </tr>
+      <tr>
+        <td>content</td>
+        <td>string</td>
+        <td>Contenido HTML del comentario</td>
+      </tr>
+      <tr>
+        <td>internal</td>
+        <td>boolean</td>
+        <td>Si es comentario interno (no visible para el solicitante)</td>
+      </tr>
+    </table>
+
+    <h3>Ejemplo de respuesta</h3>
+    <pre><code>{
+  "success": true
+}</code></pre>
+
+    <hr />
+
+    <h2>5. Miembros de un Grupo de Resolución</h2>
+
+    <div class="endpoint">
+      <span class="method get">GET</span>
+      /tickets/web/active-profiles-by-resolution-group/{groupId}
+    </div>
+
+    <p>Obtiene los perfiles activos de un grupo de resolución.</p>
+
+    <h3>Parámetros URL</h3>
+    <table>
+      <tr>
+        <th>Parámetro</th>
+        <th>Tipo</th>
+        <th>Descripción</th>
+      </tr>
+      <tr>
+        <td>groupId</td>
+        <td>number</td>
+        <td>ID del grupo (19=DBA, 22=Aplicaciones)</td>
+      </tr>
+    </table>
+
+    <h3>Ejemplo de petición</h3>
+    <pre><code>GET /tickets/web/active-profiles-by-resolution-group/19</code></pre>
+
+    <h3>Ejemplo de respuesta</h3>
+    <pre><code>{
+  "data": [
+    { "profileId": 138, "profileFullName": "Rickey Oswaldo Ehuan Vargas" },
+    { "profileId": 141, "profileFullName": "Wille Hans Ditte Morales Sanchez" },
+    { "profileId": 144, "profileFullName": "Jorge Luis Balam Vargas" },
+    { "profileId": 146, "profileFullName": "Eduardo Emmanuel Ravell May" },
+    { "profileId": 148, "profileFullName": "Gamaliel Uriel Tzab Novelo" },
+    { "profileId": 190, "profileFullName": "Ariel Jesus Fernandez Mena" },
+    { "profileId": 294, "profileFullName": "William Israel Alpuche Jimenez" }
+  ]
+}</code></pre>
+
+    <hr />
+
+    <h2>6. Búsqueda por Nivel y Grupo de Resolución</h2>
+
+    <div class="endpoint">
+      <span class="method get">GET</span>
+      /tickets/search-by-level-and-resolution-groups
+    </div>
+
+    <p>Búsqueda de tickets con múltiples filtros. Respuesta paginada.</p>
+
+    <h3>Query Parameters</h3>
+    <table>
+      <tr>
+        <th>Parámetro</th>
+        <th>Tipo</th>
+        <th>Descripción</th>
+      </tr>
+      <tr>
+        <td>page</td>
+        <td>number</td>
+        <td>Página (0-indexed)</td>
+      </tr>
+      <tr>
+        <td>size</td>
+        <td>number</td>
+        <td>Cantidad por página</td>
+      </tr>
+      <tr>
+        <td>resolutionGroupId</td>
+        <td>number</td>
+        <td>Filtrar por grupo de resolución</td>
+      </tr>
+      <tr>
+        <td>ticketStatusName</td>
+        <td>string</td>
+        <td>Filtrar por estatus</td>
+      </tr>
+      <tr>
+        <td>responsibleProfileId</td>
+        <td>number</td>
+        <td>Filtrar por analista responsable</td>
+      </tr>
+      <tr>
+        <td>responsibleName</td>
+        <td>string</td>
+        <td>Filtrar por nombre del responsable (LIKE parcial)</td>
+      </tr>
+      <tr>
+        <td>requesterName</td>
+        <td>string</td>
+        <td>Filtrar por nombre del solicitante</td>
+      </tr>
+      <tr>
+        <td>uniqueCode</td>
+        <td>string</td>
+        <td>Filtrar por folio</td>
+      </tr>
+      <tr>
+        <td>reportTypeId</td>
+        <td>number</td>
+        <td>Tipo (5=Solicitud, 6=Incidente)</td>
+      </tr>
+      <tr>
+        <td>priorityId</td>
+        <td>number</td>
+        <td>Prioridad (6=Critico, 7=Alto, 8=Medio, 9=Bajo)</td>
+      </tr>
+      <tr>
+        <td>initDate</td>
+        <td>string</td>
+        <td>Fecha inicio (2026-05-01T00:00)</td>
+      </tr>
+      <tr>
+        <td>endDate</td>
+        <td>string</td>
+        <td>Fecha fin (2026-05-11T23:59)</td>
+      </tr>
+    </table>
+
+    <h3>Ejemplo de petición</h3>
+    <pre><code>GET /tickets/search-by-level-and-resolution-groups?resolutionGroupId=19&amp;ticketStatusName=En%20espera&amp;page=0&amp;size=50</code></pre>
+
+    <h3>Ejemplo de respuesta</h3>
+    <pre><code>{
+  "data": {
+    "content": [
+      {
+        "id": 290646,
+        "uniqueCode": "26-SOL0289200",
+        "subject": "Repoblar información",
+        "requesterName": "CESAR ABRAHAM SANCHEZ GOMEZ",
+        "responsibleName": "",
+        "resolutionGroupName": "Infraestructura DBA",
+        "ticketStatusName": "En espera",
+        "reportTypeName": "Solicitud",
+        "incidentPriorityName": "Bajo",
+        "createdAt": "2026-05-08T13:29:00",
+        "responsibleProfileId": null
+      }
+    ],
+    "totalElements": 5,
+    "totalPages": 1,
+    "number": 0,
+    "size": 50
+  }
+}</code></pre>
+
+    <hr />
+
+    <h2>7. Búsqueda General de Tickets</h2>
+
+    <div class="endpoint">
+      <span class="method get">GET</span> /tickets/search-all-tickets
+    </div>
+
+    <p>
+      Búsqueda general de tickets. Más rápida para filtros por
+      responsibleProfileId.
+    </p>
+
+    <h3>Query Parameters</h3>
+    <table>
+      <tr>
+        <th>Parámetro</th>
+        <th>Tipo</th>
+        <th>Descripción</th>
+      </tr>
+      <tr>
+        <td>page</td>
+        <td>number</td>
+        <td>Página (0-indexed)</td>
+      </tr>
+      <tr>
+        <td>size</td>
+        <td>number</td>
+        <td>Cantidad por página</td>
+      </tr>
+      <tr>
+        <td>resolutionGroupId</td>
+        <td>number</td>
+        <td>Filtrar por grupo</td>
+      </tr>
+      <tr>
+        <td>responsibleProfileId</td>
+        <td>number</td>
+        <td>Filtrar por analista</td>
+      </tr>
+      <tr>
+        <td>ticketStatusName</td>
+        <td>string</td>
+        <td>Filtrar por estatus</td>
+      </tr>
+      <tr>
+        <td>initDate</td>
+        <td>string</td>
+        <td>Fecha inicio</td>
+      </tr>
+      <tr>
+        <td>endDate</td>
+        <td>string</td>
+        <td>Fecha fin</td>
+      </tr>
+    </table>
+
+    <h3>Ejemplo de petición</h3>
+    <pre><code>GET /tickets/search-all-tickets?responsibleProfileId=294&amp;ticketStatusName=Asignado</code></pre>
+
+    <h3>Ejemplo de respuesta</h3>
+    <pre><code>{
+  "data": {
+    "content": [
+      {
+        "id": 289500,
+        "uniqueCode": "26-INC0288100",
+        "subject": "Error en base de datos",
+        "requesterName": "JUAN PEREZ",
+        "responsibleName": "William Israel Alpuche Jimenez",
+        "ticketStatusName": "Asignado",
+        "incidentPriorityName": "Medio",
+        "createdAt": "2026-05-05T10:15:00"
+      }
+    ],
+    "totalElements": 3,
+    "totalPages": 1,
+    "number": 0,
+    "size": 20
+  }
+}</code></pre>
+
+    <hr />
+
+    <h2>8. Tickets Asignados al Usuario Logueado</h2>
+
+    <div class="endpoint">
+      <span class="method get">GET</span>
+      /tickets/search-by-user-current-responsible
+    </div>
+
+    <p>
+      Trae los tickets donde el usuario logueado es el responsable actual. Usa
+      la sesión (token) para identificar al usuario.
+    </p>
+
+    <h3>Query Parameters</h3>
+    <table>
+      <tr>
+        <th>Parámetro</th>
+        <th>Tipo</th>
+        <th>Descripción</th>
+      </tr>
+      <tr>
+        <td>page</td>
+        <td>number</td>
+        <td>Página (0-indexed)</td>
+      </tr>
+      <tr>
+        <td>size</td>
+        <td>number</td>
+        <td>Cantidad por página</td>
+      </tr>
+      <tr>
+        <td>ticketStatusName</td>
+        <td>string</td>
+        <td>Filtrar por estatus (opcional)</td>
+      </tr>
+    </table>
+
+    <h3>Ejemplo de petición</h3>
+    <pre><code>GET /tickets/search-by-user-current-responsible?page=0&amp;size=25&amp;ticketStatusName=Asignado</code></pre>
+
+    <h3>Ejemplo de respuesta</h3>
+    <pre><code>{
+  "data": {
+    "content": [
+      {
+        "id": 289500,
+        "uniqueCode": "26-INC0288100",
+        "subject": "Error en base de datos",
+        "requesterName": "JUAN PEREZ",
+        "responsibleName": "William Israel Alpuche Jimenez",
+        "ticketStatusName": "Asignado",
+        "createdAt": "2026-05-05T10:15:00"
+      }
+    ],
+    "totalElements": 2,
+    "totalPages": 1
+  }
+}</code></pre>
+
+    <hr />
+
+    <h2>9. Tickets Creados por el Usuario Logueado</h2>
+
+    <div class="endpoint">
+      <span class="method get">GET</span> /tickets/search-by-user-requester
+    </div>
+
+    <p>
+      Trae los tickets donde el usuario logueado es el solicitante. Usa la
+      sesión (token).
+    </p>
+
+    <h3>Query Parameters</h3>
+    <table>
+      <tr>
+        <th>Parámetro</th>
+        <th>Tipo</th>
+        <th>Descripción</th>
+      </tr>
+      <tr>
+        <td>page</td>
+        <td>number</td>
+        <td>Página (0-indexed)</td>
+      </tr>
+      <tr>
+        <td>size</td>
+        <td>number</td>
+        <td>Cantidad por página</td>
+      </tr>
+    </table>
+
+    <h3>Ejemplo de petición</h3>
+    <pre><code>GET /tickets/search-by-user-requester?page=0&amp;size=25</code></pre>
+
+    <h3>Ejemplo de respuesta</h3>
+    <pre><code>{
+  "data": {
+    "content": [
+      {
+        "id": 285000,
+        "uniqueCode": "26-SOL0284000",
+        "subject": "Solicitud de acceso",
+        "requesterName": "William Israel Alpuche Jimenez",
+        "responsibleName": "Jorge Luis Balam Vargas",
+        "ticketStatusName": "Cerrado",
+        "createdAt": "2026-04-20T09:00:00"
+      }
+    ],
+    "totalElements": 10,
+    "totalPages": 1
+  }
+}</code></pre>
+
+    <hr />
+
+    <h2>10. Agregar Participante (IAMcitos)</h2>
+
+    <div class="endpoint">
+      <span class="method post">POST</span>
+      /ticket-participants/assign-visitor-participant
+    </div>
+
+    <p>Agrega un usuario como participante/visitante a un ticket.</p>
+
+    <h3>Payload</h3>
+    <pre><code>{
+  "profileId": 296,
+  "ticketId": 290646,
+  "isParticipant": false
+}</code></pre>
+
+    <h3>Campos del payload</h3>
+    <table>
+      <tr>
+        <th>Campo</th>
+        <th>Tipo</th>
+        <th>Descripción</th>
+      </tr>
+      <tr>
+        <td>profileId</td>
+        <td>number</td>
+        <td>ID del perfil a agregar</td>
+      </tr>
+      <tr>
+        <td>ticketId</td>
+        <td>number</td>
+        <td>ID del ticket</td>
+      </tr>
+      <tr>
+        <td>isParticipant</td>
+        <td>boolean</td>
+        <td>Si es participante activo o visitante</td>
+      </tr>
+    </table>
+
+    <h3>Perfiles IAM conocidos</h3>
+    <table>
+      <tr>
+        <th>ID</th>
+        <th>Nombre</th>
+      </tr>
+      <tr>
+        <td>296</td>
+        <td>Carlos Alberto Lopez Mata</td>
+      </tr>
+      <tr>
+        <td>126</td>
+        <td>Crhistian Uziel Sanchez Alvarez</td>
+      </tr>
+      <tr>
+        <td>128</td>
+        <td>Leyver Adair Vasquez Velasco</td>
+      </tr>
+    </table>
+
+    <h3>Ejemplo de respuesta</h3>
+    <pre><code>{
+  "success": true
+}</code></pre>
+
+    <hr />
+
+    <h2>Grupos de Resolución Conocidos</h2>
+    <table>
+      <tr>
+        <th>ID</th>
+        <th>Nombre</th>
+      </tr>
+      <tr>
+        <td>19</td>
+        <td>Infraestructura DBA</td>
+      </tr>
+      <tr>
+        <td>22</td>
+        <td>Aplicaciones - Liberación e Implementación</td>
+      </tr>
+      <tr>
+        <td>53</td>
+        <td>Soporte Aplicativos y Sistemas (general)</td>
+      </tr>
+    </table>
+
+    <hr />
+
+    <h2>Estatus de Tickets</h2>
+    <table>
+      <tr>
+        <th>Estatus</th>
+        <th>Descripción</th>
+      </tr>
+      <tr>
+        <td>En espera</td>
+        <td>Sin asignar, pendiente de tomar</td>
+      </tr>
+      <tr>
+        <td>Asignado</td>
+        <td>Asignado a un analista</td>
+      </tr>
+      <tr>
+        <td>En atención</td>
+        <td>En proceso (se trata igual que Asignado)</td>
+      </tr>
+      <tr>
+        <td>En validación</td>
+        <td>Pendiente de validación</td>
+      </tr>
+      <tr>
+        <td>Por confirmar</td>
+        <td>Esperando confirmación</td>
+      </tr>
+      <tr>
+        <td>Por ejecutar</td>
+        <td>Pendiente de ejecución</td>
+      </tr>
+      <tr>
+        <td>Por revisar</td>
+        <td>Pendiente de revisión</td>
+      </tr>
+      <tr>
+        <td>En aplicaciones</td>
+        <td>Reasignado a aplicaciones</td>
+      </tr>
+      <tr>
+        <td>Cerrado</td>
+        <td>Ticket finalizado</td>
+      </tr>
+      <tr>
+        <td>Rechazado</td>
+        <td>Ticket rechazado</td>
+      </tr>
+      <tr>
+        <td>Cancelado</td>
+        <td>Ticket cancelado</td>
+      </tr>
+      <tr>
+        <td>Reabierto</td>
+        <td>Ticket reabierto</td>
+      </tr>
+    </table>
+
+    <hr />
+
+    <h2>Perfiles DBA</h2>
+    <table>
+      <tr>
+        <th>ID</th>
+        <th>Nombre</th>
+      </tr>
+      <tr>
+        <td>138</td>
+        <td>Rickey Oswaldo Ehuan Vargas</td>
+      </tr>
+      <tr>
+        <td>141</td>
+        <td>Wille Hans Ditte Morales Sanchez</td>
+      </tr>
+      <tr>
+        <td>144</td>
+        <td>Jorge Luis Balam Vargas</td>
+      </tr>
+      <tr>
+        <td>146</td>
+        <td>Eduardo Emmanuel Ravell May</td>
+      </tr>
+      <tr>
+        <td>148</td>
+        <td>Gamaliel Uriel Tzab Novelo</td>
+      </tr>
+      <tr>
+        <td>190</td>
+        <td>Ariel Jesus Fernandez Mena</td>
+      </tr>
+      <tr>
+        <td>294</td>
+        <td>William Israel Alpuche Jimenez</td>
+      </tr>
+    </table>
+
+    <h2>Perfiles Aplicaciones - Liberación e Implementación</h2>
+    <table>
+      <tr>
+        <th>ID</th>
+        <th>Nombre</th>
+      </tr>
+      <tr>
+        <td>135</td>
+        <td>Omar Francisco Canul Mutul</td>
+      </tr>
+      <tr>
+        <td>187</td>
+        <td>Eduardo Emanuel Herrera Pech</td>
+      </tr>
+      <tr>
+        <td>303</td>
+        <td>Aaron Isaac Dorantes Ku</td>
+      </tr>
+    </table>
+  </body>
+</html>
