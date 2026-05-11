@@ -7,6 +7,8 @@ chrome.storage.local.get(["mondayToken", "mondayBoardId", "mondayBoardName", "te
   }
   if (mondayToken) {
     $("mondayToken").value = mondayToken;
+    // Auto-load boards on popup open
+    loadBoards(mondayToken);
   }
   if (mondayBoardId) {
     $("mondayBoardId").value = mondayBoardId;
@@ -84,6 +86,12 @@ $("loadBoards").addEventListener("click", () => {
   const token = $("mondayToken").value.trim();
   if (!token) return ($("mondayStatus").textContent = "⚠️ Ingresa un token primero");
   loadBoards(token);
+});
+
+// Also load when token input changes
+$("mondayToken").addEventListener("change", () => {
+  const token = $("mondayToken").value.trim();
+  if (token) loadBoards(token);
 });
 
 // --- Save config ---
