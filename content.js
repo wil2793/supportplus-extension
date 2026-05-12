@@ -2566,17 +2566,13 @@
 
         var allTickets = [];
         var page = 0;
-        while (true) {
-          var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + groupId + "&page=" + page + "&size=100";
-          url += "&initDate=" + fromDate + "&endDate=" + toDate;
-          var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
-          if (!res.ok) break;
+        var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + groupId + "&page=0&size=100";
+        url += "&initDate=" + fromDate + "&endDate=" + toDate;
+        var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+        if (res.ok) {
           var json = await res.json();
           var data = json.data || json;
-          var tickets = data.content || [];
-          allTickets = allTickets.concat(tickets);
-          if (page >= (data.totalPages || 1) - 1) break;
-          page++;
+          allTickets = data.content || [];
         }
 
         if (allTickets.length > 0) {
