@@ -2547,8 +2547,6 @@
         '<label style="font-size:12px;">Hasta:</label>' +
         '<input id="sp-report-to" type="datetime-local" value="' + defaultTo + '" style="padding:5px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;">' +
       '</div>' +
-      '<div id="sp-report-status" style="font-size:13px;margin-bottom:12px;min-height:20px;color:#555;"></div>' +
-      '<div id="sp-report-progress" style="height:8px;background:#eee;border-radius:4px;margin-bottom:12px;display:none;"><div id="sp-report-bar" style="height:100%;background:#1565C0;border-radius:4px;width:0%;transition:width .3s;"></div></div>' +
       '<div style="display:flex;gap:8px;">' +
         '<button id="sp-report-start" style="flex:1;padding:10px;border:none;border-radius:6px;background:#1565C0;color:#fff;cursor:pointer;font-size:14px;">📥 Generar</button>' +
         '<button id="sp-report-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
@@ -2561,20 +2559,14 @@
     document.getElementById("sp-report-start").addEventListener("click", async function() {
       var fromDate = document.getElementById("sp-report-from").value;
       var toDate = document.getElementById("sp-report-to").value;
-      var status = document.getElementById("sp-report-status");
-      var progressDiv = document.getElementById("sp-report-progress");
-      var bar = document.getElementById("sp-report-bar");
-      var startBtn = document.getElementById("sp-report-start");
-      var cancelBtn = document.getElementById("sp-report-cancel");
 
-      startBtn.disabled = true;
-      startBtn.textContent = "⏳ Generando...";
-      cancelBtn.style.display = "none";
-      progressDiv.style.display = "block";
-      status.textContent = "Obteniendo grupos de resolución...";
+      // Close modal immediately
+      overlay.remove();
 
       var spToken = getToken();
-      if (!spToken) { status.textContent = "❌ No hay token"; startBtn.disabled = false; startBtn.textContent = "📥 Generar"; cancelBtn.style.display = ""; return; }
+      if (!spToken) { showErrorToast("No hay token"); return; }
+
+      showLoadingToast("Obteniendo grupos de resolución...");
 
       try {
         // Step 1: Get all resolution groups
@@ -2586,18 +2578,14 @@
         var groups = groupsJson.data || groupsJson;
         if (!Array.isArray(groups)) groups = Object.values(groups);
 
-        status.textContent = groups.length + " grupos encontrados. Descargando tickets...";
-
         // Step 2: For each group, fetch all tickets in date range
         var workbookData = {};
-        var completed = 0;
 
         for (var i = 0; i < groups.length; i++) {
           var group = groups[i];
           var groupName = group.name || group.label || ("Grupo " + (group.id || i));
           var groupId = group.id || group.value;
-          status.textContent = "(" + (i + 1) + "/" + groups.length + ") " + groupName + "...";
-          bar.style.width = Math.round(((i + 1) / groups.length) * 100) + "%";
+          showLoadingToast("(" + (i + 1) + "/" + groups.length + ") " + groupName);
 
           var allTickets = [];
           var page = 0;
@@ -2618,10 +2606,9 @@
           if (allTickets.length > 0) {
             workbookData[groupName] = allTickets;
           }
-          completed++;
         }
 
-        status.textContent = "Generando archivo Excel...";
+        showLoadingToast("Generando archivo Excel...");
 
         // Step 3: Load SheetJS and generate Excel
         await loadSheetJS();
@@ -2630,10 +2617,7 @@
         var sheetNames = Object.keys(workbookData);
 
         if (!sheetNames.length) {
-          status.textContent = "⚠️ No se encontraron tickets en el rango seleccionado.";
-          startBtn.disabled = false;
-          startBtn.textContent = "📥 Generar";
-          cancelBtn.style.display = "";
+          showErrorToast("No se encontraron tickets en el rango seleccionado.");
           return;
         }
 
@@ -2661,17 +2645,11 @@
         var fileName = "Reporte_SupportPlus_" + fromDate.substring(0, 10) + "_a_" + toDate.substring(0, 10) + ".xlsx";
         XLSX.writeFile(wb, fileName);
 
-        status.textContent = "✅ Reporte generado: " + sheetNames.length + " hojas, " + Object.values(workbookData).reduce(function(sum, arr) { return sum + arr.length; }, 0) + " tickets totales.";
-        startBtn.textContent = "✅ Listo";
-        startBtn.style.background = "#2E7D32";
-        cancelBtn.style.display = "";
-        cancelBtn.textContent = "Cerrar";
+        var totalTickets = Object.values(workbookData).reduce(function(sum, arr) { return sum + arr.length; }, 0);
+        showSuccessToast("📥 Reporte listo: " + sheetNames.length + " hojas, " + totalTickets + " tickets");
 
       } catch (err) {
-        status.textContent = "❌ Error: " + err.message;
-        startBtn.disabled = false;
-        startBtn.textContent = "📥 Generar";
-        cancelBtn.style.display = "";
+        showErrorToast("Error: " + err.message);
       }
     });
   }
