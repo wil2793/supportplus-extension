@@ -2513,6 +2513,7 @@
 
   // --- Report Excel ---
   const REPORT_BTN_ID = "sp-report-btn";
+  var reportGenerating = false;
 
   function injectReportButton() {
     if (document.getElementById(REPORT_BTN_ID)) return;
@@ -2523,135 +2524,117 @@
     btn.id = REPORT_BTN_ID;
     btn.textContent = "📥 Reporte Excel";
     btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#1565C0;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-    btn.addEventListener("click", showReportModal);
+    btn.addEventListener("click", handleReportClick);
     dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
   }
 
-  function showReportModal() {
-    var existing = document.getElementById("sp-report-modal");
-    if (existing) existing.remove();
+  async function handleReportClick() {
+    if (reportGenerating) return;
+    reportGenerating = true;
+    var btn = document.getElementById(REPORT_BTN_ID);
+    if (!btn) return;
 
     var now = new Date();
-    var defaultFrom = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-01T00:00";
-    var defaultTo = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + "T23:59";
+    var fromDate = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-01T00:00";
+    var toDate = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + "T23:59";
 
-    var overlay = document.createElement("div");
-    overlay.id = "sp-report-modal";
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:500px;width:90%;font-family:system-ui;">' +
-      '<h3 style="margin:0 0 16px;">📥 Generar Reporte Excel</h3>' +
-      '<p style="font-size:13px;color:#555;margin:0 0 12px;">Se generará un Excel con una hoja por cada grupo de resolución, incluyendo todos los tickets en el rango de fechas seleccionado.</p>' +
-      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">' +
-        '<label style="font-size:12px;">Desde:</label>' +
-        '<input id="sp-report-from" type="datetime-local" value="' + defaultFrom + '" style="padding:5px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;">' +
-        '<label style="font-size:12px;">Hasta:</label>' +
-        '<input id="sp-report-to" type="datetime-local" value="' + defaultTo + '" style="padding:5px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;">' +
-      '</div>' +
-      '<div style="display:flex;gap:8px;">' +
-        '<button id="sp-report-start" style="flex:1;padding:10px;border:none;border-radius:6px;background:#1565C0;color:#fff;cursor:pointer;font-size:14px;">📥 Generar</button>' +
-        '<button id="sp-report-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
-      '</div></div>';
-    document.body.appendChild(overlay);
+    btn.disabled = true;
+    btn.style.background = "#999";
+    btn.textContent = "⏳ Obteniendo grupos...";
 
-    document.getElementById("sp-report-cancel").addEventListener("click", function() { overlay.remove(); });
-    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+    var spToken = getToken();
+    if (!spToken) { showErrorToast("No hay token"); btn.textContent = "📥 Reporte Excel"; btn.style.background = "#1565C0"; btn.disabled = false; reportGenerating = false; return; }
 
-    document.getElementById("sp-report-start").addEventListener("click", async function() {
-      var fromDate = document.getElementById("sp-report-from").value;
-      var toDate = document.getElementById("sp-report-to").value;
+    try {
+      // Step 1: Get all resolution groups
+      var groupsRes = await fetch("https://macropayapi.supportplus.mx/resolution-groups/actives-by-attention-channel-id/1", {
+        headers: { accept: "application/json", authorization: "Bearer " + spToken }
+      });
+      if (!groupsRes.ok) throw new Error("HTTP " + groupsRes.status);
+      var groupsJson = await groupsRes.json();
+      var groups = groupsJson.data || groupsJson;
+      if (!Array.isArray(groups)) groups = Object.values(groups);
 
-      // Close modal immediately
-      overlay.remove();
+      // Step 2: For each group, fetch all tickets in date range
+      var workbookData = {};
 
-      var spToken = getToken();
-      if (!spToken) { showErrorToast("No hay token"); return; }
+      for (var i = 0; i < groups.length; i++) {
+        var group = groups[i];
+        var groupName = group.name || group.label || ("Grupo " + (group.id || i));
+        var groupId = group.id || group.value;
+        btn.textContent = "⏳ (" + (i + 1) + "/" + groups.length + ") " + groupName.substring(0, 20);
 
-      showLoadingToast("Obteniendo grupos de resolución...");
-
-      try {
-        // Step 1: Get all resolution groups
-        var groupsRes = await fetch("https://macropayapi.supportplus.mx/resolution-groups/actives-by-attention-channel-id/1", {
-          headers: { accept: "application/json", authorization: "Bearer " + spToken }
-        });
-        if (!groupsRes.ok) throw new Error("Error al obtener grupos: HTTP " + groupsRes.status);
-        var groupsJson = await groupsRes.json();
-        var groups = groupsJson.data || groupsJson;
-        if (!Array.isArray(groups)) groups = Object.values(groups);
-
-        // Step 2: For each group, fetch all tickets in date range
-        var workbookData = {};
-
-        for (var i = 0; i < groups.length; i++) {
-          var group = groups[i];
-          var groupName = group.name || group.label || ("Grupo " + (group.id || i));
-          var groupId = group.id || group.value;
-          showLoadingToast("(" + (i + 1) + "/" + groups.length + ") " + groupName);
-
-          var allTickets = [];
-          var page = 0;
-          while (true) {
-            var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + groupId + "&page=" + page + "&size=100";
-            if (fromDate) url += "&initDate=" + fromDate;
-            if (toDate) url += "&endDate=" + toDate;
-            var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
-            if (!res.ok) break;
-            var json = await res.json();
-            var data = json.data || json;
-            var tickets = data.content || [];
-            allTickets = allTickets.concat(tickets);
-            if (page >= (data.totalPages || 1) - 1) break;
-            page++;
-          }
-
-          if (allTickets.length > 0) {
-            workbookData[groupName] = allTickets;
-          }
+        var allTickets = [];
+        var page = 0;
+        while (true) {
+          var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + groupId + "&page=" + page + "&size=100";
+          url += "&initDate=" + fromDate + "&endDate=" + toDate;
+          var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+          if (!res.ok) break;
+          var json = await res.json();
+          var data = json.data || json;
+          var tickets = data.content || [];
+          allTickets = allTickets.concat(tickets);
+          if (page >= (data.totalPages || 1) - 1) break;
+          page++;
         }
 
-        showLoadingToast("Generando archivo Excel...");
-
-        // Step 3: Load SheetJS and generate Excel
-        await loadSheetJS();
-
-        var wb = XLSX.utils.book_new();
-        var sheetNames = Object.keys(workbookData);
-
-        if (!sheetNames.length) {
-          showErrorToast("No se encontraron tickets en el rango seleccionado.");
-          return;
+        if (allTickets.length > 0) {
+          workbookData[groupName] = allTickets;
         }
-
-        sheetNames.forEach(function(name) {
-          var tickets = workbookData[name];
-          var rows = tickets.map(function(t) {
-            return {
-              "Folio": t.uniqueCode || "",
-              "Asunto": t.subject || "",
-              "Solicitante": t.requesterName || "",
-              "Responsable": t.responsibleName || "",
-              "Estado": t.ticketStatusName || "",
-              "Prioridad": t.incidentPriorityName || "",
-              "Tipo": t.reportTypeName || "",
-              "Fecha Creación": t.createdAt ? t.createdAt.replace("T", " ").substring(0, 16) : "",
-              "Descripción": (t.description || "").replace(/<[^>]*>/g, "").substring(0, 500)
-            };
-          });
-          // Sheet name max 31 chars
-          var sheetName = name.substring(0, 31);
-          var ws = XLSX.utils.json_to_sheet(rows);
-          XLSX.utils.book_append_sheet(wb, ws, sheetName);
-        });
-
-        var fileName = "Reporte_SupportPlus_" + fromDate.substring(0, 10) + "_a_" + toDate.substring(0, 10) + ".xlsx";
-        XLSX.writeFile(wb, fileName);
-
-        var totalTickets = Object.values(workbookData).reduce(function(sum, arr) { return sum + arr.length; }, 0);
-        showSuccessToast("📥 Reporte listo: " + sheetNames.length + " hojas, " + totalTickets + " tickets");
-
-      } catch (err) {
-        showErrorToast("Error: " + err.message);
       }
-    });
+
+      btn.textContent = "⏳ Generando Excel...";
+
+      // Step 3: Load SheetJS and generate Excel
+      await loadSheetJS();
+
+      var wb = XLSX.utils.book_new();
+      var sheetNames = Object.keys(workbookData);
+
+      if (!sheetNames.length) {
+        showErrorToast("No se encontraron tickets en el rango seleccionado.");
+        btn.textContent = "📥 Reporte Excel";
+        btn.style.background = "#1565C0";
+        btn.disabled = false;
+        reportGenerating = false;
+        return;
+      }
+
+      sheetNames.forEach(function(name) {
+        var tickets = workbookData[name];
+        var rows = tickets.map(function(t) {
+          return {
+            "Folio": t.uniqueCode || "",
+            "Asunto": t.subject || "",
+            "Solicitante": t.requesterName || "",
+            "Responsable": t.responsibleName || "",
+            "Estado": t.ticketStatusName || "",
+            "Prioridad": t.incidentPriorityName || "",
+            "Tipo": t.reportTypeName || "",
+            "Fecha Creación": t.createdAt ? t.createdAt.replace("T", " ").substring(0, 16) : "",
+            "Descripción": (t.description || "").replace(/<[^>]*>/g, "").substring(0, 500)
+          };
+        });
+        var sheetName = name.substring(0, 31);
+        var ws = XLSX.utils.json_to_sheet(rows);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      });
+
+      var fileName = "Reporte_SupportPlus_" + fromDate.substring(0, 10) + "_a_" + toDate.substring(0, 10) + ".xlsx";
+      XLSX.writeFile(wb, fileName);
+
+      var totalTickets = Object.values(workbookData).reduce(function(sum, arr) { return sum + arr.length; }, 0);
+      showSuccessToast("📥 Reporte listo: " + sheetNames.length + " hojas, " + totalTickets + " tickets");
+
+    } catch (err) {
+      showErrorToast("Error: " + err.message);
+    }
+
+    btn.textContent = "📥 Reporte Excel";
+    btn.style.background = "#1565C0";
+    btn.disabled = false;
+    reportGenerating = false;
   }
 
   var sheetJSLoaded = false;
