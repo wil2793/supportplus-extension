@@ -348,6 +348,7 @@
     let isWaiting = false;
     let isAssigned = false;
     let holderName = "";
+    let ticketGroupId = null;
     try {
       const res = await fetch(SP_API + "/" + ticketId, {
         headers: { accept: "application/json", authorization: "Bearer " + spToken },
@@ -360,7 +361,8 @@
       isWaiting = ticket.ticketStatus?.name === "En espera";
       isAssigned = ticket.ticketStatus?.name === "Asignado" || ticket.ticketStatus?.name === "En atención";
       holderName = ticket.ticketHolder?.ticketHolderLog?.fullName || "";
-      console.log("[SP Monday] Detail ticket status:", ticket.ticketStatus?.name, "| type:", ticket.ticketStatus?.type?.name, "| closed:", isClosed, "| waiting:", isWaiting, "| assigned:", isAssigned, "| holder:", holderName);
+      ticketGroupId = ticket.resolutionGroup?.id || null;
+      console.log("[SP Monday] Detail ticket status:", ticket.ticketStatus?.name, "| type:", ticket.ticketStatus?.type?.name, "| closed:", isClosed, "| waiting:", isWaiting, "| assigned:", isAssigned, "| holder:", holderName, "| groupId:", ticketGroupId);
     } catch (e) { return; }
 
     const synced = await ensureSyncStarted();
@@ -406,6 +408,8 @@
       const chip2 = container.querySelector(".MuiChip-root");
       container.insertBefore(btn, chip2);
     } else if (isWaiting) {
+      // Don't show take button for Aplicaciones group
+      if (ticketGroupId !== 22) {
       const takeBtn = document.createElement("button");
       takeBtn.id = DETAIL_BTN_ID;
       takeBtn.textContent = "🤚 Tomar ticket";
@@ -420,7 +424,10 @@
       });
       const chip3 = container.querySelector(".MuiChip-root");
       container.insertBefore(takeBtn, chip3);
+      }
     } else if (isAssigned) {
+      // Don't show steal/close buttons for Aplicaciones group
+      if (ticketGroupId !== 22) {
       const myName = getLoggedUserName();
       const chip4 = container.querySelector(".MuiChip-root");
       if (holderName && myName && holderName !== myName) {
@@ -456,6 +463,7 @@
           closeBtn.disabled = false;
         });
         container.insertBefore(closeBtn, chip4);
+      }
       }
     }
     } finally { detailLoading = false; }
