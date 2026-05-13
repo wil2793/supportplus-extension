@@ -3177,6 +3177,20 @@
     const holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
     const holderName = ticket.ticketHolder?.ticketHolderLog?.fullName || "Sin asignar";
 
+    // Determine if ticket is from another area - show person selector
+    const ticketGroupId = ticket.resolutionGroup?.id || null;
+    const myAreaConfig = getTeamConfig();
+    const isOtherArea = ticketGroupId && ticketGroupId !== myAreaConfig.resolutionGroupId;
+    var personSelectHTML = "";
+    if (isOtherArea) {
+      var personOpts = '<option value="">-- Mantener: ' + holderName + ' --</option>';
+      myAreaConfig.profiles.forEach(function(p) {
+        personOpts += '<option value="' + p.profileId + '">' + p.profileFullName + '</option>';
+      });
+      personSelectHTML = '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Persona asignada en Monday</label>' +
+        '<select id="sp-person-select" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:16px;font-size:13px;">' + personOpts + '</select>';
+    }
+
     // Resolve board by ticket createdAt
     const createdDate = new Date(ticket.createdAt);
 
@@ -3193,6 +3207,7 @@
           <div><b>Persona:</b> 👤 ${holderName} ${holderEmail ? `(${holderEmail})` : ""}</div>
           <div style="margin-top:4px;max-height:60px;overflow:auto;"><b>Desc:</b> ${desc.substring(0, 200)}${desc.length > 200 ? "..." : ""}</div>
         </div>
+        ${personSelectHTML}
         <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Grupo</label>
         <select id="sp-group-select" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:16px;font-size:13px;">
         </select>
@@ -3274,13 +3289,39 @@
       const priorityIndex = PRIORITY_MAP[spPriority] ?? PRIORITY_MAP["medio"];
 
       let personValue = {};
-      const holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
-      if (holderEmail) {
-        try {
-          const users = await getMondayUsers(mondayToken);
-          const userId = users[holderEmail.toLowerCase()];
-          if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
-        } catch (e) {}
+      // If a person was selected from the dropdown (other area ticket), use their email
+      var selectedPersonId = document.getElementById("sp-person-select")?.value || "";
+      if (selectedPersonId) {
+        // Find the profile name and try to match email in Monday
+        var selectedProfile = null;
+        Object.values(TEAM_AREAS).forEach(function(area) {
+          area.profiles.forEach(function(p) { if (String(p.profileId) === selectedPersonId) selectedProfile = p; });
+        });
+        if (selectedProfile) {
+          try {
+            const users = await getMondayUsers(mondayToken);
+            // Try to find by partial name match in Monday users
+            var foundUserId = null;
+            var nameParts = selectedProfile.profileFullName.toLowerCase().split(" ");
+            Object.entries(users).forEach(function(entry) {
+              if (foundUserId) return;
+              var email = entry[0];
+              if (nameParts.some(function(part) { return part.length > 3 && email.includes(part); })) {
+                foundUserId = entry[1];
+              }
+            });
+            if (foundUserId) personValue = { personsAndTeams: [{ id: parseInt(foundUserId), kind: "person" }] };
+          } catch (e) {}
+        }
+      } else {
+        const holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
+        if (holderEmail) {
+          try {
+            const users = await getMondayUsers(mondayToken);
+            const userId = users[holderEmail.toLowerCase()];
+            if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
+          } catch (e) {}
+        }
       }
 
       const columnValues = JSON.stringify({
