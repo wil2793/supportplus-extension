@@ -392,10 +392,11 @@
       const chip = container.querySelector(".MuiChip-root");
       container.insertBefore(badge, chip);
     } else if (isClosed) {
-      // Show migrate button only if ticket belongs to my area (or gerente)
+      // Show migrate button if ticket belongs to my area, the other area, or gerente
       var myArea = getTeamConfig();
-      var ticketBelongsToMe = !ticketGroupId || ticketGroupId === myArea.resolutionGroupId || isGerente();
-      if (ticketBelongsToMe) {
+      var isOtherKnownArea = Object.values(TEAM_AREAS).some(function(a) { return a.resolutionGroupId === ticketGroupId; });
+      var canShowMigrate = !ticketGroupId || ticketGroupId === myArea.resolutionGroupId || isOtherKnownArea || isGerente();
+      if (canShowMigrate) {
       const btn = document.createElement("button");
       btn.id = DETAIL_BTN_ID;
       btn.textContent = "🙂 Migrar a Monday";
