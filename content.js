@@ -392,7 +392,10 @@
       const chip = container.querySelector(".MuiChip-root");
       container.insertBefore(badge, chip);
     } else if (isClosed) {
-      // Show migrate button
+      // Show migrate button only if ticket belongs to my area (or gerente)
+      var myArea = getTeamConfig();
+      var ticketBelongsToMe = !ticketGroupId || ticketGroupId === myArea.resolutionGroupId || isGerente();
+      if (ticketBelongsToMe) {
       const btn = document.createElement("button");
       btn.id = DETAIL_BTN_ID;
       btn.textContent = "🙂 Migrar a Monday";
@@ -407,9 +410,12 @@
       });
       const chip2 = container.querySelector(".MuiChip-root");
       container.insertBefore(btn, chip2);
+      }
     } else if (isWaiting) {
-      // Don't show take button for Aplicaciones group
-      if (ticketGroupId !== 22) {
+      // Show take button only if ticket belongs to my area (or gerente)
+      var myArea2 = getTeamConfig();
+      var ticketBelongsToMe2 = !ticketGroupId || ticketGroupId === myArea2.resolutionGroupId || isGerente();
+      if (ticketBelongsToMe2) {
       const takeBtn = document.createElement("button");
       takeBtn.id = DETAIL_BTN_ID;
       takeBtn.textContent = "🤚 Tomar ticket";
@@ -426,8 +432,10 @@
       container.insertBefore(takeBtn, chip3);
       }
     } else if (isAssigned) {
-      // Don't show steal/close buttons for Aplicaciones group
-      if (ticketGroupId !== 22) {
+      // Show steal/close buttons only if ticket belongs to my area (or gerente)
+      var myArea3 = getTeamConfig();
+      var ticketBelongsToMe3 = !ticketGroupId || ticketGroupId === myArea3.resolutionGroupId || isGerente();
+      if (ticketBelongsToMe3) {
       const myName = getLoggedUserName();
       const chip4 = container.querySelector(".MuiChip-root");
       if (holderName && myName && holderName !== myName) {
@@ -3082,12 +3090,16 @@
       }
 
       // Inject take button for "En espera" tickets
-      if (statusText === "En espera" && !row.querySelector("." + TAKE_BTN_CLASS)) {
+      var rowGroupCell = row.querySelector('[data-field="resolutionGroupName"]');
+      var rowGroupName = rowGroupCell ? rowGroupCell.textContent.trim() : "";
+      var rowBelongsToMe = !rowGroupName || rowGroupName === getTeamConfig().resolutionGroupLabel || isGerente();
+
+      if (statusText === "En espera" && !row.querySelector("." + TAKE_BTN_CLASS) && rowBelongsToMe) {
         container.appendChild(createTakeButton(ticketId));
       }
 
       // Inject steal button for "Asignado"/"En atención" tickets not assigned to me
-      if ((statusText === "Asignado" || statusText === "En atención") && !row.querySelector("." + STEAL_BTN_CLASS)) {
+      if ((statusText === "Asignado" || statusText === "En atención") && !row.querySelector("." + STEAL_BTN_CLASS) && rowBelongsToMe) {
         const responsibleCell = row.querySelector('[data-field="responsibleName"]');
         const responsibleName = responsibleCell ? responsibleCell.textContent.trim() : "";
         const myName = getLoggedUserName();
@@ -3097,7 +3109,7 @@
       }
 
       // Inject close button for "Asignado"/"En atención" tickets assigned to me
-      if ((statusText === "Asignado" || statusText === "En atención") && !row.querySelector("." + CLOSE_BTN_CLASS)) {
+      if ((statusText === "Asignado" || statusText === "En atención") && !row.querySelector("." + CLOSE_BTN_CLASS) && rowBelongsToMe) {
         const responsibleCell2 = row.querySelector('[data-field="responsibleName"]');
         const responsibleName2 = responsibleCell2 ? responsibleCell2.textContent.trim() : "";
         const myName2 = getLoggedUserName();
@@ -3113,7 +3125,7 @@
       }
 
       // Inject migrate buttons for "Cerrado" tickets
-      if (statusText === "Cerrado") {
+      if (statusText === "Cerrado" && rowBelongsToMe) {
         if (row.querySelector("." + BTN_CLASS) || row.querySelector("." + SYNCED_CLASS)) return;
         const codeEl = firstCell.querySelector("p.MuiTypography-body1");
         const uniqueCode = codeEl ? codeEl.textContent.trim() : "";
