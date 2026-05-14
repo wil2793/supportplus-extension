@@ -595,7 +595,41 @@
       }).filter(function(v) { var low = v.toLowerCase(); if (seen[low]) return false; seen[low] = true; return true; });
     }
 
-    if (!slMatches.length && !userMatches.length) return;
+    // Detect DB objects (tables, views, stored procedures, functions)
+    var dbMatches = [];
+    // Pattern 1: schema.object (e.g. HANA_Plata.HN_ZVW_PEDIDOS_CENT)
+    var dbSchemaRaw = fullText.match(/[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]{3,}/g);
+    if (dbSchemaRaw) dbSchemaRaw.forEach(function(v) {
+      // Exclude common false positives (emails, urls, file extensions)
+      if (v.match(/\.(com|mx|net|org|jpg|png|pdf|xlsx|csv|txt|html|js|css)$/i)) return;
+      dbMatches.push(v);
+    });
+    // Pattern 2: SP/USP prefixed (stored procedures)
+    var dbSpRaw = fullText.match(/\b(?:sp_|usp_|SP_|USP_)[A-Za-z0-9_]{3,}/g);
+    if (dbSpRaw) dbSpRaw.forEach(function(v) { dbMatches.push(v); });
+    // Pattern 3: Common DB prefixes (HN_, VW_, ZVW_, FN_, TBL_, V_, T_)
+    var dbPrefixRaw = fullText.match(/\b(?:HN_|VW_|ZVW_|FN_|TBL_|V_|T_)[A-Za-z0-9_]{3,}/g);
+    if (dbPrefixRaw) dbPrefixRaw.forEach(function(v) { dbMatches.push(v); });
+    // Pattern 4: Contextual - word after "tabla", "vista", "procedimiento", "store procedure", "view", "trigger", "function"
+    var dbContextRaw = fullText.match(/(?:tabla|vista|procedimiento|store\s*procedure|view|trigger|function|función|índice|index)\s*[:\-]?\s*([A-Za-z_][A-Za-z0-9_.]{3,})/gi);
+    if (dbContextRaw) {
+      dbContextRaw.forEach(function(match) {
+        var obj = match.replace(/^(?:tabla|vista|procedimiento|store\s*procedure|view|trigger|function|función|índice|index)\s*[:\-]?\s*/i, "").trim();
+        if (obj && obj.length > 3) dbMatches.push(obj);
+      });
+    }
+    // Pattern 5: UPPER_CASE words with underscores (3+ segments, likely DB objects)
+    var dbUpperRaw = fullText.match(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+){2,}\b/g);
+    if (dbUpperRaw) dbUpperRaw.forEach(function(v) {
+      // Exclude things that are clearly not DB objects
+      if (v.length < 8) return;
+      dbMatches.push(v);
+    });
+    // Deduplicate
+    var dbSeen = {};
+    dbMatches = dbMatches.filter(function(v) { var low = v.toLowerCase(); if (dbSeen[low]) return false; dbSeen[low] = true; return true; });
+
+    if (!slMatches.length && !userMatches.length && !dbMatches.length) return;
 
     var container = document.createElement("div");
     container.id = DETAIL_DETECTIONS_ID;
@@ -627,6 +661,20 @@
         userDiv.appendChild(span);
       });
       container.appendChild(userDiv);
+    }
+
+    if (dbMatches.length) {
+      var dbDiv = document.createElement("div");
+      dbDiv.style.cssText = "padding:8px 10px;background:#E8F5E9;border-radius:6px;margin-bottom:8px;";
+      dbDiv.innerHTML = '<b style="font-size:12px;color:#2E7D32;">🗄️ Objetos de BD detectados:</b> ';
+      dbMatches.forEach(function(obj) {
+        var span = document.createElement("span");
+        span.style.cssText = "display:inline-flex;align-items:center;gap:2px;margin:2px 4px;padding:2px 8px;background:#fff;border:1px solid #2E7D32;border-radius:4px;font-weight:600;font-size:12px;font-family:monospace;";
+        span.textContent = obj;
+        span.appendChild(createCopyButton(obj));
+        dbDiv.appendChild(span);
+      });
+      container.appendChild(dbDiv);
     }
 
     evidenciasH2.parentElement.insertBefore(container, evidenciasH2);
@@ -1652,7 +1700,32 @@
       userHTML += '</div>';
     }
 
-    return card + slHTML + userHTML;
+    // Detect DB objects
+    var dbMatches = [];
+    var dbSchemaRaw = fullText.match(/[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]{3,}/g);
+    if (dbSchemaRaw) dbSchemaRaw.forEach(function(v) { if (!v.match(/\.(com|mx|net|org|jpg|png|pdf|xlsx|csv|txt|html|js|css)$/i)) dbMatches.push(v); });
+    var dbSpRaw = fullText.match(/\b(?:sp_|usp_|SP_|USP_)[A-Za-z0-9_]{3,}/g);
+    if (dbSpRaw) dbSpRaw.forEach(function(v) { dbMatches.push(v); });
+    var dbPrefixRaw = fullText.match(/\b(?:HN_|VW_|ZVW_|FN_|TBL_|V_|T_)[A-Za-z0-9_]{3,}/g);
+    if (dbPrefixRaw) dbPrefixRaw.forEach(function(v) { dbMatches.push(v); });
+    var dbContextRaw = fullText.match(/(?:tabla|vista|procedimiento|store\s*procedure|view|trigger|function|función|índice|index)\s*[:\-]?\s*([A-Za-z_][A-Za-z0-9_.]{3,})/gi);
+    if (dbContextRaw) { dbContextRaw.forEach(function(match) { var obj = match.replace(/^(?:tabla|vista|procedimiento|store\s*procedure|view|trigger|function|función|índice|index)\s*[:\-]?\s*/i, "").trim(); if (obj && obj.length > 3) dbMatches.push(obj); }); }
+    var dbUpperRaw = fullText.match(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+){2,}\b/g);
+    if (dbUpperRaw) dbUpperRaw.forEach(function(v) { if (v.length >= 8) dbMatches.push(v); });
+    var dbSeen = {};
+    dbMatches = dbMatches.filter(function(v) { var low = v.toLowerCase(); if (dbSeen[low]) return false; dbSeen[low] = true; return true; });
+
+    var dbHTML = "";
+    if (dbMatches.length) {
+      dbHTML = '<div style="margin-bottom:8px;padding:8px 10px;background:#E8F5E9;border-radius:6px;border-left:4px solid #2E7D32;">' +
+        '<b style="font-size:11px;color:#2E7D32;">🗄️ Objetos de BD:</b> ';
+      dbMatches.forEach(function(obj) {
+        dbHTML += '<span class="sp-db-copy" data-db="' + obj + '" style="display:inline-flex;align-items:center;gap:2px;margin:2px 4px;padding:2px 8px;background:#fff;border:1px solid #2E7D32;border-radius:4px;font-weight:600;font-size:12px;font-family:monospace;">' + obj + '</span>';
+      });
+      dbHTML += '</div>';
+    }
+
+    return card + slHTML + userHTML + dbHTML;
   }
 
   function injectSLCopyButtons(container) {
@@ -1665,6 +1738,11 @@
       if (span.querySelector(".sp-copy-btn")) return;
       var user = span.dataset.user;
       if (user) span.appendChild(createCopyButton(user));
+    });
+    container.querySelectorAll(".sp-db-copy").forEach(function(span) {
+      if (span.querySelector(".sp-copy-btn")) return;
+      var db = span.dataset.db;
+      if (db) span.appendChild(createCopyButton(db));
     });
   }
 
