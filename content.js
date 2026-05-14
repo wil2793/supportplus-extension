@@ -3385,11 +3385,15 @@
         return;
       }
 
+      // Read values BEFORE closing modal
+      const selectedGroupId = document.getElementById("sp-group-select")?.value || "";
+      var selectedPersonId = document.getElementById("sp-person-select")?.value || "";
+
       // Validations passed - close modal and show loading toast
       const modal = document.getElementById("sp-monday-modal"); if (modal) modal.remove();
       showLoadingToast("Migrando a Monday...");
 
-      const groupId = document.getElementById("sp-group-select")?.value || "";
+      const groupId = selectedGroupId;
       const itemName = ticket.subject || "Sin asunto";
       const createdDate = new Date(ticket.createdAt).toISOString().slice(0, 10);
       const spPriority = (ticket.incidentPriorityName || ticket.incidentPriority?.name || "").toLowerCase().trim();
@@ -3397,9 +3401,7 @@
 
       let personValue = {};
       // If a person was selected from the dropdown (other area ticket), use their email
-      var selectedPersonId = document.getElementById("sp-person-select")?.value || "";
       if (selectedPersonId) {
-        // Find the profile and use their email directly
         var selectedProfile = null;
         Object.values(TEAM_AREAS).forEach(function(area) {
           area.profiles.forEach(function(p) { if (String(p.profileId) === selectedPersonId) selectedProfile = p; });
@@ -3408,8 +3410,16 @@
           try {
             const users = await getMondayUsers(mondayToken);
             var foundUserId = users[selectedProfile.email.toLowerCase()];
+            if (!foundUserId) {
+              // Fallback: search by partial email match
+              var emailPrefix = selectedProfile.email.split("@")[0].toLowerCase();
+              Object.entries(users).forEach(function(entry) {
+                if (!foundUserId && entry[0].toLowerCase().includes(emailPrefix)) foundUserId = entry[1];
+              });
+            }
             if (foundUserId) personValue = { personsAndTeams: [{ id: parseInt(foundUserId), kind: "person" }] };
-          } catch (e) {}
+            console.log("[SP Monday] Person select:", selectedProfile.email, "-> Monday userId:", foundUserId);
+          } catch (e) { console.warn("[SP Monday] Error finding user:", e); }
         }
       } else {
         const holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
