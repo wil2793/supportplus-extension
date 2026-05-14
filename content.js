@@ -2764,12 +2764,20 @@
     var reportBtn = document.getElementById(REPORT_BTN_ID);
     if (!reportBtn) return;
 
-    var btn = document.createElement("button");
-    btn.id = MONDAY_STATS_BTN_ID;
-    btn.textContent = "📈 Monday Stats";
-    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#6A1B9A;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-    btn.addEventListener("click", handleMondayStats);
-    reportBtn.parentElement.insertBefore(btn, reportBtn.nextSibling);
+    // Only show if Monday token is configured
+    getMondayToken().then(function(token) {
+      if (!token) return;
+      getMondayBoardId().then(function(boardId) {
+        if (!boardId) return;
+        if (document.getElementById(MONDAY_STATS_BTN_ID)) return;
+        var btn = document.createElement("button");
+        btn.id = MONDAY_STATS_BTN_ID;
+        btn.textContent = "📈 Monday Stats";
+        btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#6A1B9A;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+        btn.addEventListener("click", handleMondayStats);
+        reportBtn.parentElement.insertBefore(btn, reportBtn.nextSibling);
+      });
+    });
   }
 
   async function handleMondayStats() {
@@ -2848,94 +2856,36 @@
     var existing = document.getElementById("sp-monday-stats-modal");
     if (existing) existing.remove();
 
-    var statusSorted = Object.entries(statusCounts).sort(function(a, b) { return b[1] - a[1]; });
     var personSorted = Object.entries(statsByPerson).sort(function(a, b) { return b[1].total - a[1].total; });
-    var allStatuses = statusSorted.map(function(e) { return e[0]; });
-
-    var statusColorMap = {
-      "Trabajando en ello": "#fdab3d", "Hecho": "#00c875", "Atascado": "#e2445c",
-      "Pendiente": "#c4c4c4", "": "#c4c4c4", "En revisión": "#a25ddc",
-      "Esperando revisión": "#579bfc", "Listo para QA": "#66ccff"
-    };
-    var fallbackColors = ["#1976D2", "#E65100", "#7B1FA2", "#00796B", "#C62828", "#F57F17", "#283593", "#5D4037", "#D81B60", "#00838F"];
-    function getStatusColor(status) {
-      if (statusColorMap[status]) return statusColorMap[status];
-      var idx = allStatuses.indexOf(status) % fallbackColors.length;
-      return fallbackColors[idx];
-    }
-
-    // --- Donut chart (SVG) ---
-    var donutSize = 160;
-    var donutR = 60;
-    var donutStroke = 24;
-    var donutCirc = 2 * Math.PI * donutR;
-    var donutOffset = 0;
-    var donutSVG = '<svg width="' + donutSize + '" height="' + donutSize + '" viewBox="0 0 ' + donutSize + ' ' + donutSize + '">';
-    statusSorted.forEach(function(entry) {
-      var pct = entry[1] / totalItems;
-      var dashLen = pct * donutCirc;
-      var color = getStatusColor(entry[0]);
-      donutSVG += '<circle cx="' + (donutSize/2) + '" cy="' + (donutSize/2) + '" r="' + donutR + '" fill="none" stroke="' + color + '" stroke-width="' + donutStroke + '" stroke-dasharray="' + dashLen + ' ' + (donutCirc - dashLen) + '" stroke-dashoffset="-' + donutOffset + '" />';
-      donutOffset += dashLen;
-    });
-    donutSVG += '<text x="' + (donutSize/2) + '" y="' + (donutSize/2 - 6) + '" text-anchor="middle" font-size="22" font-weight="700" fill="#333">' + totalItems + '</text>';
-    donutSVG += '<text x="' + (donutSize/2) + '" y="' + (donutSize/2 + 14) + '" text-anchor="middle" font-size="11" fill="#888">tickets</text>';
-    donutSVG += '</svg>';
-
-    // Legend
-    var legendHTML = '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">';
-    statusSorted.forEach(function(entry) {
-      var color = getStatusColor(entry[0]);
-      var pct = Math.round((entry[1] / totalItems) * 100);
-      legendHTML += '<div style="display:flex;align-items:center;gap:4px;font-size:11px;"><span style="width:10px;height:10px;border-radius:2px;background:' + color + ';display:inline-block;"></span>' + (entry[0] || "Sin estado") + ' <b>(' + entry[1] + ' - ' + pct + '%)</b></div>';
-    });
-    legendHTML += '</div>';
-
-    // --- Stacked bar chart per person ---
     var maxTotal = personSorted[0] ? personSorted[0][1].total : 1;
+
+    var colors = ["#1976D2", "#2E7D32", "#D94040", "#7B1FA2", "#E65100", "#00796B", "#C2185B", "#F57F17", "#283593", "#5D4037"];
+
+    // --- Bar chart per person ---
     var barsHTML = '';
-    personSorted.forEach(function(entry) {
+    personSorted.forEach(function(entry, idx) {
       var name = entry[0];
       var data = entry[1];
       var barWidth = Math.round((data.total / maxTotal) * 100);
-      var firstName = name.split(" ")[0];
+      var color = colors[idx % colors.length];
 
-      barsHTML += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">';
-      barsHTML += '<div style="width:100px;font-size:11px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + name + '">' + firstName + '</div>';
-      barsHTML += '<div style="flex:1;display:flex;height:28px;border-radius:4px;overflow:hidden;background:#f0f0f0;">';
-
-      allStatuses.forEach(function(status) {
-        var count = data.statuses[status] || 0;
-        if (!count) return;
-        var segPct = (count / maxTotal) * 100;
-        var color = getStatusColor(status);
-        barsHTML += '<div style="width:' + segPct + '%;background:' + color + ';display:flex;align-items:center;justify-content:center;min-width:' + (count > 0 ? '18px' : '0') + ';" title="' + (status || "Sin estado") + ': ' + count + '">';
-        if (segPct > 5) barsHTML += '<span style="color:#fff;font-size:10px;font-weight:700;">' + count + '</span>';
-        barsHTML += '</div>';
-      });
-
+      barsHTML += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">';
+      barsHTML += '<div style="width:140px;font-size:12px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + name + '">' + name + '</div>';
+      barsHTML += '<div style="flex:1;background:#f0f0f0;border-radius:4px;height:30px;overflow:hidden;">';
+      barsHTML += '<div style="width:' + barWidth + '%;background:' + color + ';height:100%;border-radius:4px;transition:width 0.5s;"></div>';
       barsHTML += '</div>';
-      barsHTML += '<div style="width:30px;font-size:12px;font-weight:700;text-align:center;">' + data.total + '</div>';
+      barsHTML += '<div style="width:35px;font-size:13px;font-weight:700;text-align:center;">' + data.total + '</div>';
       barsHTML += '</div>';
     });
 
     var overlay = document.createElement("div");
     overlay.id = "sp-monday-stats-modal";
     overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:850px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
+    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:700px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
-        '<h3 style="margin:0;font-size:18px;">📈 ' + boardName + '</h3>' +
+        '<h3 style="margin:0;font-size:18px;">📈 ' + boardName + ' <span style="font-size:13px;color:#888;font-weight:400;">(' + totalItems + ' tickets migrados)</span></h3>' +
         '<button id="sp-stats-close" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Cerrar</button>' +
       '</div>' +
-      // Top section: donut + legend
-      '<div style="display:flex;gap:24px;align-items:center;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid #eee;">' +
-        '<div style="flex-shrink:0;">' + donutSVG + '</div>' +
-        '<div style="flex:1;">' +
-          '<h4 style="margin:0 0 8px;font-size:14px;color:#555;">Distribución por estatus</h4>' +
-          legendHTML +
-        '</div>' +
-      '</div>' +
-      // Bottom section: stacked bars
       '<h4 style="margin:0 0 12px;font-size:14px;color:#555;">Tickets por persona</h4>' +
       '<div style="flex:1;overflow:auto;">' + barsHTML + '</div>' +
       '</div>';
