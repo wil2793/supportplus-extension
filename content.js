@@ -1126,22 +1126,22 @@
       resolutionGroupId: 19,
       resolutionGroupLabel: "Infraestructura DBA",
       profiles: [
-        { profileId: 138, profileFullName: "Rickey Oswaldo Ehuan Vargas" },
-        { profileId: 141, profileFullName: "Wille Hans Ditte Morales Sanchez" },
-        { profileId: 144, profileFullName: "Jorge Luis Balam Vargas" },
-        { profileId: 146, profileFullName: "Eduardo Emmanuel Ravell May" },
-        { profileId: 148, profileFullName: "Gamaliel Uriel Tzab Novelo" },
-        { profileId: 190, profileFullName: "Ariel Jesus Fernandez Mena" },
-        { profileId: 294, profileFullName: "William Israel Alpuche Jimenez" }
+        { profileId: 138, profileFullName: "Rickey Oswaldo Ehuan Vargas", email: "rickey.ehuan@macropay.mx" },
+        { profileId: 141, profileFullName: "Wille Hans Ditte Morales Sanchez", email: "wille.morales@macropay.mx" },
+        { profileId: 144, profileFullName: "Jorge Luis Balam Vargas", email: "jorge.balam@macropay.mx" },
+        { profileId: 146, profileFullName: "Eduardo Emmanuel Ravell May", email: "eduardo.ravell@macropay.mx" },
+        { profileId: 148, profileFullName: "Gamaliel Uriel Tzab Novelo", email: "gamaliel.tzab@macropay.mx" },
+        { profileId: 190, profileFullName: "Ariel Jesus Fernandez Mena", email: "ariel.fernandez@macropay.mx" },
+        { profileId: 294, profileFullName: "William Israel Alpuche Jimenez", email: "william.alpuche@macropay.mx" }
       ]
     },
     aplicaciones: {
       resolutionGroupId: 22,
       resolutionGroupLabel: "Aplicaciones - Liberación e Implementación",
       profiles: [
-        { profileId: 135, profileFullName: "Omar Francisco Canul Mutul" },
-        { profileId: 187, profileFullName: "Eduardo Emanuel Herrera Pech" },
-        { profileId: 303, profileFullName: "Aaron Isaac Dorantes Ku" }
+        { profileId: 135, profileFullName: "Omar Francisco Canul Mutul", email: "omar.canul@macropay.mx" },
+        { profileId: 187, profileFullName: "Eduardo Emanuel Herrera Pech", email: "eduardo.herrera@macropay.mx" },
+        { profileId: 303, profileFullName: "Aaron Isaac Dorantes Ku", email: "aaron.dorantes@macropay.mx" }
       ]
     }
   };
@@ -3399,24 +3399,15 @@
       // If a person was selected from the dropdown (other area ticket), use their email
       var selectedPersonId = document.getElementById("sp-person-select")?.value || "";
       if (selectedPersonId) {
-        // Find the profile name and try to match email in Monday
+        // Find the profile and use their email directly
         var selectedProfile = null;
         Object.values(TEAM_AREAS).forEach(function(area) {
           area.profiles.forEach(function(p) { if (String(p.profileId) === selectedPersonId) selectedProfile = p; });
         });
-        if (selectedProfile) {
+        if (selectedProfile && selectedProfile.email) {
           try {
             const users = await getMondayUsers(mondayToken);
-            // Try to find by partial name match in Monday users
-            var foundUserId = null;
-            var nameParts = selectedProfile.profileFullName.toLowerCase().split(" ");
-            Object.entries(users).forEach(function(entry) {
-              if (foundUserId) return;
-              var email = entry[0];
-              if (nameParts.some(function(part) { return part.length > 3 && email.includes(part); })) {
-                foundUserId = entry[1];
-              }
-            });
+            var foundUserId = users[selectedProfile.email.toLowerCase()];
             if (foundUserId) personValue = { personsAndTeams: [{ id: parseInt(foundUserId), kind: "person" }] };
           } catch (e) {}
         }
