@@ -391,6 +391,22 @@
       });
       const chip = container.querySelector(".MuiChip-root");
       container.insertBefore(badge, chip);
+    } else if (ticketGroupId && ticketGroupId !== getTeamConfig().resolutionGroupId && Object.values(TEAM_AREAS).some(function(a) { return a.resolutionGroupId === ticketGroupId; })) {
+      // Ticket is from another known area - always show migrate button regardless of status
+      const btn = document.createElement("button");
+      btn.id = DETAIL_BTN_ID;
+      btn.textContent = "🙂 Migrar a Monday";
+      btn.style.cssText =
+        "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#D94040;color:#fff;font-weight:600;white-space:nowrap;";
+      btn.addEventListener("mouseenter", () => { if (!btn.disabled) btn.textContent = "🫡 Migrar a Monday"; });
+      btn.addEventListener("mouseleave", () => { if (!btn.disabled) btn.textContent = "🙂 Migrar a Monday"; });
+      btn.addEventListener("click", () => {
+        btn.textContent = "⏳ Migrando...";
+        btn.disabled = true;
+        handleMondayClick(ticketId).finally(() => { btn.textContent = "🙂 Migrar a Monday"; btn.disabled = false; });
+      });
+      const chip2 = container.querySelector(".MuiChip-root");
+      container.insertBefore(btn, chip2);
     } else if (isClosed) {
       // Show migrate button if ticket belongs to my area, the other area, or gerente
       var myArea = getTeamConfig();
