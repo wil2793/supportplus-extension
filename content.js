@@ -2756,6 +2756,151 @@
     });
   }
 
+  // --- Monday Stats ---
+  const MONDAY_STATS_BTN_ID = "sp-monday-stats-btn";
+
+  function injectMondayStatsButton() {
+    if (document.getElementById(MONDAY_STATS_BTN_ID)) return;
+    var reportBtn = document.getElementById(REPORT_BTN_ID);
+    if (!reportBtn) return;
+
+    var btn = document.createElement("button");
+    btn.id = MONDAY_STATS_BTN_ID;
+    btn.textContent = "📈 Monday Stats";
+    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#6A1B9A;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+    btn.addEventListener("click", handleMondayStats);
+    reportBtn.parentElement.insertBefore(btn, reportBtn.nextSibling);
+  }
+
+  async function handleMondayStats() {
+    var btn = document.getElementById(MONDAY_STATS_BTN_ID);
+    if (!btn || btn.disabled) return;
+
+    btn.disabled = true;
+    btn.textContent = "⏳ Cargando...";
+    btn.style.background = "#999";
+
+    try {
+      var mondayToken = await getMondayToken();
+      var boardId = await getMondayBoardId();
+      if (!mondayToken || !boardId) throw new Error("Configura Monday en el popup");
+
+      // Fetch all items from the board
+      var allItems = [];
+      var firstPage = await mondayQuery(mondayToken,
+        'query ($boardId: [ID!]!) { boards(ids: $boardId) { name items_page(limit: 500) { cursor items { id name column_values { id text value } } } } }',
+        { boardId });
+      var board = firstPage.boards[0];
+      var boardName = board.name;
+      var page = board.items_page;
+      allItems = allItems.concat(page.items);
+
+      var cursor = page.cursor;
+      while (cursor) {
+        btn.textContent = "⏳ " + allItems.length + " items...";
+        var next = await mondayQuery(mondayToken,
+          'query ($cursor: String!) { next_items_page(limit: 500, cursor: $cursor) { cursor items { id name column_values { id text value } } } }',
+          { cursor });
+        allItems = allItems.concat(next.next_items_page.items);
+        cursor = next.next_items_page.cursor;
+      }
+
+      // Parse items: extract person and status
+      var statsByPerson = {};
+      var statusCounts = {};
+      var totalItems = allItems.length;
+
+      allItems.forEach(function(item) {
+        var person = "Sin asignar";
+        var status = "Sin estado";
+
+        item.column_values.forEach(function(col) {
+          if (col.id === "multiple_person_mm25nvfq" && col.text) {
+            person = col.text;
+          }
+          if (col.id === "status" && col.text) {
+            status = col.text;
+          }
+        });
+
+        // Count by status
+        statusCounts[status] = (statusCounts[status] || 0) + 1;
+
+        // Count by person + status
+        if (!statsByPerson[person]) statsByPerson[person] = { total: 0, statuses: {} };
+        statsByPerson[person].total++;
+        statsByPerson[person].statuses[status] = (statsByPerson[person].statuses[status] || 0) + 1;
+      });
+
+      // Show modal with stats
+      showMondayStatsModal(boardName, totalItems, statusCounts, statsByPerson);
+
+    } catch (err) {
+      showErrorToast("Error: " + err.message);
+    }
+
+    btn.textContent = "📈 Monday Stats";
+    btn.style.background = "#6A1B9A";
+    btn.disabled = false;
+  }
+
+  function showMondayStatsModal(boardName, totalItems, statusCounts, statsByPerson) {
+    var existing = document.getElementById("sp-monday-stats-modal");
+    if (existing) existing.remove();
+
+    // Build status summary
+    var statusSorted = Object.entries(statusCounts).sort(function(a, b) { return b[1] - a[1]; });
+    var statusColors = { "Trabajando en ello": "#fdab3d", "Hecho": "#00c875", "Atascado": "#e2445c", "": "#c4c4c4" };
+
+    var statusHTML = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">';
+    statusSorted.forEach(function(entry) {
+      var color = statusColors[entry[0]] || "#7B1FA2";
+      statusHTML += '<div style="padding:6px 12px;border-radius:6px;background:' + color + '22;border:1px solid ' + color + ';font-size:12px;">' +
+        '<b style="color:' + color + ';">' + entry[1] + '</b> ' + (entry[0] || "Sin estado") + '</div>';
+    });
+    statusHTML += '</div>';
+
+    // Build person table
+    var allStatuses = Object.keys(statusCounts).sort();
+    var personSorted = Object.entries(statsByPerson).sort(function(a, b) { return b[1].total - a[1].total; });
+
+    var tableHTML = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">';
+    tableHTML += '<thead><tr style="background:#f5f5f5;"><th style="padding:6px 8px;text-align:left;border:1px solid #ddd;">Persona</th><th style="padding:6px 8px;border:1px solid #ddd;">Total</th>';
+    allStatuses.forEach(function(s) {
+      tableHTML += '<th style="padding:6px 8px;border:1px solid #ddd;font-size:10px;">' + (s || "Sin estado") + '</th>';
+    });
+    tableHTML += '</tr></thead><tbody>';
+
+    personSorted.forEach(function(entry) {
+      var name = entry[0];
+      var data = entry[1];
+      tableHTML += '<tr><td style="padding:6px 8px;border:1px solid #ddd;font-weight:600;">' + name + '</td>';
+      tableHTML += '<td style="padding:6px 8px;border:1px solid #ddd;text-align:center;font-weight:700;">' + data.total + '</td>';
+      allStatuses.forEach(function(s) {
+        var count = data.statuses[s] || 0;
+        tableHTML += '<td style="padding:6px 8px;border:1px solid #ddd;text-align:center;">' + (count || "-") + '</td>';
+      });
+      tableHTML += '</tr>';
+    });
+    tableHTML += '</tbody></table></div>';
+
+    var overlay = document.createElement("div");
+    overlay.id = "sp-monday-stats-modal";
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:800px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+        '<h3 style="margin:0;">📈 ' + boardName + ' <span style="font-size:13px;color:#888;font-weight:400;">(' + totalItems + ' items)</span></h3>' +
+        '<button id="sp-stats-close" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Cerrar</button>' +
+      '</div>' +
+      statusHTML +
+      '<div style="flex:1;overflow:auto;">' + tableHTML + '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    document.getElementById("sp-stats-close").addEventListener("click", function() { overlay.remove(); });
+    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+  }
+
   const QUICK_SEARCH_ID = "sp-quick-search";
 
   function injectQuickSearch() {
@@ -3142,6 +3287,7 @@
     injectSearchButton();
     injectDashboardButton();
     injectReportButton();
+    injectMondayStatsButton();
     injectQuickSearch();
     injectQuickFilterButton();
 
