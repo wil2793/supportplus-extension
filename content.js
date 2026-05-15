@@ -2046,7 +2046,23 @@
             showSuccessToast("Ticket tomado");
           }
           if (isDetailView()) {
-            setTimeout(function() { window.location.reload(); }, 1500);
+            if (doneCheck.checked) {
+              // Show close tab / stay modal
+              var closeOverlay = document.createElement("div");
+              closeOverlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+              closeOverlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:360px;width:90%;font-family:system-ui;text-align:center;">' +
+                '<h3 style="margin:0 0 12px;">✅ Ticket tomado, cerrado y migrado</h3>' +
+                '<p style="font-size:13px;color:#555;margin:0 0 16px;">El ticket fue procesado correctamente.</p>' +
+                '<div style="display:flex;gap:8px;">' +
+                  '<button id="sp-take-close-tab" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;">Cerrar pestaña</button>' +
+                  '<button id="sp-take-stay-tab" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Quedarme</button>' +
+                '</div></div>';
+              document.body.appendChild(closeOverlay);
+              document.getElementById("sp-take-close-tab").addEventListener("click", function() { window.close(); });
+              document.getElementById("sp-take-stay-tab").addEventListener("click", function() { closeOverlay.remove(); window.location.reload(); });
+            } else {
+              setTimeout(function() { window.location.reload(); }, 1500);
+            }
           } else if (!doneCheck.checked) {
             window.open("/es/dashboard/tickets/" + ticketId, "_blank");
           }
