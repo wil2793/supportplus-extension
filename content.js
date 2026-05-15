@@ -2294,6 +2294,24 @@
           if (!commentRes.ok) throw new Error("Error al agregar comentario: HTTP " + commentRes.status);
         }
 
+        // Step 1.5: If no one is assigned, assign to logged user first
+        if (!info.holder || info.holder === "Sin asignar") {
+          var myProfId = await getMyProfileId();
+          if (myProfId) {
+            var assignRes = await fetch(SP_API + "/reassign/" + ticketId, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+              body: JSON.stringify({
+                resolutionGroupId: getTeamConfig().resolutionGroupId,
+                serviceId: null,
+                responsibleProfileId: myProfId,
+                resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId }
+              }),
+            });
+            if (!assignRes.ok) throw new Error("Error al asignar: HTTP " + assignRes.status);
+          }
+        }
+
         // Step 2: Close ticket
         var res = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
           method: "PATCH",
