@@ -428,40 +428,39 @@
       const chip2 = container.querySelector(".MuiChip-root");
       container.insertBefore(btn, chip2);
       }
-    } else if (isWaiting) {
-      // Show take button only if ticket belongs to my area (or gerente)
-      var myArea2 = getTeamConfig();
-      var ticketBelongsToMe2 = !ticketGroupId || ticketGroupId === myArea2.resolutionGroupId || isGerente();
-      if (ticketBelongsToMe2) {
-      const takeBtn = document.createElement("button");
-      takeBtn.id = DETAIL_BTN_ID;
-      takeBtn.textContent = "🤚 Tomar ticket";
-      takeBtn.style.cssText =
-        "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#1976D2;color:#fff;font-weight:600;white-space:nowrap;";
-      takeBtn.addEventListener("mouseenter", () => { if (!takeBtn.disabled) takeBtn.textContent = "✊ Tomar ticket"; });
-      takeBtn.addEventListener("mouseleave", () => { if (!takeBtn.disabled) takeBtn.textContent = "🤚 Tomar ticket"; });
-      takeBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        showTakeModal(ticketId, takeBtn);
-      });
-      const chip3 = container.querySelector(".MuiChip-root");
-      container.insertBefore(takeBtn, chip3);
-      }
-    } else if (isAssigned) {
-      // Show steal/close buttons only if ticket belongs to my area (or gerente)
+    } else if (isAssigned || isWaiting) {
+      // Show buttons only if ticket belongs to my area (or gerente)
       var myArea3 = getTeamConfig();
       var ticketBelongsToMe3 = !ticketGroupId || ticketGroupId === myArea3.resolutionGroupId || isGerente();
       if (ticketBelongsToMe3) {
       const myName = getLoggedUserName();
       const chip4 = container.querySelector(".MuiChip-root");
-      if (holderName && myName && holderName !== myName) {
+
+      // Show take button if waiting
+      if (isWaiting) {
+        const takeBtn = document.createElement("button");
+        takeBtn.className = "sp-detail-take";
+        takeBtn.textContent = "🤚 Tomar ticket";
+        takeBtn.style.cssText =
+          "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#1976D2;color:#fff;font-weight:600;white-space:nowrap;margin-right:6px;";
+        takeBtn.addEventListener("mouseenter", () => { if (!takeBtn.disabled) takeBtn.textContent = "✊ Tomar ticket"; });
+        takeBtn.addEventListener("mouseleave", () => { if (!takeBtn.disabled) takeBtn.textContent = "🤚 Tomar ticket"; });
+        takeBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          showTakeModal(ticketId, takeBtn);
+        });
+        container.insertBefore(takeBtn, chip4);
+      }
+
+      // Show steal button if assigned to someone else
+      if (isAssigned && holderName && myName && holderName !== myName) {
         const stealBtn = document.createElement("button");
-        stealBtn.id = DETAIL_BTN_ID;
+        stealBtn.className = "sp-detail-steal";
         stealBtn.textContent = "🥷 Robar ticket";
         stealBtn.title = "Asignado a: " + holderName;
         stealBtn.style.cssText =
-          "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#E65100;color:#fff;font-weight:600;white-space:nowrap;";
+          "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#E65100;color:#fff;font-weight:600;white-space:nowrap;margin-right:6px;";
         stealBtn.addEventListener("mouseenter", () => { if (!stealBtn.disabled) stealBtn.textContent = "💀 Robar ticket"; });
         stealBtn.addEventListener("mouseleave", () => { if (!stealBtn.disabled) stealBtn.textContent = "🥷 Robar ticket"; });
         stealBtn.addEventListener("click", (e) => {
@@ -470,25 +469,26 @@
           showTakeModal(ticketId, stealBtn);
         });
         container.insertBefore(stealBtn, chip4);
-      } else if (holderName && myName && holderName === myName) {
-        const closeBtn = document.createElement("button");
-        closeBtn.id = DETAIL_BTN_ID;
-        closeBtn.textContent = "🔒 Cerrar ticket";
-        closeBtn.style.cssText =
-          "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#616161;color:#fff;font-weight:600;white-space:nowrap;";
-        closeBtn.addEventListener("mouseenter", () => { if (!closeBtn.disabled) closeBtn.textContent = "🔐 Cerrar ticket"; });
-        closeBtn.addEventListener("mouseleave", () => { if (!closeBtn.disabled) closeBtn.textContent = "🔒 Cerrar ticket"; });
-        closeBtn.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          closeBtn.disabled = true;
-          closeBtn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
-          await showCloseModal(ticketId, closeBtn);
-          closeBtn.textContent = "🔒 Cerrar ticket";
-          closeBtn.disabled = false;
-        });
-        container.insertBefore(closeBtn, chip4);
       }
+
+      // Always show close button (regardless of who holds it)
+      const closeBtn = document.createElement("button");
+      closeBtn.id = DETAIL_BTN_ID;
+      closeBtn.textContent = "🔒 Cerrar ticket";
+      closeBtn.style.cssText =
+        "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#616161;color:#fff;font-weight:600;white-space:nowrap;";
+      closeBtn.addEventListener("mouseenter", () => { if (!closeBtn.disabled) closeBtn.textContent = "🔐 Cerrar ticket"; });
+      closeBtn.addEventListener("mouseleave", () => { if (!closeBtn.disabled) closeBtn.textContent = "🔒 Cerrar ticket"; });
+      closeBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        closeBtn.disabled = true;
+        closeBtn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
+        await showCloseModal(ticketId, closeBtn);
+        closeBtn.textContent = "🔒 Cerrar ticket";
+        closeBtn.disabled = false;
+      });
+      container.insertBefore(closeBtn, chip4);
       }
     }
     } finally { detailLoading = false; }
@@ -1252,6 +1252,14 @@
         });
       });
 
+      // "Cerrados hoy" column at the right
+      var closedCol = document.createElement("div");
+      closedCol.id = "sp-team-col-closed";
+      closedCol.style.cssText = "min-width:180px;max-width:220px;border:2px solid #2E7D32;border-radius:8px;overflow:hidden;flex-shrink:0;";
+      closedCol.innerHTML = '<div class="sp-team-header" data-profile-id="closed" style="background:#2E7D32;color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">✅ Cerrados hoy <span class="sp-team-count" style="opacity:0.7;">(...)</span></div>' +
+        '<div class="sp-team-tickets" data-profile-id="closed" data-area-group="closed" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>';
+      containerDiv.appendChild(closedCol);
+
       // Setup drag and drop + click to open
       var dragStartPos = null;
       panel.addEventListener("click", function(e) {
@@ -1304,6 +1312,40 @@
 
         // Can't drop onto "Sin asignar" column
         if (targetProfileId === "unassigned") return;
+
+        // Handle drop onto "Cerrados hoy" column
+        if (targetProfileId === "closed") {
+          showLoadingToast("Cerrando ticket...");
+          try {
+            // Check if ticket has someone assigned by looking at source
+            var needsAssign = !sourceProfileId || sourceProfileId === "unassigned";
+            if (needsAssign) {
+              // Assign to logged user first
+              var myProfId = await getMyProfileId();
+              if (myProfId) {
+                await fetch(SP_API + "/reassign/" + ticketId, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                  body: JSON.stringify({ resolutionGroupId: getTeamConfig().resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId } }),
+                });
+              }
+            }
+            // Close the ticket
+            var closeRes = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+              body: JSON.stringify({ nextTicketStatusId: 9, ticketCommentRequest: null }),
+            });
+            if (!closeRes.ok) throw new Error("HTTP " + closeRes.status);
+            showSuccessToast("Ticket cerrado");
+            if (sourceProfileId && sourceProfileId !== "unassigned") refreshTeamColumn(sourceProfileId);
+            if (sourceProfileId === "unassigned" || fromTable) refreshUnassignedColumn();
+            refreshClosedColumn();
+          } catch (err) {
+            showErrorToast("Error: " + err.message);
+          }
+          return;
+        }
 
         // Don't reassign if dropped on the same column it came from
         var sourceCol = panel.querySelector('.sp-team-ticket[data-ticket-id="' + ticketId + '"]');
@@ -1461,6 +1503,9 @@
         }).catch(function() {});
       });
 
+      // Fetch closed tickets today
+      refreshClosedColumn();
+
     } catch (err) {
       panel.innerHTML = '<div style="color:#D94040;padding:8px;font-size:12px;">Error: ' + err.message + '</div>';
     }
@@ -1517,8 +1562,9 @@
       }).catch(function() {}).finally(function() { pending--; if (pending <= 0) teamRefreshing = false; });
     });
 
-    // Also refresh unassigned column
+    // Also refresh unassigned and closed columns
     refreshUnassignedColumn();
+    refreshClosedColumn();
   }
 
   function refreshTeamColumn(profileId) {
@@ -1589,6 +1635,51 @@
         }
       }).catch(function() {});
     });
+  }
+
+  function refreshClosedColumn() {
+    var spToken = getToken();
+    if (!spToken) return;
+    var today = new Date();
+    var todayStart = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0") + "T00:00";
+    var todayEnd = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0") + "T23:59";
+    var areas = getActiveAreas();
+    var allClosed = [];
+    var pending = areas.length;
+
+    areas.forEach(function(area) {
+      fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + area.resolutionGroupId + "&ticketStatusName=Cerrado&initDate=" + todayStart + "&endDate=" + todayEnd + "&page=0&size=100", {
+        headers: { accept: "application/json", authorization: "Bearer " + spToken },
+      }).then(function(r) { return r.json(); }).then(function(json) {
+        var tickets = (json.data || json).content || [];
+        allClosed = allClosed.concat(tickets);
+      }).catch(function() {}).finally(function() {
+        pending--;
+        if (pending <= 0) renderClosedColumn(allClosed);
+      });
+    });
+  }
+
+  function renderClosedColumn(tickets) {
+    var col = document.getElementById("sp-team-col-closed");
+    if (!col) return;
+    var countEl = col.querySelector(".sp-team-count");
+    if (countEl) countEl.textContent = "(" + tickets.length + ")";
+    var listEl = col.querySelector(".sp-team-tickets");
+    if (!listEl) return;
+    if (!tickets.length) {
+      listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets cerrados hoy</div>';
+    } else {
+      var html = "";
+      tickets.forEach(function(t) {
+        html += '<div class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #2E7D32;font-size:10px;line-height:1.3;">';
+        html += '<div style="font-weight:600;color:#2E7D32;">' + (t.uniqueCode || "") + '</div>';
+        html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#2E7D32;font-weight:600;font-size:9px;">Cerrado</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.responsibleName || "") + '">' + (t.responsibleName || "").split(" ")[0] + '</span></div>';
+        html += '</div>';
+      });
+      listEl.innerHTML = html;
+    }
   }
 
   // --- Take ticket (reassign) ---
@@ -3377,18 +3468,13 @@
         }
       }
 
-      // Inject close button for "Asignado"/"En atención" tickets assigned to me
-      if ((statusText === "Asignado" || statusText === "En atención") && !row.querySelector("." + CLOSE_BTN_CLASS) && rowBelongsToMe) {
-        const responsibleCell2 = row.querySelector('[data-field="responsibleName"]');
-        const responsibleName2 = responsibleCell2 ? responsibleCell2.textContent.trim() : "";
-        const myName2 = getLoggedUserName();
-        if (responsibleName2 && myName2 && responsibleName2 === myName2) {
-          container.appendChild(createCloseButton(ticketId));
-        }
+      // Inject close button for any non-closed ticket in my area
+      if (statusText !== "Cerrado" && !row.querySelector("." + CLOSE_BTN_CLASS) && rowBelongsToMe) {
+        container.appendChild(createCloseButton(ticketId));
       }
 
-      // Clean up close button if status changed
-      if (statusText !== "Asignado" && statusText !== "En atención") {
+      // Clean up close button if status changed to Cerrado
+      if (statusText === "Cerrado") {
         const oldClose = row.querySelector("." + CLOSE_BTN_CLASS);
         if (oldClose) oldClose.remove();
       }
