@@ -1350,7 +1350,7 @@
             var prevAnalystName = (sourceProfileId && sourceProfileId !== "unassigned") ? (ALL_PROFILE_NAMES[parseInt(sourceProfileId)] || "") : "";
             var isSelfAssignFromEmpty = !prevAnalystName && loggedName === newAnalystName;
 
-            if (!isSelfAssignFromEmpty && loggedName !== newAnalystName) {
+            if (!isSelfAssignFromEmpty) {
               var commentLines = "Ticket reasignado por: " + loggedName + "\n";
               if (prevAnalystName) commentLines += "Analista anterior: " + prevAnalystName + "\n";
               commentLines += "Persona asignada: " + newAnalystName;
