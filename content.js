@@ -1343,6 +1343,24 @@
           var json = await res.json();
           if (json.success) {
             showSuccessToast("Ticket reasignado");
+
+            // Insert comment if the reassignment is not self-assign from unassigned
+            var loggedName = getLoggedUserName();
+            var newAnalystName = ALL_PROFILE_NAMES[parseInt(targetProfileId)] || "";
+            var prevAnalystName = (sourceProfileId && sourceProfileId !== "unassigned") ? (ALL_PROFILE_NAMES[parseInt(sourceProfileId)] || "") : "";
+            var isSelfAssignFromEmpty = !prevAnalystName && loggedName === newAnalystName;
+
+            if (!isSelfAssignFromEmpty && loggedName !== newAnalystName) {
+              var commentLines = "Ticket reasignado por: " + loggedName + "\n";
+              if (prevAnalystName) commentLines += "Analista anterior: " + prevAnalystName + "\n";
+              commentLines += "Persona asignada: " + newAnalystName;
+              fetch(SP_API + "/comment/" + ticketId, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                body: JSON.stringify({ content: "<p>" + commentLines.replace(/\n/g, "<br>") + "</p>", internal: false }),
+              }).catch(function() {});
+            }
+
             // Only refresh the two affected columns
             refreshTeamColumn(targetProfileId);
             if (sourceProfileId && sourceProfileId !== "unassigned") refreshTeamColumn(sourceProfileId);
