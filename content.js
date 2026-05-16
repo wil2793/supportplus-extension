@@ -428,21 +428,6 @@
       const chip2 = container.querySelector(".MuiChip-root");
       container.insertBefore(btn, chip2);
       }
-
-      // Show reopen button
-      var ticketBelongsForReopen = !ticketGroupId || ticketGroupId === myArea.resolutionGroupId || isGerente();
-      if (ticketBelongsForReopen) {
-        const reopenBtn = document.createElement("button");
-        reopenBtn.className = "sp-reopen-btn";
-        reopenBtn.textContent = "🔓 Reabrir";
-        reopenBtn.style.cssText =
-          "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#FF8F00;color:#fff;font-weight:600;white-space:nowrap;";
-        reopenBtn.addEventListener("mouseenter", () => { if (!reopenBtn.disabled) reopenBtn.textContent = "🔄 Reabrir"; });
-        reopenBtn.addEventListener("mouseleave", () => { if (!reopenBtn.disabled) reopenBtn.textContent = "🔓 Reabrir"; });
-        reopenBtn.addEventListener("click", () => { showReopenModal(ticketId, holderName); });
-        const chip2b = container.querySelector(".MuiChip-root");
-        container.insertBefore(reopenBtn, chip2b);
-      }
     } else if (isAssigned || isWaiting) {
       // Show buttons only if ticket belongs to my area (or gerente)
       var myArea3 = getTeamConfig();
@@ -504,6 +489,24 @@
         closeBtn.disabled = false;
       });
       container.insertBefore(closeBtn, chip4);
+      }
+    }
+
+    // Show reopen button independently for closed tickets (even if migrated)
+    if (isClosed && !container.querySelector(".sp-reopen-btn")) {
+      var myAreaReopen = getTeamConfig();
+      var canReopen = !ticketGroupId || ticketGroupId === myAreaReopen.resolutionGroupId || isGerente();
+      if (canReopen) {
+        const reopenBtn = document.createElement("button");
+        reopenBtn.className = "sp-reopen-btn";
+        reopenBtn.textContent = "🔓 Reabrir";
+        reopenBtn.style.cssText =
+          "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#FF8F00;color:#fff;font-weight:600;white-space:nowrap;margin-left:6px;";
+        reopenBtn.addEventListener("mouseenter", () => { if (!reopenBtn.disabled) reopenBtn.textContent = "🔄 Reabrir"; });
+        reopenBtn.addEventListener("mouseleave", () => { if (!reopenBtn.disabled) reopenBtn.textContent = "🔓 Reabrir"; });
+        reopenBtn.addEventListener("click", () => { showReopenModal(ticketId, holderName); });
+        var chipReopen = container.querySelector(".MuiChip-root");
+        container.insertBefore(reopenBtn, chipReopen);
       }
     }
     } finally { detailLoading = false; }
@@ -3177,15 +3180,6 @@
   }
 
   const QUICK_FILTER_ID = "sp-quick-filter";
-  const QUICK_FILTER_ASSIGNED_ID = "sp-quick-filter-assigned";
-  const QUICK_FILTER_ATTENTION_ID = "sp-quick-filter-attention";
-  const QUICK_FILTER_MYCREATED_ID = "sp-quick-filter-mycreated";
-  const QUICK_FILTER_MYASSIGNED_ID = "sp-quick-filter-myassigned";
-  const QUICK_FILTER_MYPENDING_ID = "sp-quick-filter-mypending";
-
-  async function showMyAssignedModal() {
-    showQuickFilterModal("", "", "👤 Mis tickets asignados", "https://macropayapi.supportplus.mx/tickets/search-by-user-current-responsible");
-  }
 
   function injectQuickFilterButton() {
     var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
@@ -3199,65 +3193,6 @@
       btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#FF8F00;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
       btn.addEventListener("click", function() { showQuickFilterModal("En espera"); });
       parent.insertBefore(btn, userWrapper);
-    }
-
-    if (!document.getElementById(QUICK_FILTER_ASSIGNED_ID)) {
-      var btn2 = document.createElement("button");
-      btn2.id = QUICK_FILTER_ASSIGNED_ID;
-      btn2.textContent = "📌 Asignados";
-      btn2.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#1976D2;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-      btn2.addEventListener("click", function() { showQuickFilterModal("Asignado"); });
-      parent.insertBefore(btn2, userWrapper);
-    }
-
-    if (!document.getElementById(QUICK_FILTER_ATTENTION_ID)) {
-      var btn3 = document.createElement("button");
-      btn3.id = QUICK_FILTER_ATTENTION_ID;
-      btn3.textContent = "🔔 En atención";
-      btn3.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#E65100;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-      btn3.addEventListener("click", function() { showQuickFilterModal("En atención"); });
-      parent.insertBefore(btn3, userWrapper);
-    }
-
-    if (!document.getElementById("sp-filter-separator") && !document.getElementById(QUICK_FILTER_MYASSIGNED_ID)) {
-      var sep = document.createElement("span");
-      sep.id = "sp-filter-separator";
-      sep.textContent = "|";
-      sep.style.cssText = "color:rgba(255,255,255,0.4);font-size:16px;margin-right:8px;";
-      parent.insertBefore(sep, userWrapper);
-    }
-
-    if (!document.getElementById(QUICK_FILTER_MYASSIGNED_ID)) {
-      var myName = getLoggedUserName();
-      if (myName) {
-        var btn4 = document.createElement("button");
-        btn4.id = QUICK_FILTER_MYASSIGNED_ID;
-        btn4.textContent = "👤 Mis asignados";
-        btn4.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#2E7D32;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-        btn4.addEventListener("click", function() { showMyAssignedModal(); });
-        parent.insertBefore(btn4, userWrapper);
-      }
-    }
-
-    if (!document.getElementById(QUICK_FILTER_MYCREATED_ID)) {
-      var myName2 = getLoggedUserName();
-      if (myName2) {
-        var btn5 = document.createElement("button");
-        btn5.id = QUICK_FILTER_MYCREATED_ID;
-        btn5.textContent = "📝 Mis creados";
-        btn5.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#7B1FA2;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-        btn5.addEventListener("click", function() { showQuickFilterModal("", "", "📝 Tickets que yo creé", "https://macropayapi.supportplus.mx/tickets/search-by-user-requester"); });
-        parent.insertBefore(btn5, userWrapper);
-      }
-    }
-
-    if (!document.getElementById(QUICK_FILTER_MYPENDING_ID)) {
-      var btn6 = document.createElement("button");
-      btn6.id = QUICK_FILTER_MYPENDING_ID;
-      btn6.textContent = "📋 Mis pendientes";
-      btn6.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#D94040;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-      btn6.addEventListener("click", function() { showQuickFilterModal("Asignado", "", "📋 Mis pendientes", "https://macropayapi.supportplus.mx/tickets/search-by-user-current-responsible"); });
-      parent.insertBefore(btn6, userWrapper);
     }
   }
 
