@@ -417,7 +417,7 @@
       btn.id = DETAIL_BTN_ID;
       btn.textContent = "🙂 Migrar a Monday";
       btn.style.cssText =
-        "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#D94040;color:#fff;font-weight:600;white-space:nowrap;";
+        "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#D94040;color:#fff;font-weight:600;white-space:nowrap;margin-right:6px;";
       btn.addEventListener("mouseenter", () => { if (!btn.disabled) btn.textContent = "🫡 Migrar a Monday"; });
       btn.addEventListener("mouseleave", () => { if (!btn.disabled) btn.textContent = "🙂 Migrar a Monday"; });
       btn.addEventListener("click", () => {
@@ -427,6 +427,21 @@
       });
       const chip2 = container.querySelector(".MuiChip-root");
       container.insertBefore(btn, chip2);
+      }
+
+      // Show reopen button
+      var ticketBelongsForReopen = !ticketGroupId || ticketGroupId === myArea.resolutionGroupId || isGerente();
+      if (ticketBelongsForReopen) {
+        const reopenBtn = document.createElement("button");
+        reopenBtn.className = "sp-reopen-btn";
+        reopenBtn.textContent = "🔓 Reabrir";
+        reopenBtn.style.cssText =
+          "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#FF8F00;color:#fff;font-weight:600;white-space:nowrap;";
+        reopenBtn.addEventListener("mouseenter", () => { if (!reopenBtn.disabled) reopenBtn.textContent = "🔄 Reabrir"; });
+        reopenBtn.addEventListener("mouseleave", () => { if (!reopenBtn.disabled) reopenBtn.textContent = "🔓 Reabrir"; });
+        reopenBtn.addEventListener("click", () => { showReopenModal(ticketId, holderName); });
+        const chip2b = container.querySelector(".MuiChip-root");
+        container.insertBefore(reopenBtn, chip2b);
       }
     } else if (isAssigned || isWaiting) {
       // Show buttons only if ticket belongs to my area (or gerente)
@@ -2405,6 +2420,71 @@
         showErrorToast("Error: " + err.message);
         originalBtn.textContent = "🔒 Cerrar";
         originalBtn.disabled = false;
+      }
+    });
+  }
+
+  function showReopenModal(ticketId, currentHolder) {
+    var existing = document.getElementById("sp-reopen-modal");
+    if (existing) existing.remove();
+
+    var profiles = getTeamConfig().profiles;
+    // Exclude the current holder from the list
+    var opts = profiles.filter(function(p) {
+      return p.profileFullName !== currentHolder;
+    }).map(function(p) {
+      return '<option value="' + p.profileId + '">' + p.profileFullName + '</option>';
+    }).join("");
+
+    var overlay = document.createElement("div");
+    overlay.id = "sp-reopen-modal";
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:400px;width:90%;font-family:system-ui;">' +
+      '<h3 style="margin:0 0 16px;color:#FF8F00;">🔓 Reabrir ticket #' + ticketId + '</h3>' +
+      '<p style="font-size:13px;color:#555;margin:0 0 12px;">Al reasignar un ticket cerrado a otra persona, se reabrirá automáticamente.</p>' +
+      (currentHolder && currentHolder !== "Sin asignar" ? '<p style="font-size:12px;color:#888;margin:0 0 12px;">Asignado actualmente a: <b>' + currentHolder + '</b></p>' : '') +
+      '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Reasignar a:</label>' +
+      '<select id="sp-reopen-person" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:16px;font-size:13px;">' +
+        '<option value="">-- Selecciona --</option>' + opts +
+      '</select>' +
+      '<div id="sp-reopen-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;color:#D94040;"></div>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button id="sp-reopen-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#FF8F00;color:#fff;cursor:pointer;font-size:14px;">🔄 Reabrir</button>' +
+        '<button id="sp-reopen-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
+      '</div></div>';
+    document.body.appendChild(overlay);
+
+    document.getElementById("sp-reopen-cancel").addEventListener("click", function() { overlay.remove(); });
+    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+    document.getElementById("sp-reopen-confirm").addEventListener("click", async function() {
+      var personId = document.getElementById("sp-reopen-person").value;
+      var msg = document.getElementById("sp-reopen-msg");
+      if (!personId) { msg.textContent = "Selecciona a quién reasignar."; return; }
+
+      overlay.remove();
+      showLoadingToast("Reabriendo ticket...");
+
+      var spToken = getToken();
+      try {
+        var res = await fetch(SP_API + "/reassign/" + ticketId, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+          body: JSON.stringify({
+            resolutionGroupId: getTeamConfig().resolutionGroupId,
+            serviceId: null,
+            responsibleProfileId: parseInt(personId),
+            resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId }
+          }),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var json = await res.json();
+        if (json.success) {
+          showSuccessToast("Ticket reabierto y reasignado");
+          setTimeout(function() { window.location.reload(); }, 1500);
+        } else { throw new Error("No se pudo reabrir"); }
+      } catch (err) {
+        showErrorToast("Error: " + err.message);
       }
     });
   }
