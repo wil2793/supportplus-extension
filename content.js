@@ -2432,10 +2432,7 @@
     if (existing) existing.remove();
 
     var profiles = getTeamConfig().profiles;
-    // Exclude the current holder from the list
-    var opts = profiles.filter(function(p) {
-      return p.profileFullName !== currentHolder;
-    }).map(function(p) {
+    var opts = profiles.map(function(p) {
       return '<option value="' + p.profileId + '">' + p.profileFullName + '</option>';
     }).join("");
 
