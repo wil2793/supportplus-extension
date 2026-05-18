@@ -4075,10 +4075,29 @@
           btn.disabled = true;
           try {
             var fileRes = await fetch("https://macropayapi.supportplus.mx/files/" + fileId, {
-              headers: { authorization: "Bearer " + spToken }
+              headers: { accept: "application/json", authorization: "Bearer " + spToken }
             });
             if (!fileRes.ok) throw new Error("HTTP " + fileRes.status);
-            var blob = await fileRes.blob();
+            var fileJson = await fileRes.json();
+            var fileData = fileJson.data || fileJson;
+            var base64Content = fileData.content;
+            if (!base64Content) throw new Error("Sin contenido");
+
+            // Decode base64 to blob
+            var byteChars = atob(base64Content);
+            var byteNumbers = new Array(byteChars.length);
+            for (var i = 0; i < byteChars.length; i++) {
+              byteNumbers[i] = byteChars.charCodeAt(i);
+            }
+            var byteArray = new Uint8Array(byteNumbers);
+
+            // Determine mime type
+            var mimeType = "application/octet-stream";
+            var ext = fileName.split(".").pop().toLowerCase();
+            var mimeMap = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml", bmp: "image/bmp", pdf: "application/pdf", zip: "application/zip", txt: "text/plain" };
+            if (mimeMap[ext]) mimeType = mimeMap[ext];
+
+            var blob = new Blob([byteArray], { type: mimeType });
             var url = URL.createObjectURL(blob);
             btn.textContent = "📎 " + fileName;
             btn.disabled = false;
