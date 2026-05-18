@@ -4048,6 +4048,15 @@
             '<button id="sp-qd-take-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🤚 Tomar</button>' +
             '<select id="sp-qd-assign-select" style="flex:1;padding:6px 8px;font-size:11px;border:1px solid #ddd;border-radius:6px;"><option value="">-- Asignar a --</option></select>' +
           '</div>' : '') +
+          // Action row (close + migrate) - only if assigned and not closed
+          (statusName !== "En espera" && statusName !== "Cerrado" ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
+            '<button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🔒 Cerrar</button>' +
+            '<button id="sp-qd-close-migrate-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🔒 Cerrar y Migrar</button>' +
+          '</div>' : '') +
+          // Migrate only (if closed and not migrated)
+          (statusName === "Cerrado" && !(t.uniqueCode && getCache() && getCache()[t.uniqueCode]) ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
+            '<button id="sp-qd-migrate-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🙂 Migrar a Monday</button>' +
+          '</div>' : '') +
           // People row
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
             '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:11px;">' +
@@ -4248,6 +4257,33 @@
             assignSelect.disabled = false;
             assignSelect.value = "";
           }
+        });
+      }
+
+      // Close button
+      var closeActionBtn = document.getElementById("sp-qd-close-btn");
+      if (closeActionBtn) {
+        closeActionBtn.addEventListener("click", function() {
+          overlay.remove();
+          showCloseModal(ticketId, closeActionBtn);
+        });
+      }
+
+      // Close + Migrate button
+      var closeMigrateBtn = document.getElementById("sp-qd-close-migrate-btn");
+      if (closeMigrateBtn) {
+        closeMigrateBtn.addEventListener("click", function() {
+          overlay.remove();
+          showCloseModal(ticketId, closeMigrateBtn);
+        });
+      }
+
+      // Migrate only button
+      var migrateOnlyBtn = document.getElementById("sp-qd-migrate-btn");
+      if (migrateOnlyBtn) {
+        migrateOnlyBtn.addEventListener("click", function() {
+          overlay.remove();
+          handleMondayClick(ticketId);
         });
       }
 
