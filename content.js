@@ -1,10 +1,30 @@
 (function () {
-  // --- Boss emails: show department view instead of normal extension ---
-  const BOSS_EMAILS = ["francisco.toquero@macropay.mx"];
-  const DEV_EMAIL = "william.alpuche@macropay.mx";
+  // --- ROLES & PERMISSIONS ---
+  const ROLES = {
+    admin: {
+      email: "william.alpuche@macropay.mx",
+      groups: [12, 18, 19, 20, 22],
+      canDragDrop: true,
+      canConfig: true,
+      canSwitchView: true
+    },
+    director: {
+      email: "francisco.toquero@macropay.mx",
+      groups: [12, 18, 19, 20, 22],
+      canDragDrop: false,
+      canConfig: false,
+      canSwitchView: false
+    },
+    gerente: {
+      email: "rickey.ehuan@macropay.mx",
+      groups: [19, 22],
+      canDragDrop: true,
+      canConfig: true,
+      canSwitchView: false
+    }
+  };
 
-  // Boss departments
-  const BOSS_DEPARTMENTS = [
+  const GROUP_INFO = [
     { id: 12, name: "Infraestructura IAM" },
     { id: 18, name: "Infraestructura (Cloud/ Servidores)" },
     { id: 19, name: "Infraestructura DBA" },
@@ -12,68 +32,159 @@
     { id: 22, name: "Aplicaciones- Liberacion e Implementacion" }
   ];
 
-  // Check session before doing anything
+  var currentUserRole = "usuario";
+  var currentViewMode = null; // null = use own role's view
+
+  function getUserRole(email) {
+    for (var key in ROLES) {
+      if (ROLES[key].email === email) return key;
+    }
+    return "usuario";
+  }
+
+  function getActiveViewMode() {
+    return currentViewMode || currentUserRole;
+  }
+
+  // --- Session check ---
   async function checkSession() {
     try {
       var res = await fetch("https://macropay.supportplus.mx/api/auth/session", {
         headers: { accept: "application/json", authorization: "Bearer " + (localStorage.getItem("token") || "") }
       });
-      if (!res.ok) return { allowed: true, isDev: false, isBoss: false };
+      if (!res.ok) return "usuario";
       var data = await res.json();
       var email = data?.user?.email?.toLowerCase() || "";
       try { chrome.storage.local.set({ userEmail: email }); } catch(e) {}
-      var isDev = email === DEV_EMAIL;
-      var isBoss = BOSS_EMAILS.includes(email);
-      var simulateBoss = isDev && localStorage.getItem("sp_simulate_boss") === "true";
-      if (isBoss || simulateBoss) return { allowed: false, isDev: isDev, isBoss: true };
-      return { allowed: true, isDev: isDev, isBoss: false };
-    } catch(e) { return { allowed: true, isDev: false, isBoss: false }; }
+      return getUserRole(email);
+    } catch(e) { return "usuario"; }
   }
 
-  checkSession().then(function(result) {
-    if (result.isDev) injectDevToggle();
-    if (result.isBoss && !result.allowed) { initBossView(); return; }
-    if (!result.allowed) return;
-    initExtension();
+  checkSession().then(function(role) {
+    currentUserRole = role;
+    // Admin: restore saved view mode
+    if (role === "admin") {
+      currentViewMode = localStorage.getItem("sp_view_mode") || null;
+    }
+    initByRole();
   });
 
-  function initBossView() {
-    // Wait for page to load
+  function initByRole() {
+    var viewMode = getActiveViewMode();
+    if (viewMode === "director" || viewMode === "gerente") {
+      initManagerView(viewMode);
+    } else {
+      initExtension();
+    }
+    // Admin gets the view switcher
+    if (currentUserRole === "admin") injectViewSwitcher();
+  }
+
+  // --- View switcher (admin only) ---
+  function injectViewSwitcher() {
+    var attempts = 0;
+    var interval = setInterval(function() {
+      var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
+      if (!userWrapper && attempts < 30) { attempts++; return; }
+      clearInterval(interval);
+      if (!userWrapper) return;
+      if (document.getElementById("sp-view-switcher")) return;
+
+      var select = document.createElement("select");
+      select.id = "sp-view-switcher";
+      select.style.cssText = "padding:4px 8px;font-size:11px;border:1px solid rgba(255,255,255,0.3);border-radius:4px;background:rgba(255,255,255,0.1);color:#fff;margin-right:8px;cursor:pointer;";
+      select.innerHTML = '<option value=""' + (!currentViewMode ? " selected" : "") + '>👤 Mi vista (Admin)</option>' +
+        '<option value="director"' + (currentViewMode === "director" ? " selected" : "") + '>👔 Director</option>' +
+        '<option value="gerente"' + (currentViewMode === "gerente" ? " selected" : "") + '>🏢 Gerente</option>' +
+        '<option value="usuario"' + (currentViewMode === "usuario" ? " selected" : "") + '>🧑‍💻 Usuario</option>';
+      select.addEventListener("change", function() {
+        var val = select.value;
+        if (val) {
+          localStorage.setItem("sp_view_mode", val);
+        } else {
+          localStorage.removeItem("sp_view_mode");
+        }
+        window.location.reload();
+      });
+      userWrapper.parentElement.insertBefore(select, userWrapper);
+    }, 500);
+  }
+
+  // --- Manager view (director / gerente) ---
+  function initManagerView(viewMode) {
+    var roleConfig = ROLES[viewMode];
+    var groups = roleConfig ? roleConfig.groups : [19];
+    var canDrag = roleConfig ? roleConfig.canDragDrop : false;
+
     var attempts = 0;
     var interval = setInterval(function() {
       var grid = document.querySelector(".MuiDataGrid-root");
       if (!grid && attempts < 40) { attempts++; return; }
       clearInterval(interval);
       if (!grid) return;
-      loadBossPanel(grid);
+      loadManagerPanel(grid, groups, canDrag);
     }, 500);
   }
 
-  function loadBossPanel(grid) {
+  function loadManagerPanel(grid, groups, canDrag) {
     var spToken = localStorage.getItem("token");
     if (!spToken) return;
 
     var panel = document.createElement("div");
-    panel.id = "sp-boss-panel";
-    panel.style.cssText = "margin-bottom:12px;overflow-x:auto;font-family:system-ui;";
+    panel.id = "sp-manager-panel";
+    panel.style.cssText = "margin-bottom:12px;font-family:system-ui;";
     grid.parentElement.insertBefore(panel, grid);
 
-    var containerDiv = document.createElement("div");
-    containerDiv.style.cssText = "display:flex;gap:8px;justify-content:center;";
-    panel.appendChild(containerDiv);
+    // Summary row (no drag)
+    var summaryDiv = document.createElement("div");
+    summaryDiv.style.cssText = "display:flex;gap:8px;justify-content:center;margin-bottom:12px;";
+    panel.appendChild(summaryDiv);
 
-    // Create columns for each department
-    BOSS_DEPARTMENTS.forEach(function(dept) {
-      var col = document.createElement("div");
-      col.id = "sp-boss-col-" + dept.id;
-      col.style.cssText = "min-width:200px;max-width:250px;border:2px solid #1976D2;border-radius:8px;overflow:hidden;flex-shrink:0;";
-      col.innerHTML = '<div style="background:#1976D2;color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">' + dept.name + ' <span class="sp-boss-count" style="opacity:0.7;">(...)</span></div>' +
-        '<div class="sp-boss-tickets" style="padding:4px;max-height:250px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>';
-      containerDiv.appendChild(col);
+    var groupsInfo = groups.map(function(gId) {
+      return GROUP_INFO.find(function(g) { return g.id === gId; }) || { id: gId, name: "Grupo " + gId };
     });
 
-    // Fetch tickets for each department
-    BOSS_DEPARTMENTS.forEach(function(dept) {
+    groupsInfo.forEach(function(dept) {
+      var col = document.createElement("div");
+      col.id = "sp-mgr-summary-" + dept.id;
+      col.style.cssText = "min-width:160px;border:2px solid #1976D2;border-radius:8px;overflow:hidden;flex-shrink:0;text-align:center;";
+      col.innerHTML = '<div style="background:#1976D2;color:#fff;padding:6px 10px;font-size:10px;font-weight:700;">' + dept.name + '</div>' +
+        '<div class="sp-mgr-count" style="padding:12px;font-size:24px;font-weight:700;color:#1976D2;">...</div>';
+      summaryDiv.appendChild(col);
+    });
+
+    // Collapsible detail per group
+    groupsInfo.forEach(function(dept) {
+      var section = document.createElement("div");
+      section.id = "sp-mgr-section-" + dept.id;
+      section.style.cssText = "margin-bottom:8px;border:1px solid #ddd;border-radius:8px;overflow:hidden;";
+
+      var header = document.createElement("div");
+      header.style.cssText = "padding:8px 12px;background:#f5f5f5;cursor:pointer;font-size:12px;font-weight:600;display:flex;justify-content:space-between;align-items:center;";
+      header.innerHTML = '<span>📂 ' + dept.name + '</span><span class="sp-mgr-toggle" style="font-size:14px;">▶</span>';
+
+      var body = document.createElement("div");
+      body.className = "sp-mgr-body";
+      body.style.cssText = "display:none;padding:8px;overflow-x:auto;";
+      body.innerHTML = '<div class="sp-mgr-columns" style="display:flex;gap:6px;justify-content:center;"></div>';
+
+      header.addEventListener("click", function() {
+        var isOpen = body.style.display !== "none";
+        body.style.display = isOpen ? "none" : "block";
+        header.querySelector(".sp-mgr-toggle").textContent = isOpen ? "▶" : "▼";
+        if (!isOpen && !body.dataset.loaded) {
+          body.dataset.loaded = "true";
+          loadManagerGroupDetail(dept.id, body.querySelector(".sp-mgr-columns"), spToken, canDrag);
+        }
+      });
+
+      section.appendChild(header);
+      section.appendChild(body);
+      panel.appendChild(section);
+    });
+
+    // Fetch summary counts
+    groupsInfo.forEach(function(dept) {
       Promise.all([
         fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + dept.id + "&ticketStatusName=Asignado", {
           headers: { accept: "application/json", authorization: "Bearer " + spToken }
@@ -82,42 +193,15 @@
           headers: { accept: "application/json", authorization: "Bearer " + spToken }
         }).then(function(r) { return r.json(); })
       ]).then(function(results) {
-        var tickets = ((results[0].data || results[0]).content || []).concat((results[1].data || results[1]).content || []);
-
-        var col = document.getElementById("sp-boss-col-" + dept.id);
-        if (!col) return;
-
-        var countEl = col.querySelector(".sp-boss-count");
-        if (countEl) countEl.textContent = "(" + tickets.length + ")";
-
-        var listEl = col.querySelector(".sp-boss-tickets");
-        if (!listEl) return;
-
-        if (!tickets.length) {
-          listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
-        } else {
-          var html = "";
-          tickets.forEach(function(t) {
-            html += '<a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;text-decoration:none;color:inherit;font-size:10px;line-height:1.3;">';
-            html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
-            html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 35) + '</div>';
-            html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#888;font-size:9px;">' + (t.responsibleName || "Sin asignar").split(" ")[0] + '</span><span style="color:#888;font-size:9px;">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
-            html += '</a>';
-          });
-          listEl.innerHTML = html;
-        }
-      }).catch(function() {
-        var col = document.getElementById("sp-boss-col-" + dept.id);
-        if (col) {
-          var listEl = col.querySelector(".sp-boss-tickets");
-          if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#D94040;font-size:10px;">Error</div>';
-        }
-      });
+        var count = ((results[0].data || results[0]).content || []).length + ((results[1].data || results[1]).content || []).length;
+        var col = document.getElementById("sp-mgr-summary-" + dept.id);
+        if (col) col.querySelector(".sp-mgr-count").textContent = count;
+      }).catch(function() {});
     });
 
-    // Auto-refresh every 60 seconds
+    // Auto-refresh summary every 60s
     setInterval(function() {
-      BOSS_DEPARTMENTS.forEach(function(dept) {
+      groupsInfo.forEach(function(dept) {
         Promise.all([
           fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + dept.id + "&ticketStatusName=Asignado", {
             headers: { accept: "application/json", authorization: "Bearer " + spToken }
@@ -126,54 +210,119 @@
             headers: { accept: "application/json", authorization: "Bearer " + spToken }
           }).then(function(r) { return r.json(); })
         ]).then(function(results) {
-          var tickets = ((results[0].data || results[0]).content || []).concat((results[1].data || results[1]).content || []);
-          var col = document.getElementById("sp-boss-col-" + dept.id);
-          if (!col) return;
-          var countEl = col.querySelector(".sp-boss-count");
-          if (countEl) countEl.textContent = "(" + tickets.length + ")";
-          var listEl = col.querySelector(".sp-boss-tickets");
-          if (!listEl) return;
-          if (!tickets.length) {
-            listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
-          } else {
-            var html = "";
-            tickets.forEach(function(t) {
-              html += '<a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;text-decoration:none;color:inherit;font-size:10px;line-height:1.3;">';
-              html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
-              html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 35) + '</div>';
-              html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#888;font-size:9px;">' + (t.responsibleName || "Sin asignar").split(" ")[0] + '</span><span style="color:#888;font-size:9px;">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
-              html += '</a>';
-            });
-            listEl.innerHTML = html;
-          }
+          var count = ((results[0].data || results[0]).content || []).length + ((results[1].data || results[1]).content || []).length;
+          var col = document.getElementById("sp-mgr-summary-" + dept.id);
+          if (col) col.querySelector(".sp-mgr-count").textContent = count;
         }).catch(function() {});
       });
     }, 60000);
   }
 
-  function injectDevToggle() {
-    // Wait for the page to load
-    var attempts = 0;
-    var interval = setInterval(function() {
-      var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
-      if (!userWrapper && attempts < 30) { attempts++; return; }
-      clearInterval(interval);
-      if (!userWrapper) return;
+  function loadManagerGroupDetail(groupId, container, spToken, canDrag) {
+    // Fetch members of this group
+    fetch("https://macropayapi.supportplus.mx/tickets/web/active-profiles-by-resolution-group/" + groupId, {
+      headers: { accept: "application/json", authorization: "Bearer " + spToken }
+    }).then(function(r) { return r.json(); }).then(function(json) {
+      var profiles = json.data || json;
+      if (!Array.isArray(profiles)) { container.innerHTML = '<div style="color:#888;font-size:11px;">Sin miembros</div>'; return; }
 
-      var toggle = document.createElement("label");
-      toggle.style.cssText = "display:inline-flex;align-items:center;gap:4px;margin-right:12px;font-size:11px;color:#fff;cursor:pointer;opacity:0.7;";
-      toggle.innerHTML = '<input type="checkbox" id="sp-dev-boss-toggle" style="cursor:pointer;"' + (localStorage.getItem("sp_simulate_boss") === "true" ? " checked" : "") + '> Simular jefe';
-      userWrapper.parentElement.insertBefore(toggle, userWrapper);
-
-      document.getElementById("sp-dev-boss-toggle").addEventListener("change", function() {
-        if (this.checked) {
-          localStorage.setItem("sp_simulate_boss", "true");
-        } else {
-          localStorage.removeItem("sp_simulate_boss");
-        }
-        window.location.reload();
+      // Create columns per member
+      profiles.forEach(function(p) {
+        var col = document.createElement("div");
+        col.style.cssText = "min-width:160px;max-width:200px;border:1px solid #ddd;border-radius:6px;overflow:hidden;flex-shrink:0;";
+        col.innerHTML = '<div style="background:#2196F3;color:#fff;padding:4px 8px;font-size:10px;font-weight:700;text-align:center;">' + p.profileFullName.split(" ")[0] + ' <span class="sp-mgr-pcount">(...)</span></div>' +
+          '<div class="sp-mgr-ptickets" data-profile-id="' + p.profileId + '" data-group-id="' + groupId + '" style="padding:3px;max-height:180px;overflow-y:auto;background:#fafafa;min-height:25px;"></div>';
+        container.appendChild(col);
       });
-    }, 500);
+
+      // Setup drag and drop if allowed
+      if (canDrag) {
+        container.addEventListener("dragstart", function(e) {
+          var ticket = e.target.closest(".sp-mgr-ticket");
+          if (!ticket) return;
+          e.dataTransfer.setData("text/plain", ticket.dataset.ticketId);
+          ticket.style.opacity = "0.4";
+        });
+        container.addEventListener("dragend", function(e) {
+          var ticket = e.target.closest(".sp-mgr-ticket");
+          if (ticket) ticket.style.opacity = "1";
+        });
+        container.addEventListener("dragover", function(e) {
+          e.preventDefault();
+          var zone = e.target.closest(".sp-mgr-ptickets");
+          if (zone) zone.style.background = "#e3f2fd";
+        });
+        container.addEventListener("dragleave", function(e) {
+          var zone = e.target.closest(".sp-mgr-ptickets");
+          if (zone && !zone.contains(e.relatedTarget)) zone.style.background = "#fafafa";
+        });
+        container.addEventListener("drop", async function(e) {
+          e.preventDefault();
+          var zone = e.target.closest(".sp-mgr-ptickets");
+          if (!zone) return;
+          zone.style.background = "#fafafa";
+          var ticketId = e.dataTransfer.getData("text/plain");
+          var targetProfileId = zone.dataset.profileId;
+          var targetGroupId = zone.dataset.groupId;
+          if (!ticketId || !targetProfileId) return;
+
+          // Check same column
+          var src = container.querySelector('.sp-mgr-ticket[data-ticket-id="' + ticketId + '"]');
+          if (src) {
+            var srcZone = src.closest(".sp-mgr-ptickets");
+            if (srcZone && srcZone.dataset.profileId === targetProfileId) return;
+          }
+
+          try {
+            var res = await fetch("https://macropayapi.supportplus.mx/tickets/web/reassign/" + ticketId, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+              body: JSON.stringify({ resolutionGroupId: parseInt(targetGroupId), serviceId: null, responsibleProfileId: parseInt(targetProfileId), resolutionGroup: { label: "", value: parseInt(targetGroupId) } }),
+            });
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            var json2 = await res.json();
+            if (json2.success) {
+              // Refresh this group detail
+              container.innerHTML = "";
+              loadManagerGroupDetail(parseInt(targetGroupId), container, spToken, canDrag);
+            }
+          } catch(err) {}
+        });
+      }
+
+      // Fetch tickets per member
+      profiles.forEach(function(p) {
+        Promise.all([
+          fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + p.profileId + "&ticketStatusName=Asignado", {
+            headers: { accept: "application/json", authorization: "Bearer " + spToken }
+          }).then(function(r) { return r.json(); }),
+          fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + p.profileId + "&ticketStatusName=En%20atenci%C3%B3n", {
+            headers: { accept: "application/json", authorization: "Bearer " + spToken }
+          }).then(function(r) { return r.json(); })
+        ]).then(function(results) {
+          var tickets = ((results[0].data || results[0]).content || []).concat((results[1].data || results[1]).content || []);
+          var listEl = container.querySelector('.sp-mgr-ptickets[data-profile-id="' + p.profileId + '"]');
+          if (!listEl) return;
+          var countEl = listEl.previousElementSibling.querySelector(".sp-mgr-pcount");
+          if (countEl) countEl.textContent = "(" + tickets.length + ")";
+
+          if (!tickets.length) {
+            listEl.innerHTML = '<div style="text-align:center;padding:6px;color:#aaa;font-size:10px;">Sin tickets</div>';
+          } else {
+            var html = "";
+            tickets.forEach(function(t) {
+              html += '<div ' + (canDrag ? 'draggable="true" ' : '') + 'data-ticket-id="' + t.id + '" class="sp-mgr-ticket" style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:9px;line-height:1.3;' + (canDrag ? 'cursor:grab;' : '') + '">';
+              html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
+              html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 25) + '</div>';
+              html += '</div>';
+            });
+            listEl.innerHTML = html;
+          }
+        }).catch(function() {});
+      });
+    }).catch(function() {
+      container.innerHTML = '<div style="color:#D94040;font-size:11px;">Error al cargar miembros</div>';
+    });
   }
 
   function initExtension() {
