@@ -4033,11 +4033,13 @@
         '<div style="flex:1;overflow:auto;">' +
           // Subject + info grid
           '<div style="background:#f5f5f5;padding:8px 10px;border-radius:6px;font-size:13px;font-weight:600;margin-bottom:8px;">' + (t.subject || "Sin asunto") + '</div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;font-size:11px;">' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;font-size:11px;">' +
+            '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Estado:</span> <select id="sp-qd-status-select" style="font-size:11px;border:none;background:transparent;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-weight:700;cursor:pointer;">' + ["Asignado","En espera","En atención","En validación","Por confirmar","Por ejecutar","Por revisar","En aplicaciones","Cerrado","Rechazado","Cancelado","Reabierto"].map(function(s) { return '<option value="' + s + '"' + (s === statusName ? ' selected' : '') + '>' + s + '</option>'; }).join("") + '</select></div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Prioridad:</span> ' + priorityName + '</div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Tipo:</span> ' + reportType + '</div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Canal:</span> ' + channel + '</div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Grupo:</span> ' + groupName + '</div>' +
+            '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Servicio:</span> ' + serviceName + '</div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Creado:</span> ' + createdAt + '</div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Actualizado:</span> ' + updatedAt + '</div>' +
           '</div>' +
@@ -4119,6 +4121,30 @@
       // Allow Enter to send
       document.getElementById("sp-qd-comment-input").addEventListener("keydown", function(e) {
         if (e.key === "Enter") document.getElementById("sp-qd-comment-send").click();
+      });
+
+      // Status change
+      var STATUS_ID_MAP = { "En espera": 34, "Asignado": 1, "En atención": 2, "En validación": 3, "Por confirmar": 4, "Por ejecutar": 5, "Por revisar": 6, "En aplicaciones": 7, "Cerrado": 9, "Rechazado": 10, "Cancelado": 11, "Reabierto": 12 };
+      document.getElementById("sp-qd-status-select").addEventListener("change", async function() {
+        var newStatus = this.value;
+        var statusId = STATUS_ID_MAP[newStatus];
+        if (!statusId) { showErrorToast("Estatus no reconocido"); return; }
+        this.disabled = true;
+        showLoadingToast("Cambiando estatus...");
+        try {
+          var statusRes = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+            body: JSON.stringify({ nextTicketStatusId: statusId, ticketCommentRequest: null }),
+          });
+          if (!statusRes.ok) throw new Error("HTTP " + statusRes.status);
+          showSuccessToast("Estatus cambiado a: " + newStatus);
+          this.style.color = STATUS_TEXT_COLORS[newStatus] || "#333";
+        } catch(err) {
+          showErrorToast("Error: " + err.message);
+          this.value = statusName; // revert
+        }
+        this.disabled = false;
       });
 
       // View attachments in modal
