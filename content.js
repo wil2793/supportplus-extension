@@ -226,6 +226,13 @@
       var profiles = json.data || json;
       if (!Array.isArray(profiles)) { container.innerHTML = '<div style="color:#888;font-size:11px;">Sin miembros</div>'; return; }
 
+      // Create "Sin asignar" column at the left
+      var unassignedCol = document.createElement("div");
+      unassignedCol.style.cssText = "min-width:160px;max-width:200px;border:1px solid #FF8F00;border-radius:6px;overflow:hidden;flex-shrink:0;";
+      unassignedCol.innerHTML = '<div style="background:#FF8F00;color:#fff;padding:4px 8px;font-size:10px;font-weight:700;text-align:center;">⏳ Sin asignar <span class="sp-mgr-pcount">(...)</span></div>' +
+        '<div class="sp-mgr-ptickets" data-profile-id="unassigned" data-group-id="' + groupId + '" style="padding:3px;max-height:180px;overflow-y:auto;background:#fafafa;min-height:25px;"></div>';
+      container.appendChild(unassignedCol);
+
       // Create columns per member
       profiles.forEach(function(p) {
         var col = document.createElement("div");
@@ -320,6 +327,64 @@
           }
         }).catch(function() {});
       });
+
+      // Fetch "Sin asignar" (En espera)
+      fetch("https://macropayapi.supportplus.mx/tickets/search-by-level-and-resolution-groups?page=0&size=50&resolutionGroupId=" + groupId + "&ticketStatusName=En%20espera", {
+        headers: { accept: "application/json", authorization: "Bearer " + spToken }
+      }).then(function(r) { return r.json(); }).then(function(json) {
+        var tickets = (json.data || json).content || [];
+        var listEl = container.querySelector('.sp-mgr-ptickets[data-profile-id="unassigned"]');
+        if (!listEl) return;
+        var countEl = listEl.previousElementSibling.querySelector(".sp-mgr-pcount");
+        if (countEl) countEl.textContent = "(" + tickets.length + ")";
+        if (!tickets.length) {
+          listEl.innerHTML = '<div style="text-align:center;padding:6px;color:#aaa;font-size:10px;">Sin tickets</div>';
+        } else {
+          var html = "";
+          tickets.forEach(function(t) {
+            html += '<div ' + (canDrag ? 'draggable="true" ' : '') + 'data-ticket-id="' + t.id + '" class="sp-mgr-ticket" style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:9px;line-height:1.3;' + (canDrag ? 'cursor:grab;' : '') + '">';
+            html += '<div style="font-weight:600;color:#E65100;">' + (t.uniqueCode || "") + '</div>';
+            html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 25) + '</div>';
+            html += '</div>';
+          });
+          listEl.innerHTML = html;
+        }
+      }).catch(function() {});
+
+      // Create "Cerrados hoy" column at the right
+      var today = new Date();
+      var todayStart = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0") + "T00:00";
+      var todayEnd = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0") + "T23:59";
+
+      var closedCol = document.createElement("div");
+      closedCol.style.cssText = "min-width:160px;max-width:200px;border:1px solid #2E7D32;border-radius:6px;overflow:hidden;flex-shrink:0;";
+      closedCol.innerHTML = '<div style="background:#2E7D32;color:#fff;padding:4px 8px;font-size:10px;font-weight:700;text-align:center;">✅ Cerrados hoy <span class="sp-mgr-closed-count">(...)</span></div>' +
+        '<div class="sp-mgr-closed-list" style="padding:3px;max-height:180px;overflow-y:auto;background:#fafafa;min-height:25px;"></div>';
+      container.appendChild(closedCol);
+
+      // Fetch closed today
+      fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + groupId + "&ticketStatusName=Cerrado&initDate=" + todayStart + "&endDate=" + todayEnd + "&page=0&size=100", {
+        headers: { accept: "application/json", authorization: "Bearer " + spToken }
+      }).then(function(r) { return r.json(); }).then(function(json) {
+        var tickets = (json.data || json).content || [];
+        var countEl = closedCol.querySelector(".sp-mgr-closed-count");
+        if (countEl) countEl.textContent = "(" + tickets.length + ")";
+        var listEl = closedCol.querySelector(".sp-mgr-closed-list");
+        if (!listEl) return;
+        if (!tickets.length) {
+          listEl.innerHTML = '<div style="text-align:center;padding:6px;color:#aaa;font-size:10px;">Sin tickets</div>';
+        } else {
+          var html = "";
+          tickets.forEach(function(t) {
+            html += '<div style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #2E7D32;font-size:9px;line-height:1.3;">';
+            html += '<div style="font-weight:600;color:#2E7D32;">' + (t.uniqueCode || "") + '</div>';
+            html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 25) + '</div>';
+            html += '<div style="color:#888;font-size:8px;">' + (t.responsibleName || "").split(" ")[0] + '</div>';
+            html += '</div>';
+          });
+          listEl.innerHTML = html;
+        }
+      }).catch(function() {});
     }).catch(function() {
       container.innerHTML = '<div style="color:#D94040;font-size:11px;">Error al cargar miembros</div>';
     });
