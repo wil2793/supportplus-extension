@@ -12,6 +12,8 @@
       if (!res.ok) return { allowed: true, isDev: false };
       var data = await res.json();
       var email = data?.user?.email?.toLowerCase() || "";
+      // Save email to chrome.storage for popup access
+      try { chrome.storage.local.set({ userEmail: email }); } catch(e) {}
       var isDev = email === DEV_EMAIL;
       var simulateBoss = isDev && localStorage.getItem("sp_simulate_boss") === "true";
       if (BLOCKED_EMAILS.includes(email) || simulateBoss) return { allowed: false, isDev: isDev };
@@ -2707,6 +2709,130 @@
   const SP_SEARCH_API = "https://macropayapi.supportplus.mx/tickets/search-by-level-and-resolution-groups";
   var activeModalRefresh = null;
 
+  // --- Config button ---
+  const CONFIG_BTN_ID = "sp-config-btn";
+
+  function injectConfigButton() {
+    if (document.getElementById(CONFIG_BTN_ID)) return;
+    var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
+    if (!userWrapper) return;
+
+    var btn = document.createElement("button");
+    btn.id = CONFIG_BTN_ID;
+    btn.textContent = "⚙️";
+    btn.title = "Configuración SupportPlus Tools";
+    btn.style.cssText = "padding:4px 10px;font-size:14px;cursor:pointer;border:none;border-radius:6px;background:rgba(255,255,255,0.15);color:#fff;margin-right:8px;";
+    btn.addEventListener("click", showConfigModal);
+    userWrapper.parentElement.insertBefore(btn, userWrapper);
+  }
+
+  function showConfigModal() {
+    var existing = document.getElementById("sp-config-modal");
+    if (existing) existing.remove();
+
+    // Load current values
+    chrome.storage.local.get(["mondayToken", "mondayBoardId", "mondayBoardName", "teamArea"], function(stored) {
+      var currentToken = stored.mondayToken || "";
+      var currentBoardId = stored.mondayBoardId || "";
+      var currentBoardName = stored.mondayBoardName || "";
+      var currentArea = stored.teamArea || "dba";
+
+      var overlay = document.createElement("div");
+      overlay.id = "sp-config-modal";
+      overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+      overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:450px;width:90%;font-family:system-ui;">' +
+        '<h3 style="margin:0 0 16px;">⚙️ Configuración</h3>' +
+        '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Área de trabajo</label>' +
+        '<select id="sp-cfg-area" style="width:100%;padding:8px;font-size:13px;border:1px solid #ddd;border-radius:6px;margin-bottom:12px;">' +
+          '<option value="dba"' + (currentArea === "dba" ? " selected" : "") + '>Infraestructura DBA</option>' +
+          '<option value="aplicaciones"' + (currentArea === "aplicaciones" ? " selected" : "") + '>Aplicaciones - Liberación e Implementación</option>' +
+        '</select>' +
+        '<hr style="border:none;border-top:1px solid #eee;margin:12px 0;">' +
+        '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Monday.com - API Token</label>' +
+        '<input id="sp-cfg-token" type="password" value="' + currentToken + '" placeholder="Pega tu token de Monday" style="width:100%;padding:8px;font-size:12px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;margin-bottom:8px;">' +
+        '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Board</label>' +
+        '<div style="position:relative;margin-bottom:4px;">' +
+          '<input id="sp-cfg-board-search" type="text" value="' + currentBoardName.replace(/"/g, '&quot;') + '" placeholder="Buscar board..." style="width:100%;padding:8px;font-size:12px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;">' +
+          '<div id="sp-cfg-board-results" style="position:absolute;top:100%;left:0;right:0;max-height:180px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:4px;display:none;z-index:10;font-size:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>' +
+        '</div>' +
+        '<div id="sp-cfg-board-status" style="font-size:11px;color:#888;margin-bottom:12px;min-height:16px;">' + (currentBoardName ? "✅ " + currentBoardName : "Carga los boards primero") + '</div>' +
+        '<button id="sp-cfg-load-boards" style="width:100%;padding:8px;font-size:12px;cursor:pointer;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;margin-bottom:12px;">🔄 Cargar boards</button>' +
+        '<input type="hidden" id="sp-cfg-board-id" value="' + currentBoardId + '">' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button id="sp-cfg-save" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">💾 Guardar</button>' +
+          '<button id="sp-cfg-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
+        '</div></div>';
+      document.body.appendChild(overlay);
+
+      // Events
+      document.getElementById("sp-cfg-cancel").addEventListener("click", function() { overlay.remove(); });
+      overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+      // Load boards
+      var allBoards = [];
+      document.getElementById("sp-cfg-load-boards").addEventListener("click", async function() {
+        var token = document.getElementById("sp-cfg-token").value.trim();
+        if (!token) { document.getElementById("sp-cfg-board-status").textContent = "⚠️ Ingresa un token primero"; return; }
+        document.getElementById("sp-cfg-board-status").textContent = "Cargando...";
+        try {
+          var res = await fetch("https://api.monday.com/v2", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: token },
+            body: JSON.stringify({ query: "{ boards(limit:500) { id name } }" }),
+          });
+          var json = await res.json();
+          if (json.errors) throw new Error(json.errors[0].message);
+          allBoards = json.data.boards.sort(function(a, b) { return a.name.localeCompare(b.name); });
+          document.getElementById("sp-cfg-board-status").textContent = allBoards.length + " boards cargados. Escribe para buscar.";
+        } catch(e) {
+          document.getElementById("sp-cfg-board-status").textContent = "❌ " + e.message;
+        }
+      });
+
+      // Board search
+      function filterCfgBoards() {
+        var query = document.getElementById("sp-cfg-board-search").value.toLowerCase().trim();
+        var results = document.getElementById("sp-cfg-board-results");
+        if (!query || !allBoards.length) { results.style.display = "none"; return; }
+        var filtered = allBoards.filter(function(b) { return b.name.toLowerCase().includes(query); }).slice(0, 15);
+        if (!filtered.length) { results.innerHTML = '<div style="padding:6px 8px;color:#888;">Sin resultados</div>'; results.style.display = "block"; return; }
+        results.innerHTML = filtered.map(function(b) {
+          return '<div class="sp-cfg-board-opt" data-id="' + b.id + '" data-name="' + b.name.replace(/"/g, '&quot;') + '" style="padding:8px;cursor:pointer;border-bottom:1px solid #f0f0f0;">' + b.name + '</div>';
+        }).join("");
+        results.style.display = "block";
+      }
+      document.getElementById("sp-cfg-board-search").addEventListener("input", filterCfgBoards);
+      document.getElementById("sp-cfg-board-search").addEventListener("focus", filterCfgBoards);
+      document.getElementById("sp-cfg-board-results").addEventListener("click", function(e) {
+        var opt = e.target.closest(".sp-cfg-board-opt");
+        if (!opt) return;
+        document.getElementById("sp-cfg-board-id").value = opt.dataset.id;
+        document.getElementById("sp-cfg-board-search").value = opt.dataset.name;
+        document.getElementById("sp-cfg-board-status").textContent = "✅ " + opt.dataset.name;
+        document.getElementById("sp-cfg-board-results").style.display = "none";
+      });
+
+      // Save
+      document.getElementById("sp-cfg-save").addEventListener("click", function() {
+        var token = document.getElementById("sp-cfg-token").value.trim();
+        var boardId = document.getElementById("sp-cfg-board-id").value;
+        var boardName = document.getElementById("sp-cfg-board-search").value.trim();
+        var area = document.getElementById("sp-cfg-area").value;
+        chrome.storage.local.set({ mondayToken: token, mondayBoardId: boardId, mondayBoardName: boardName, teamArea: area }, function() {
+          overlay.remove();
+          showSuccessToast("Configuración guardada");
+          // Reload team area
+          currentTeamArea = area;
+          // Remove panel to rebuild with new area
+          var panel = document.getElementById(TEAM_PANEL_ID);
+          if (panel) panel.remove();
+          teamPanelLoading = false;
+          loadTeamPanel();
+        });
+      });
+    });
+  }
+
   function injectSearchButton() {
     if (document.getElementById(SEARCH_BTN_ID)) return;
     var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
@@ -3486,6 +3612,7 @@
     var boardDate = await getBoardDate();
 
     // Header buttons - always inject regardless of view
+    injectConfigButton();
     injectSearchButton();
     injectDashboardButton();
     injectReportButton();
