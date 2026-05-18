@@ -4017,54 +4017,109 @@
         participantsHTML += '</div></div>';
       }
 
-      var rowStyle = 'padding:8px 12px;border-bottom:1px solid #f0f0f0;display:flex;gap:8px;font-size:13px;';
+      var rowStyle = 'padding:4px 10px;border-bottom:1px solid #f0f0f0;display:flex;gap:8px;font-size:12px;';
 
       var overlay = document.createElement("div");
       overlay.id = "sp-quick-detail-modal";
       overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-      overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:750px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-          '<h3 style="margin:0;font-size:16px;">📋 ' + (t.uniqueCode || ticketId) + '</h3>' +
+      overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:800px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+          '<h3 style="margin:0;font-size:15px;">📋 ' + (t.uniqueCode || ticketId) + ' <span style="font-weight:400;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-size:12px;">(' + statusName + ')</span></h3>' +
           '<div style="display:flex;gap:6px;">' +
-            '<a href="/es/dashboard/tickets/' + ticketId + '" target="_blank" style="padding:6px 12px;border:1px solid #1976D2;border-radius:6px;font-size:12px;text-decoration:none;color:#1976D2;">Abrir ticket ↗</a>' +
-            '<button id="sp-qd-close" style="padding:6px 12px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:12px;">Cerrar</button>' +
+            '<a href="/es/dashboard/tickets/' + ticketId + '" target="_blank" style="padding:5px 10px;border:1px solid #1976D2;border-radius:6px;font-size:11px;text-decoration:none;color:#1976D2;">Abrir ↗</a>' +
+            '<button id="sp-qd-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
           '</div>' +
         '</div>' +
         '<div style="flex:1;overflow:auto;">' +
-          '<div style="border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;margin-bottom:12px;">' +
-            '<div style="' + rowStyle + 'background:#f5f5f5;font-weight:600;">' + (t.subject || "Sin asunto") + '</div>' +
-            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Estado:</span><b style="color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';">' + statusName + '</b></div>' +
-            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Prioridad:</span>' + priorityName + '</div>' +
-            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Tipo:</span>' + reportType + '</div>' +
-            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Grupo:</span>' + groupName + '</div>' +
-            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Servicio:</span>' + serviceName + '</div>' +
-            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Canal:</span>' + channel + '</div>' +
-            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Creado:</span>' + createdAt + '</div>' +
-            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Actualizado:</span>' + updatedAt + '</div>' +
+          // Subject + info grid
+          '<div style="background:#f5f5f5;padding:8px 10px;border-radius:6px;font-size:13px;font-weight:600;margin-bottom:8px;">' + (t.subject || "Sin asunto") + '</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;font-size:11px;">' +
+            '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Prioridad:</span> ' + priorityName + '</div>' +
+            '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Tipo:</span> ' + reportType + '</div>' +
+            '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Canal:</span> ' + channel + '</div>' +
+            '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Grupo:</span> ' + groupName + '</div>' +
+            '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Creado:</span> ' + createdAt + '</div>' +
+            '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Actualizado:</span> ' + updatedAt + '</div>' +
           '</div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">' +
-            '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px;">' +
-              '<b style="font-size:11px;color:#888;">👤 Solicitante</b>' +
-              '<div style="font-size:13px;font-weight:600;margin-top:4px;">' + requesterName + '</div>' +
-              '<div style="font-size:11px;color:#555;">' + requesterEmail + '</div>' +
-              '<div style="font-size:11px;color:#888;">' + department + ' | ' + location + '</div>' +
+          // People row
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
+            '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:11px;">' +
+              '<b style="color:#888;">👤 Solicitante:</b> ' + requesterName + (requesterEmail ? ' <span style="color:#888;">(' + requesterEmail + ')</span>' : '') +
+              (department ? '<br><span style="color:#aaa;">' + department + ' | ' + location + '</span>' : '') +
             '</div>' +
-            '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px;">' +
-              '<b style="font-size:11px;color:#888;">🔍 Analista</b>' +
-              '<div style="font-size:13px;font-weight:600;margin-top:4px;">' + holderName + '</div>' +
-              '<div style="font-size:11px;color:#555;">' + holderEmail + '</div>' +
+            '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:11px;">' +
+              '<b style="color:#888;">🔍 Analista:</b> ' + holderName + (holderEmail ? ' <span style="color:#888;">(' + holderEmail + ')</span>' : '') +
             '</div>' +
           '</div>' +
-          '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px;margin-bottom:12px;">' +
-            '<b style="font-size:11px;color:#888;">📝 Descripción</b>' +
-            '<pre style="margin:6px 0 0;font-size:12px;white-space:pre-wrap;word-break:break-word;font-family:system-ui;color:#333;max-height:150px;overflow:auto;">' + desc + '</pre>' +
+          // Description (compact)
+          '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;margin-bottom:8px;">' +
+            '<b style="font-size:10px;color:#888;">📝 Descripción</b>' +
+            '<pre style="margin:4px 0 0;font-size:11px;white-space:pre-wrap;word-break:break-word;font-family:system-ui;color:#333;max-height:80px;overflow:auto;">' + desc + '</pre>' +
           '</div>' +
-          attachHTML + commentsHTML + participantsHTML +
+          attachHTML +
+          participantsHTML +
+          // Comments section
+          '<div style="margin-top:8px;border-top:1px solid #eee;padding-top:8px;">' +
+            '<b style="font-size:12px;">💬 Comentarios (' + comments.length + ')</b>' +
+            '<div id="sp-qd-comments-list" style="max-height:150px;overflow-y:auto;margin-top:6px;">' +
+              (comments.length ? comments.map(function(c) {
+                var cDate = c.createdAt ? c.createdAt.replace("T", " ").substring(0, 16) : "";
+                var cContent = (c.content || "").replace(/<[^>]*>/g, "");
+                return '<div style="padding:5px 8px;background:#f9f9f9;border-left:3px solid #1976D2;border-radius:4px;font-size:11px;margin-bottom:4px;">' +
+                  '<div style="display:flex;justify-content:space-between;"><b>' + (c.fullName || "") + '</b><span style="color:#888;font-size:10px;">' + cDate + '</span></div>' +
+                  '<div style="color:#555;margin-top:2px;">' + cContent + '</div></div>';
+              }).join("") : '<div style="color:#aaa;font-size:11px;padding:4px;">Sin comentarios</div>') +
+            '</div>' +
+            // Add comment form
+            '<div style="display:flex;gap:6px;margin-top:8px;">' +
+              '<input id="sp-qd-comment-input" type="text" placeholder="Escribe un comentario..." style="flex:1;padding:6px 10px;font-size:12px;border:1px solid #ddd;border-radius:6px;outline:none;">' +
+              '<button id="sp-qd-comment-send" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">Enviar</button>' +
+            '</div>' +
+          '</div>' +
         '</div></div>';
       document.body.appendChild(overlay);
 
       document.getElementById("sp-qd-close").addEventListener("click", function() { overlay.remove(); });
       overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+      // Send comment
+      document.getElementById("sp-qd-comment-send").addEventListener("click", async function() {
+        var input = document.getElementById("sp-qd-comment-input");
+        var text = input.value.trim();
+        if (!text) return;
+        var sendBtn = document.getElementById("sp-qd-comment-send");
+        sendBtn.disabled = true;
+        sendBtn.textContent = "...";
+        try {
+          var commentRes = await fetch(SP_API + "/comment/" + ticketId, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+            body: JSON.stringify({ content: "<p>" + text + "</p>", internal: false }),
+          });
+          if (!commentRes.ok) throw new Error("HTTP " + commentRes.status);
+          // Add comment to list in real time
+          var now = new Date();
+          var nowStr = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0") + "-" + String(now.getDate()).padStart(2,"0") + " " + String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0");
+          var myName = getLoggedUserName() || "Yo";
+          var list = document.getElementById("sp-qd-comments-list");
+          var noComments = list.querySelector('[style*="color:#aaa"]');
+          if (noComments) noComments.remove();
+          list.innerHTML += '<div style="padding:5px 8px;background:#e3f2fd;border-left:3px solid #1976D2;border-radius:4px;font-size:11px;margin-bottom:4px;">' +
+            '<div style="display:flex;justify-content:space-between;"><b>' + myName + '</b><span style="color:#888;font-size:10px;">' + nowStr + '</span></div>' +
+            '<div style="color:#555;margin-top:2px;">' + text + '</div></div>';
+          list.scrollTop = list.scrollHeight;
+          input.value = "";
+        } catch(err) {
+          showErrorToast("Error al comentar: " + err.message);
+        }
+        sendBtn.disabled = false;
+        sendBtn.textContent = "Enviar";
+      });
+
+      // Allow Enter to send
+      document.getElementById("sp-qd-comment-input").addEventListener("keydown", function(e) {
+        if (e.key === "Enter") document.getElementById("sp-qd-comment-send").click();
+      });
 
       // View attachments in modal
       overlay.querySelectorAll(".sp-qd-download").forEach(function(btn) {
