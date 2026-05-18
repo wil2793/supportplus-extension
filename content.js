@@ -4080,12 +4080,9 @@
             if (!fileRes.ok) throw new Error("HTTP " + fileRes.status);
             var blob = await fileRes.blob();
             var url = URL.createObjectURL(blob);
-            var a = document.createElement("a");
-            a.href = url;
-            a.download = fileName;
-            a.click();
-            URL.revokeObjectURL(url);
-            btn.textContent = "✅ " + fileName;
+            window.open(url, "_blank");
+            btn.textContent = "📎 " + fileName;
+            btn.disabled = false;
           } catch(err) {
             btn.textContent = "❌ Error";
             setTimeout(function() { btn.textContent = "📎 " + fileName; btn.disabled = false; }, 2000);
