@@ -4066,7 +4066,7 @@
       document.getElementById("sp-qd-close").addEventListener("click", function() { overlay.remove(); });
       overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
 
-      // Download attachments via authenticated fetch
+      // View attachments in modal
       overlay.querySelectorAll(".sp-qd-download").forEach(function(btn) {
         btn.addEventListener("click", async function() {
           var fileId = btn.dataset.fileId;
@@ -4080,9 +4080,26 @@
             if (!fileRes.ok) throw new Error("HTTP " + fileRes.status);
             var blob = await fileRes.blob();
             var url = URL.createObjectURL(blob);
-            window.open(url, "_blank");
             btn.textContent = "📎 " + fileName;
             btn.disabled = false;
+
+            // Show file in a modal
+            var fileModal = document.createElement("div");
+            fileModal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.8);z-index:999999;display:flex;flex-direction:column;align-items:center;justify-content:center;";
+            var isImage = /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(fileName);
+            var isPdf = /\.pdf$/i.test(fileName);
+            var contentHTML = '';
+            if (isImage) {
+              contentHTML = '<img src="' + url + '" style="max-width:90vw;max-height:80vh;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">';
+            } else if (isPdf) {
+              contentHTML = '<iframe src="' + url + '" style="width:90vw;height:85vh;border:none;border-radius:8px;"></iframe>';
+            } else {
+              contentHTML = '<div style="background:#fff;padding:24px;border-radius:8px;text-align:center;"><p style="margin:0 0 12px;font-size:14px;">No se puede previsualizar: <b>' + fileName + '</b></p><a href="' + url + '" download="' + fileName + '" style="padding:8px 16px;background:#1976D2;color:#fff;border-radius:6px;text-decoration:none;font-size:13px;">📥 Descargar</a></div>';
+            }
+            fileModal.innerHTML = '<div style="display:flex;justify-content:flex-end;width:90vw;margin-bottom:8px;"><button id="sp-file-close" style="padding:6px 14px;border:none;border-radius:6px;background:rgba(255,255,255,0.9);cursor:pointer;font-size:13px;">✕ Cerrar</button></div>' + contentHTML;
+            document.body.appendChild(fileModal);
+            document.getElementById("sp-file-close").addEventListener("click", function() { fileModal.remove(); URL.revokeObjectURL(url); });
+            fileModal.addEventListener("click", function(e) { if (e.target === fileModal) { fileModal.remove(); URL.revokeObjectURL(url); } });
           } catch(err) {
             btn.textContent = "❌ Error";
             setTimeout(function() { btn.textContent = "📎 " + fileName; btn.disabled = false; }, 2000);
