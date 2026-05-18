@@ -3924,6 +3924,154 @@
     return month === boardDate.month && year === boardDate.year;
   }
 
+  // --- Quick detail button ---
+  const DETAIL_QUICK_CLASS = "sp-quick-detail-btn";
+
+  function createQuickDetailButton(ticketId) {
+    var btn = document.createElement("button");
+    btn.className = DETAIL_QUICK_CLASS + " MuiButtonBase-root MuiButton-root MuiButton-contained MuiButton-containedPrimary MuiButton-sizeMedium MuiButton-containedSizeMedium MuiButton-colorPrimary";
+    btn.textContent = "👁️ Ver";
+    btn.style.cssText = "padding:2px 8px;font-size:11px;cursor:pointer;margin-left:6px;white-space:nowrap;min-width:auto;";
+    btn.addEventListener("click", function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      showQuickDetailModal(ticketId);
+    });
+    return btn;
+  }
+
+  async function showQuickDetailModal(ticketId) {
+    var existing = document.getElementById("sp-quick-detail-modal");
+    if (existing) existing.remove();
+
+    showLoadingToast("Cargando detalle...");
+
+    var spToken = getToken();
+    if (!spToken) { showErrorToast("No hay token"); return; }
+
+    try {
+      var res = await fetch(SP_API + "/" + ticketId, {
+        headers: { accept: "application/json", authorization: "Bearer " + spToken }
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      var json = await res.json();
+      var t = json.data || json;
+
+      // Remove loading toast
+      var loadingToast = document.getElementById("sp-loading-toast");
+      if (loadingToast) loadingToast.remove();
+
+      // Build modal content
+      var desc = (t.description || "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]*>/g, "");
+      var holderName = t.ticketHolder?.ticketHolderLog?.fullName || "Sin asignar";
+      var holderEmail = t.ticketHolder?.ticketHolderLog?.email || "";
+      var requesterName = t.ticketInfo?.fullName || "";
+      var requesterEmail = t.ticketInfo?.email || "";
+      var statusName = t.ticketStatus?.name || "";
+      var priorityName = t.incidentPriority?.name || "";
+      var serviceName = t.service?.name || "";
+      var groupName = t.resolutionGroup?.name || "";
+      var reportType = t.reportType?.name || "";
+      var createdAt = t.createdAt ? t.createdAt.replace("T", " ").substring(0, 16) : "";
+      var updatedAt = t.updatedAt ? t.updatedAt.replace("T", " ").substring(0, 16) : "";
+      var location = t.ticketInfo?.location || "";
+      var department = t.ticketInfo?.departmentName || "";
+      var channel = t.attentionChannel?.name || "";
+
+      // Attachments
+      var attachments = t.ticketAttachments?.attachments || [];
+      var attachHTML = "";
+      if (attachments.length) {
+        attachHTML = '<div style="margin-top:12px;"><b style="font-size:12px;">📎 Adjuntos (' + attachments.length + '):</b><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px;">';
+        attachments.forEach(function(a) {
+          var fileName = a.file?.name || "archivo";
+          var fileKey = a.file?.key || "";
+          var url = "https://files-itsm-prod.s3.amazonaws.com/" + fileKey;
+          attachHTML += '<a href="' + url + '" target="_blank" style="padding:4px 8px;background:#e3f2fd;border:1px solid #1976D2;border-radius:4px;font-size:11px;text-decoration:none;color:#1976D2;">' + fileName + '</a>';
+        });
+        attachHTML += '</div></div>';
+      }
+
+      // Comments
+      var comments = t.ticketComments || [];
+      var commentsHTML = "";
+      if (comments.length) {
+        commentsHTML = '<div style="margin-top:12px;"><b style="font-size:12px;">💬 Comentarios (' + comments.length + '):</b>';
+        comments.forEach(function(c) {
+          var cDate = c.createdAt ? c.createdAt.replace("T", " ").substring(0, 16) : "";
+          var cContent = (c.content || "").replace(/<[^>]*>/g, "");
+          commentsHTML += '<div style="margin-top:6px;padding:6px 8px;background:#f9f9f9;border-left:3px solid #1976D2;border-radius:4px;font-size:11px;">' +
+            '<div style="display:flex;justify-content:space-between;margin-bottom:2px;"><b>' + (c.fullName || "") + '</b><span style="color:#888;">' + cDate + '</span></div>' +
+            '<div style="color:#555;">' + cContent + '</div></div>';
+        });
+        commentsHTML += '</div>';
+      }
+
+      // Participants
+      var participants = t.participants || [];
+      var participantsHTML = "";
+      if (participants.length) {
+        participantsHTML = '<div style="margin-top:12px;"><b style="font-size:12px;">👥 Participantes (' + participants.length + '):</b><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;">';
+        participants.forEach(function(p) {
+          participantsHTML += '<span style="padding:2px 6px;background:#e8f5e9;border:1px solid #2E7D32;border-radius:4px;font-size:10px;">' + (p.profileFullName || p.email || "") + '</span>';
+        });
+        participantsHTML += '</div></div>';
+      }
+
+      var rowStyle = 'padding:8px 12px;border-bottom:1px solid #f0f0f0;display:flex;gap:8px;font-size:13px;';
+
+      var overlay = document.createElement("div");
+      overlay.id = "sp-quick-detail-modal";
+      overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+      overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:750px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+          '<h3 style="margin:0;font-size:16px;">📋 ' + (t.uniqueCode || ticketId) + '</h3>' +
+          '<div style="display:flex;gap:6px;">' +
+            '<a href="/es/dashboard/tickets/' + ticketId + '" target="_blank" style="padding:6px 12px;border:1px solid #1976D2;border-radius:6px;font-size:12px;text-decoration:none;color:#1976D2;">Abrir ticket ↗</a>' +
+            '<button id="sp-qd-close" style="padding:6px 12px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:12px;">Cerrar</button>' +
+          '</div>' +
+        '</div>' +
+        '<div style="flex:1;overflow:auto;">' +
+          '<div style="border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;margin-bottom:12px;">' +
+            '<div style="' + rowStyle + 'background:#f5f5f5;font-weight:600;">' + (t.subject || "Sin asunto") + '</div>' +
+            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Estado:</span><b style="color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';">' + statusName + '</b></div>' +
+            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Prioridad:</span>' + priorityName + '</div>' +
+            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Tipo:</span>' + reportType + '</div>' +
+            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Grupo:</span>' + groupName + '</div>' +
+            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Servicio:</span>' + serviceName + '</div>' +
+            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Canal:</span>' + channel + '</div>' +
+            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Creado:</span>' + createdAt + '</div>' +
+            '<div style="' + rowStyle + '"><span style="min-width:100px;color:#888;">Actualizado:</span>' + updatedAt + '</div>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">' +
+            '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px;">' +
+              '<b style="font-size:11px;color:#888;">👤 Solicitante</b>' +
+              '<div style="font-size:13px;font-weight:600;margin-top:4px;">' + requesterName + '</div>' +
+              '<div style="font-size:11px;color:#555;">' + requesterEmail + '</div>' +
+              '<div style="font-size:11px;color:#888;">' + department + ' | ' + location + '</div>' +
+            '</div>' +
+            '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px;">' +
+              '<b style="font-size:11px;color:#888;">🔍 Analista</b>' +
+              '<div style="font-size:13px;font-weight:600;margin-top:4px;">' + holderName + '</div>' +
+              '<div style="font-size:11px;color:#555;">' + holderEmail + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px;margin-bottom:12px;">' +
+            '<b style="font-size:11px;color:#888;">📝 Descripción</b>' +
+            '<pre style="margin:6px 0 0;font-size:12px;white-space:pre-wrap;word-break:break-word;font-family:system-ui;color:#333;max-height:150px;overflow:auto;">' + desc + '</pre>' +
+          '</div>' +
+          attachHTML + commentsHTML + participantsHTML +
+        '</div></div>';
+      document.body.appendChild(overlay);
+
+      document.getElementById("sp-qd-close").addEventListener("click", function() { overlay.remove(); });
+      overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+    } catch(err) {
+      showErrorToast("Error: " + err.message);
+    }
+  }
+
   function makeWaitingRowsDraggable() {
     document.querySelectorAll(".MuiDataGrid-row").forEach(function(row) {
       var ticketId = row.getAttribute("data-id");
@@ -4048,6 +4196,17 @@
     highlightMyRows();
     colorRowsByStatus();
     makeWaitingRowsDraggable();
+
+    // Inject quick detail button on all rows
+    document.querySelectorAll(".MuiDataGrid-row").forEach(function(row) {
+      if (row.querySelector("." + DETAIL_QUICK_CLASS)) return;
+      var ticketId = row.getAttribute("data-id");
+      if (!ticketId) return;
+      var firstCell = row.querySelector('[data-field="uniqueCode"]');
+      if (!firstCell) return;
+      var container = firstCell.querySelector(".MuiBox-root") || firstCell;
+      container.appendChild(createQuickDetailButton(ticketId));
+    });
     injectBulkButton();
     injectBulkCloseButton();
     injectNewTicketButton();
