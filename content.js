@@ -321,6 +321,7 @@
               html += '<div ' + (canDrag ? 'draggable="true" ' : '') + 'data-ticket-id="' + t.id + '" class="sp-mgr-ticket" style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:9px;line-height:1.3;' + (canDrag ? 'cursor:grab;' : '') + '">';
               html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
               html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 25) + '</div>';
+              html += '<div style="color:#888;font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</div>';
               html += '</div>';
             });
             listEl.innerHTML = html;
@@ -345,6 +346,7 @@
             html += '<div ' + (canDrag ? 'draggable="true" ' : '') + 'data-ticket-id="' + t.id + '" class="sp-mgr-ticket" style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:9px;line-height:1.3;' + (canDrag ? 'cursor:grab;' : '') + '">';
             html += '<div style="font-weight:600;color:#E65100;">' + (t.uniqueCode || "") + '</div>';
             html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 25) + '</div>';
+            html += '<div style="color:#888;font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</div>';
             html += '</div>';
           });
           listEl.innerHTML = html;
