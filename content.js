@@ -3985,9 +3985,8 @@
         attachHTML = '<div style="margin-top:12px;"><b style="font-size:12px;">📎 Adjuntos (' + attachments.length + '):</b><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px;">';
         attachments.forEach(function(a) {
           var fileName = a.file?.name || "archivo";
-          var fileKey = a.file?.key || "";
-          var url = "https://files-itsm-prod.s3.amazonaws.com/" + fileKey;
-          attachHTML += '<a href="' + url + '" target="_blank" style="padding:4px 8px;background:#e3f2fd;border:1px solid #1976D2;border-radius:4px;font-size:11px;text-decoration:none;color:#1976D2;">' + fileName + '</a>';
+          var fileId = a.file?.id || "";
+          attachHTML += '<button class="sp-qd-download" data-file-id="' + fileId + '" data-file-name="' + fileName.replace(/"/g, '&quot;') + '" style="padding:4px 8px;background:#e3f2fd;border:1px solid #1976D2;border-radius:4px;font-size:11px;cursor:pointer;color:#1976D2;">📎 ' + fileName + '</button>';
         });
         attachHTML += '</div></div>';
       }
@@ -4066,6 +4065,33 @@
 
       document.getElementById("sp-qd-close").addEventListener("click", function() { overlay.remove(); });
       overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+      // Download attachments via authenticated fetch
+      overlay.querySelectorAll(".sp-qd-download").forEach(function(btn) {
+        btn.addEventListener("click", async function() {
+          var fileId = btn.dataset.fileId;
+          var fileName = btn.dataset.fileName;
+          btn.textContent = "⏳ ...";
+          btn.disabled = true;
+          try {
+            var fileRes = await fetch("https://macropayapi.supportplus.mx/files/" + fileId, {
+              headers: { authorization: "Bearer " + spToken }
+            });
+            if (!fileRes.ok) throw new Error("HTTP " + fileRes.status);
+            var blob = await fileRes.blob();
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement("a");
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+            btn.textContent = "✅ " + fileName;
+          } catch(err) {
+            btn.textContent = "❌ Error";
+            setTimeout(function() { btn.textContent = "📎 " + fileName; btn.disabled = false; }, 2000);
+          }
+        });
+      });
 
     } catch(err) {
       showErrorToast("Error: " + err.message);
