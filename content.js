@@ -1,7 +1,16 @@
 (function () {
-  // --- Blocked emails: don't show anything for these users ---
-  const BLOCKED_EMAILS = ["francisco.toquero@macropay.mx"];
+  // --- Boss emails: show department view instead of normal extension ---
+  const BOSS_EMAILS = ["francisco.toquero@macropay.mx"];
   const DEV_EMAIL = "william.alpuche@macropay.mx";
+
+  // Boss departments
+  const BOSS_DEPARTMENTS = [
+    { id: 12, name: "Infraestructura IAM" },
+    { id: 18, name: "Infraestructura (Cloud/ Servidores)" },
+    { id: 19, name: "Infraestructura DBA" },
+    { id: 20, name: "Infraestructura DevOps" },
+    { id: 22, name: "Aplicaciones- Liberacion e Implementacion" }
+  ];
 
   // Check session before doing anything
   async function checkSession() {
@@ -9,24 +18,138 @@
       var res = await fetch("https://macropay.supportplus.mx/api/auth/session", {
         headers: { accept: "application/json", authorization: "Bearer " + (localStorage.getItem("token") || "") }
       });
-      if (!res.ok) return { allowed: true, isDev: false };
+      if (!res.ok) return { allowed: true, isDev: false, isBoss: false };
       var data = await res.json();
       var email = data?.user?.email?.toLowerCase() || "";
-      // Save email to chrome.storage for popup access
       try { chrome.storage.local.set({ userEmail: email }); } catch(e) {}
       var isDev = email === DEV_EMAIL;
+      var isBoss = BOSS_EMAILS.includes(email);
       var simulateBoss = isDev && localStorage.getItem("sp_simulate_boss") === "true";
-      if (BLOCKED_EMAILS.includes(email) || simulateBoss) return { allowed: false, isDev: isDev };
-      return { allowed: true, isDev: isDev };
-    } catch(e) { return { allowed: true, isDev: false }; }
+      if (isBoss || simulateBoss) return { allowed: false, isDev: isDev, isBoss: true };
+      return { allowed: true, isDev: isDev, isBoss: false };
+    } catch(e) { return { allowed: true, isDev: false, isBoss: false }; }
   }
 
   checkSession().then(function(result) {
-    // If dev, always inject the simulate toggle
     if (result.isDev) injectDevToggle();
-    if (!result.allowed) return; // Don't inject anything else
+    if (result.isBoss && !result.allowed) { initBossView(); return; }
+    if (!result.allowed) return;
     initExtension();
   });
+
+  function initBossView() {
+    // Wait for page to load
+    var attempts = 0;
+    var interval = setInterval(function() {
+      var grid = document.querySelector(".MuiDataGrid-root");
+      if (!grid && attempts < 40) { attempts++; return; }
+      clearInterval(interval);
+      if (!grid) return;
+      loadBossPanel(grid);
+    }, 500);
+  }
+
+  function loadBossPanel(grid) {
+    var spToken = localStorage.getItem("token");
+    if (!spToken) return;
+
+    var panel = document.createElement("div");
+    panel.id = "sp-boss-panel";
+    panel.style.cssText = "margin-bottom:12px;overflow-x:auto;font-family:system-ui;";
+    grid.parentElement.insertBefore(panel, grid);
+
+    var containerDiv = document.createElement("div");
+    containerDiv.style.cssText = "display:flex;gap:8px;justify-content:center;";
+    panel.appendChild(containerDiv);
+
+    // Create columns for each department
+    BOSS_DEPARTMENTS.forEach(function(dept) {
+      var col = document.createElement("div");
+      col.id = "sp-boss-col-" + dept.id;
+      col.style.cssText = "min-width:200px;max-width:250px;border:2px solid #1976D2;border-radius:8px;overflow:hidden;flex-shrink:0;";
+      col.innerHTML = '<div style="background:#1976D2;color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">' + dept.name + ' <span class="sp-boss-count" style="opacity:0.7;">(...)</span></div>' +
+        '<div class="sp-boss-tickets" style="padding:4px;max-height:250px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>';
+      containerDiv.appendChild(col);
+    });
+
+    // Fetch tickets for each department
+    BOSS_DEPARTMENTS.forEach(function(dept) {
+      Promise.all([
+        fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + dept.id + "&ticketStatusName=Asignado", {
+          headers: { accept: "application/json", authorization: "Bearer " + spToken }
+        }).then(function(r) { return r.json(); }),
+        fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + dept.id + "&ticketStatusName=En%20atenci%C3%B3n", {
+          headers: { accept: "application/json", authorization: "Bearer " + spToken }
+        }).then(function(r) { return r.json(); })
+      ]).then(function(results) {
+        var tickets = ((results[0].data || results[0]).content || []).concat((results[1].data || results[1]).content || []);
+
+        var col = document.getElementById("sp-boss-col-" + dept.id);
+        if (!col) return;
+
+        var countEl = col.querySelector(".sp-boss-count");
+        if (countEl) countEl.textContent = "(" + tickets.length + ")";
+
+        var listEl = col.querySelector(".sp-boss-tickets");
+        if (!listEl) return;
+
+        if (!tickets.length) {
+          listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
+        } else {
+          var html = "";
+          tickets.forEach(function(t) {
+            html += '<a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;text-decoration:none;color:inherit;font-size:10px;line-height:1.3;">';
+            html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
+            html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 35) + '</div>';
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#888;font-size:9px;">' + (t.responsibleName || "Sin asignar").split(" ")[0] + '</span><span style="color:#888;font-size:9px;">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
+            html += '</a>';
+          });
+          listEl.innerHTML = html;
+        }
+      }).catch(function() {
+        var col = document.getElementById("sp-boss-col-" + dept.id);
+        if (col) {
+          var listEl = col.querySelector(".sp-boss-tickets");
+          if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#D94040;font-size:10px;">Error</div>';
+        }
+      });
+    });
+
+    // Auto-refresh every 60 seconds
+    setInterval(function() {
+      BOSS_DEPARTMENTS.forEach(function(dept) {
+        Promise.all([
+          fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + dept.id + "&ticketStatusName=Asignado", {
+            headers: { accept: "application/json", authorization: "Bearer " + spToken }
+          }).then(function(r) { return r.json(); }),
+          fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + dept.id + "&ticketStatusName=En%20atenci%C3%B3n", {
+            headers: { accept: "application/json", authorization: "Bearer " + spToken }
+          }).then(function(r) { return r.json(); })
+        ]).then(function(results) {
+          var tickets = ((results[0].data || results[0]).content || []).concat((results[1].data || results[1]).content || []);
+          var col = document.getElementById("sp-boss-col-" + dept.id);
+          if (!col) return;
+          var countEl = col.querySelector(".sp-boss-count");
+          if (countEl) countEl.textContent = "(" + tickets.length + ")";
+          var listEl = col.querySelector(".sp-boss-tickets");
+          if (!listEl) return;
+          if (!tickets.length) {
+            listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
+          } else {
+            var html = "";
+            tickets.forEach(function(t) {
+              html += '<a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;text-decoration:none;color:inherit;font-size:10px;line-height:1.3;">';
+              html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
+              html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 35) + '</div>';
+              html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#888;font-size:9px;">' + (t.responsibleName || "Sin asignar").split(" ")[0] + '</span><span style="color:#888;font-size:9px;">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
+              html += '</a>';
+            });
+            listEl.innerHTML = html;
+          }
+        }).catch(function() {});
+      });
+    }, 60000);
+  }
 
   function injectDevToggle() {
     // Wait for the page to load
