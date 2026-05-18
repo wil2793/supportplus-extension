@@ -137,7 +137,7 @@
 
     // Summary row (no drag)
     var summaryDiv = document.createElement("div");
-    summaryDiv.style.cssText = "display:flex;gap:8px;justify-content:center;margin-bottom:12px;";
+    summaryDiv.style.cssText = "display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:12px;";
     panel.appendChild(summaryDiv);
 
     var groupsInfo = groups.map(function(gId) {
@@ -166,7 +166,7 @@
       var body = document.createElement("div");
       body.className = "sp-mgr-body";
       body.style.cssText = "display:none;padding:8px;overflow-x:auto;";
-      body.innerHTML = '<div class="sp-mgr-columns" style="display:flex;gap:6px;justify-content:center;"></div>';
+      body.innerHTML = '<div class="sp-mgr-columns" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;"></div>';
 
       header.addEventListener("click", function() {
         var isOpen = body.style.display !== "none";
