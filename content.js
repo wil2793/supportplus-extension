@@ -4034,7 +4034,7 @@
           // Subject + info grid
           '<div style="background:#f5f5f5;padding:8px 10px;border-radius:6px;font-size:13px;font-weight:600;margin-bottom:8px;">' + (t.subject || "Sin asunto") + '</div>' +
           '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;font-size:11px;">' +
-            '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Estado:</span> <select id="sp-qd-status-select" style="font-size:11px;border:none;background:transparent;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-weight:700;cursor:pointer;">' + ["Asignado","En espera","En atención","En validación","Por confirmar","Por ejecutar","Por revisar","En aplicaciones","Cerrado","Rechazado","Cancelado","Reabierto"].map(function(s) { return '<option value="' + s + '"' + (s === statusName ? ' selected' : '') + '>' + s + '</option>'; }).join("") + '</select></div>' +
+            '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Estado:</span> <select id="sp-qd-status-select" style="font-size:11px;border:none;background:transparent;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-weight:700;cursor:pointer;"><option value="" selected>' + statusName + '</option><option value="" disabled>Cargando...</option></select></div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Prioridad:</span> ' + priorityName + '</div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Tipo:</span> ' + reportType + '</div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Canal:</span> ' + channel + '</div>' +
@@ -4123,28 +4123,53 @@
         if (e.key === "Enter") document.getElementById("sp-qd-comment-send").click();
       });
 
-      // Status change
-      var STATUS_ID_MAP = { "En espera": 34, "Asignado": 1, "En atención": 2, "En validación": 3, "Por confirmar": 4, "Por ejecutar": 5, "Por revisar": 6, "En aplicaciones": 7, "Cerrado": 9, "Rechazado": 10, "Cancelado": 11, "Reabierto": 12 };
-      document.getElementById("sp-qd-status-select").addEventListener("change", async function() {
-        var newStatus = this.value;
-        var statusId = STATUS_ID_MAP[newStatus];
-        if (!statusId) { showErrorToast("Estatus no reconocido"); return; }
-        this.disabled = true;
+      // Status change - load valid options from API
+      var statusSelect = document.getElementById("sp-qd-status-select");
+      var currentStatusId = t.ticketStatus?.id || 34;
+      fetch("https://macropayapi.supportplus.mx/ticket-status/next-status-options/" + currentStatusId, {
+        headers: { accept: "application/json", authorization: "Bearer " + spToken }
+      }).then(function(r) { return r.json(); }).then(function(statusJson) {
+        var options = (statusJson.data || []);
+        statusSelect.innerHTML = '<option value="" data-id="">' + statusName + ' (actual)</option>';
+        options.forEach(function(opt) {
+          var ns = opt.nextStatus || {};
+          statusSelect.innerHTML += '<option value="' + ns.id + '" data-name="' + (ns.name || opt.name) + '">' + (ns.name || opt.name) + '</option>';
+        });
+      }).catch(function() {
+        statusSelect.innerHTML = '<option value="">' + statusName + '</option>';
+      });
+
+      statusSelect.addEventListener("change", async function() {
+        var selectedOpt = statusSelect.options[statusSelect.selectedIndex];
+        var newStatusId = statusSelect.value;
+        var newStatusName = selectedOpt.dataset.name || selectedOpt.textContent;
+        if (!newStatusId) return;
+        statusSelect.disabled = true;
         showLoadingToast("Cambiando estatus...");
         try {
           var statusRes = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
             method: "PATCH",
             headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-            body: JSON.stringify({ nextTicketStatusId: statusId, ticketCommentRequest: null }),
+            body: JSON.stringify({ nextTicketStatusId: parseInt(newStatusId), ticketCommentRequest: null }),
           });
           if (!statusRes.ok) throw new Error("HTTP " + statusRes.status);
-          showSuccessToast("Estatus cambiado a: " + newStatus);
-          this.style.color = STATUS_TEXT_COLORS[newStatus] || "#333";
+          showSuccessToast("Estatus cambiado a: " + newStatusName);
+          statusSelect.style.color = STATUS_TEXT_COLORS[newStatusName] || "#333";
+          // Reload valid options for new status
+          var newOptRes = await fetch("https://macropayapi.supportplus.mx/ticket-status/next-status-options/" + newStatusId, {
+            headers: { accept: "application/json", authorization: "Bearer " + spToken }
+          });
+          var newOptJson = await newOptRes.json();
+          var newOptions = (newOptJson.data || []);
+          statusSelect.innerHTML = '<option value="" data-id="">' + newStatusName + ' (actual)</option>';
+          newOptions.forEach(function(opt) {
+            var ns = opt.nextStatus || {};
+            statusSelect.innerHTML += '<option value="' + ns.id + '" data-name="' + (ns.name || opt.name) + '">' + (ns.name || opt.name) + '</option>';
+          });
         } catch(err) {
           showErrorToast("Error: " + err.message);
-          this.value = statusName; // revert
         }
-        this.disabled = false;
+        statusSelect.disabled = false;
       });
 
       // View attachments in modal
