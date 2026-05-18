@@ -4043,6 +4043,11 @@
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Creado:</span> ' + createdAt + '</div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Actualizado:</span> ' + updatedAt + '</div>' +
           '</div>' +
+          // Assign row (only if "En espera" / unassigned)
+          (statusName === "En espera" ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
+            '<button id="sp-qd-take-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🤚 Tomar</button>' +
+            '<select id="sp-qd-assign-select" style="flex:1;padding:6px 8px;font-size:11px;border:1px solid #ddd;border-radius:6px;"><option value="">-- Asignar a --</option></select>' +
+          '</div>' : '') +
           // People row
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
             '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:11px;">' +
@@ -4126,18 +4131,26 @@
       // Status change - load valid options from API
       var statusSelect = document.getElementById("sp-qd-status-select");
       var currentStatusId = t.ticketStatus?.id || 34;
-      fetch("https://macropayapi.supportplus.mx/ticket-status/next-status-options/" + currentStatusId, {
-        headers: { accept: "application/json", authorization: "Bearer " + spToken }
-      }).then(function(r) { return r.json(); }).then(function(statusJson) {
-        var options = (statusJson.data || []);
-        statusSelect.innerHTML = '<option value="" data-id="">' + statusName + ' (actual)</option>';
-        options.forEach(function(opt) {
-          var ns = opt.nextStatus || {};
-          statusSelect.innerHTML += '<option value="' + ns.id + '" data-name="' + (ns.name || opt.name) + '">' + (ns.name || opt.name) + '</option>';
-        });
-      }).catch(function() {
+      var isUnassigned = statusName === "En espera";
+
+      if (isUnassigned) {
+        statusSelect.disabled = true;
+        statusSelect.title = "Toma o asigna el ticket primero";
         statusSelect.innerHTML = '<option value="">' + statusName + '</option>';
-      });
+      } else {
+        fetch("https://macropayapi.supportplus.mx/ticket-status/next-status-options/" + currentStatusId, {
+          headers: { accept: "application/json", authorization: "Bearer " + spToken }
+        }).then(function(r) { return r.json(); }).then(function(statusJson) {
+          var options = (statusJson.data || []);
+          statusSelect.innerHTML = '<option value="" data-id="">' + statusName + ' (actual)</option>';
+          options.forEach(function(opt) {
+            var ns = opt.nextStatus || {};
+            statusSelect.innerHTML += '<option value="' + ns.id + '" data-name="' + (ns.name || opt.name) + '">' + (ns.name || opt.name) + '</option>';
+          });
+        }).catch(function() {
+          statusSelect.innerHTML = '<option value="">' + statusName + '</option>';
+        });
+      }
 
       statusSelect.addEventListener("change", async function() {
         var selectedOpt = statusSelect.options[statusSelect.selectedIndex];
@@ -4171,6 +4184,72 @@
         }
         statusSelect.disabled = false;
       });
+
+      // Take / Assign logic (only when unassigned)
+      if (isUnassigned) {
+        var assignSelect = document.getElementById("sp-qd-assign-select");
+        var takeBtn = document.getElementById("sp-qd-take-btn");
+        // Load team members
+        var teamConfig = getTeamConfig();
+        teamConfig.profiles.forEach(function(p) {
+          var opt = document.createElement("option");
+          opt.value = p.profileId;
+          opt.textContent = p.profileFullName;
+          assignSelect.appendChild(opt);
+        });
+
+        // Take button - assign to me
+        takeBtn.addEventListener("click", async function() {
+          takeBtn.disabled = true;
+          takeBtn.textContent = "⏳...";
+          try {
+            var myProfId = await getMyProfileId();
+            if (!myProfId) throw new Error("No se pudo obtener tu perfil");
+            var res = await fetch(SP_API + "/reassign/" + ticketId, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+              body: JSON.stringify({ resolutionGroupId: teamConfig.resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: teamConfig.resolutionGroupLabel, value: teamConfig.resolutionGroupId }, ticketCommentRequest: { internal: false, content: "se revisa" } }),
+            });
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            var json2 = await res.json();
+            if (json2.success) {
+              showSuccessToast("Ticket tomado");
+              overlay.remove();
+              showQuickDetailModal(ticketId); // Reload modal
+            } else throw new Error("No success");
+          } catch(err) {
+            showErrorToast("Error: " + err.message);
+            takeBtn.disabled = false;
+            takeBtn.textContent = "🤚 Tomar";
+          }
+        });
+
+        // Assign select - assign to selected member
+        assignSelect.addEventListener("change", async function() {
+          var selectedId = assignSelect.value;
+          if (!selectedId) return;
+          assignSelect.disabled = true;
+          showLoadingToast("Asignando ticket...");
+          try {
+            var res = await fetch(SP_API + "/reassign/" + ticketId, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+              body: JSON.stringify({ resolutionGroupId: teamConfig.resolutionGroupId, serviceId: null, responsibleProfileId: parseInt(selectedId), resolutionGroup: { label: teamConfig.resolutionGroupLabel, value: teamConfig.resolutionGroupId }, ticketCommentRequest: { internal: false, content: "se revisa" } }),
+            });
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            var json2 = await res.json();
+            if (json2.success) {
+              showSuccessToast("Ticket asignado");
+              overlay.remove();
+              showQuickDetailModal(ticketId); // Reload modal
+            } else throw new Error("No success");
+          } catch(err) {
+            showErrorToast("Error: " + err.message);
+            assignSelect.disabled = false;
+            assignSelect.value = "";
+          }
+        });
+      }
 
       // View attachments in modal
       overlay.querySelectorAll(".sp-qd-download").forEach(function(btn) {
