@@ -1,6 +1,7 @@
 (function () {
   // --- Blocked emails: don't show anything for these users ---
   const BLOCKED_EMAILS = ["francisco.toquero@macropay.mx"];
+  const DEV_EMAIL = "william.alpuche@macropay.mx";
 
   // Check session before doing anything
   async function checkSession() {
@@ -8,18 +9,47 @@
       var res = await fetch("https://macropay.supportplus.mx/api/auth/session", {
         headers: { accept: "application/json", authorization: "Bearer " + (localStorage.getItem("token") || "") }
       });
-      if (!res.ok) return true; // allow if can't check
+      if (!res.ok) return { allowed: true, isDev: false };
       var data = await res.json();
       var email = data?.user?.email?.toLowerCase() || "";
-      if (BLOCKED_EMAILS.includes(email)) return false;
-      return true;
-    } catch(e) { return true; }
+      var isDev = email === DEV_EMAIL;
+      var simulateBoss = isDev && localStorage.getItem("sp_simulate_boss") === "true";
+      if (BLOCKED_EMAILS.includes(email) || simulateBoss) return { allowed: false, isDev: isDev };
+      return { allowed: true, isDev: isDev };
+    } catch(e) { return { allowed: true, isDev: false }; }
   }
 
-  checkSession().then(function(allowed) {
-    if (!allowed) return; // Don't inject anything
+  checkSession().then(function(result) {
+    // If dev, always inject the simulate toggle
+    if (result.isDev) injectDevToggle();
+    if (!result.allowed) return; // Don't inject anything else
     initExtension();
   });
+
+  function injectDevToggle() {
+    // Wait for the page to load
+    var attempts = 0;
+    var interval = setInterval(function() {
+      var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
+      if (!userWrapper && attempts < 30) { attempts++; return; }
+      clearInterval(interval);
+      if (!userWrapper) return;
+
+      var toggle = document.createElement("label");
+      toggle.style.cssText = "display:inline-flex;align-items:center;gap:4px;margin-right:12px;font-size:11px;color:#fff;cursor:pointer;opacity:0.7;";
+      toggle.innerHTML = '<input type="checkbox" id="sp-dev-boss-toggle" style="cursor:pointer;"' + (localStorage.getItem("sp_simulate_boss") === "true" ? " checked" : "") + '> Simular jefe';
+      userWrapper.parentElement.insertBefore(toggle, userWrapper);
+
+      document.getElementById("sp-dev-boss-toggle").addEventListener("change", function() {
+        if (this.checked) {
+          localStorage.setItem("sp_simulate_boss", "true");
+        } else {
+          localStorage.removeItem("sp_simulate_boss");
+        }
+        window.location.reload();
+      });
+    }, 500);
+  }
 
   function initExtension() {
   // Make loading backdrop less invasive - thin top bar instead of fullscreen
