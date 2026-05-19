@@ -4221,7 +4221,7 @@
       overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
       overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:800px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
-          '<h3 style="margin:0;font-size:15px;">📋 ' + (t.uniqueCode || ticketId) + ' <span style="font-weight:400;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-size:12px;">(' + statusName + ')</span></h3>' +
+          '<h3 style="margin:0;font-size:15px;">📋 ' + (t.uniqueCode || ticketId) + ' <span class="sp-qd-copy-folio" data-copy="' + (t.uniqueCode || ticketId) + '" style="cursor:pointer;font-size:12px;opacity:0.6;" title="Copiar folio">📋</span> <span style="font-weight:400;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-size:12px;">(' + statusName + ')</span></h3>' +
           '<div style="display:flex;gap:6px;">' +
             '<a href="/es/dashboard/tickets/' + ticketId + '" target="_blank" style="padding:5px 10px;border:1px solid #1976D2;border-radius:6px;font-size:11px;text-decoration:none;color:#1976D2;">Abrir ↗</a>' +
             '<button id="sp-qd-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
@@ -4299,7 +4299,7 @@
             '<div id="sp-qd-comments-list" style="max-height:150px;overflow-y:auto;margin-top:6px;">' +
               (comments.length ? comments.map(function(c) {
                 var cDate = c.createdAt ? c.createdAt.replace("T", " ").substring(0, 16) : "";
-                var cContent = (c.content || "").replace(/<[^>]*>/g, "");
+                var cContent = (c.content || "").replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
                 var cAttachments = c.attachments || [];
                 var cAttachHTML = "";
                 if (cAttachments.length) {
@@ -4330,6 +4330,17 @@
 
       document.getElementById("sp-qd-close").addEventListener("click", function() { overlay.remove(); });
       overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+      // Copy folio button
+      var copyFolioBtn = overlay.querySelector(".sp-qd-copy-folio");
+      if (copyFolioBtn) {
+        copyFolioBtn.addEventListener("click", function() {
+          navigator.clipboard.writeText(copyFolioBtn.dataset.copy).then(function() {
+            copyFolioBtn.textContent = "✅";
+            setTimeout(function() { copyFolioBtn.textContent = "📋"; }, 1500);
+          });
+        });
+      }
 
       // Attach files - multiple with remove
       var attachInput = document.getElementById("sp-qd-attach-input");
