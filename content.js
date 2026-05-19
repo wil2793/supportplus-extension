@@ -185,6 +185,14 @@
     if (groups === "all") groups = GROUP_INFO.map(function(g) { return g.id; });
     var canDrag = roleConfig ? roleConfig.canDragDrop : false;
 
+    function tryInject() {
+      var grid = document.querySelector(".MuiDataGrid-root");
+      if (!grid) return;
+      if (document.getElementById("sp-manager-panel")) return;
+      loadManagerPanel(grid, groups, canDrag);
+    }
+
+    // Initial inject with retry
     var attempts = 0;
     var interval = setInterval(function() {
       var grid = document.querySelector(".MuiDataGrid-root");
@@ -193,6 +201,12 @@
       if (!grid) return;
       loadManagerPanel(grid, groups, canDrag);
     }, 500);
+
+    // Observer to re-inject when navigating back
+    var mgrObserver = new MutationObserver(function() {
+      tryInject();
+    });
+    mgrObserver.observe(document.body, { childList: true, subtree: true });
   }
 
   function loadManagerPanel(grid, groups, canDrag) {
