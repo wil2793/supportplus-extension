@@ -4262,15 +4262,18 @@
           (function() {
             if (statusName === "En espera" || statusName === "Cerrado") return '';
             var isMigrated = t.uniqueCode && getCache() && getCache()[t.uniqueCode];
-            if (isMigrated) {
-              return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
-                '<button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🔒 Cerrar</button>' +
-              '</div>';
-            } else {
-              return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
-                '<button id="sp-qd-close-migrate-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🔒 Cerrar y Migrar</button>' +
-              '</div>';
-            }
+            var closeHTML = '<div style="margin-bottom:8px;">' +
+              '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">' +
+                '<button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:' + (isMigrated ? '#616161' : '#D94040') + ';color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">' + (isMigrated ? '🔒 Cerrar' : '🔒 Cerrar y Migrar') + '</button>' +
+              '</div>' +
+              '<div id="sp-qd-close-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:11px;">' +
+                '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label>' +
+                '<input id="sp-qd-close-comment" type="text" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;">' +
+                (!isMigrated ? '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Migrar a Monday</label><select id="sp-qd-close-group" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;margin-bottom:6px;"><option value="">-- Selecciona destino --</option></select>' : '') +
+                '<button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:' + (isMigrated ? '#616161' : '#D94040') + ';color:#fff;cursor:pointer;font-size:11px;font-weight:600;">Confirmar</button>' +
+              '</div>' +
+            '</div>';
+            return closeHTML;
           })() +
           // Migrate only (if closed and not migrated)
           (statusName === "Cerrado" && !(t.uniqueCode && getCache() && getCache()[t.uniqueCode]) ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
@@ -4663,22 +4666,85 @@
         });
       }
 
-      // Close button
+      // Close button - toggle inline form
       var closeActionBtn = document.getElementById("sp-qd-close-btn");
-      if (closeActionBtn) {
-        closeActionBtn.addEventListener("click", function() {
-          overlay.remove();
-          showCloseModal(ticketId, closeActionBtn);
-        });
-      }
+      var closeForm = document.getElementById("sp-qd-close-form");
+      if (closeActionBtn && closeForm) {
+        // Load Monday groups if not migrated
+        var closeGroupSelect = document.getElementById("sp-qd-close-group");
+        if (closeGroupSelect) {
+          getMondayToken().then(function(mondayToken) {
+            if (!mondayToken) return;
+            getMondayBoardId().then(function(boardId) {
+              if (!boardId) return;
+              mondayQuery(mondayToken, 'query ($boardId: [ID!]!) { boards(ids: $boardId) { groups { id title } } }', { boardId }).then(function(gData) {
+                var groups = gData.boards[0]?.groups || [];
+                groups.forEach(function(g) {
+                  var opt = document.createElement("option");
+                  opt.value = g.id;
+                  opt.textContent = g.title;
+                  closeGroupSelect.appendChild(opt);
+                });
+              }).catch(function() {});
+            });
+          });
+        }
 
-      // Close + Migrate button
-      var closeMigrateBtn = document.getElementById("sp-qd-close-migrate-btn");
-      if (closeMigrateBtn) {
-        closeMigrateBtn.addEventListener("click", function() {
-          overlay.remove();
-          showCloseModal(ticketId, closeMigrateBtn);
+        closeActionBtn.addEventListener("click", function() {
+          closeForm.style.display = closeForm.style.display === "none" ? "block" : "none";
         });
+
+        var closeConfirmBtn = document.getElementById("sp-qd-close-confirm");
+        if (closeConfirmBtn) {
+          closeConfirmBtn.addEventListener("click", async function() {
+            var closeComment = document.getElementById("sp-qd-close-comment").value.trim();
+            var selectedGroup = closeGroupSelect ? closeGroupSelect.value : "";
+            closeConfirmBtn.disabled = true;
+            closeConfirmBtn.textContent = "⏳...";
+            showLoadingToast("Cerrando ticket...");
+            try {
+              // Comment if provided
+              if (closeComment) {
+                await fetch(SP_API + "/comment/" + ticketId, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                  body: JSON.stringify({ content: "<p>" + closeComment + "</p>", internal: false }),
+                });
+              }
+              // If no one assigned, assign to me first
+              if (!holderName || holderName === "Sin asignar") {
+                var myProfId = await getMyProfileId();
+                if (myProfId) {
+                  await fetch(SP_API + "/reassign/" + ticketId, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                    body: JSON.stringify({ resolutionGroupId: getTeamConfig().resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId } }),
+                  });
+                }
+              }
+              // Close
+              var closeRes = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                body: JSON.stringify({ nextTicketStatusId: 9, ticketCommentRequest: null }),
+              });
+              if (!closeRes.ok) throw new Error("HTTP " + closeRes.status);
+              // Migrate if selected
+              if (selectedGroup) {
+                overlay.remove();
+                handleMondayClick(ticketId);
+                return;
+              }
+              showSuccessToast("Ticket cerrado");
+              overlay.remove();
+              showQuickDetailModal(ticketId);
+            } catch(err) {
+              showErrorToast("Error: " + err.message);
+              closeConfirmBtn.disabled = false;
+              closeConfirmBtn.textContent = "Confirmar";
+            }
+          });
+        }
       }
 
       // Migrate only button
