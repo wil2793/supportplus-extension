@@ -4231,7 +4231,7 @@
           // Subject + info grid
           '<div style="background:#f5f5f5;padding:8px 10px;border-radius:6px;font-size:13px;font-weight:600;margin-bottom:8px;">' + (t.subject || "Sin asunto") + '</div>' +
           '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;font-size:11px;">' +
-            '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Estado:</span> <select id="sp-qd-status-select" style="font-size:11px;border:none;background:transparent;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-weight:700;cursor:pointer;"><option value="" selected>' + statusName + '</option><option value="" disabled>Cargando...</option></select></div>' +
+            '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;">' + (statusName === "Cerrado" ? '<span style="color:#2E7D32;font-weight:700;font-size:11px;">Cerrado</span>' : '<span style="color:#888;">Estado:</span> <select id="sp-qd-status-select" style="font-size:11px;border:none;background:transparent;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-weight:700;cursor:pointer;"><option value="" selected>' + statusName + '</option><option value="" disabled>Cargando...</option></select>') + '</div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Prioridad:</span> ' + priorityName + '</div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Tipo:</span> ' + reportType + '</div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Canal:</span> ' + channel + '</div>' +
@@ -4275,6 +4275,11 @@
           // Migrate only (if closed and not migrated)
           (statusName === "Cerrado" && !(t.uniqueCode && getCache() && getCache()[t.uniqueCode]) ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
             '<button id="sp-qd-migrate-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🙂 Migrar a Monday</button>' +
+          '</div>' : '') +
+          // Reopen row (if closed)
+          (statusName === "Cerrado" ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
+            '<button id="sp-qd-reopen-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#FF8F00;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🔓 Reabrir</button>' +
+            '<select id="sp-qd-reopen-select" style="flex:1;padding:6px 8px;font-size:11px;border:1px solid #ddd;border-radius:6px;"><option value="">-- Reasignar a --</option></select>' +
           '</div>' : '') +
           // People row
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
@@ -4484,7 +4489,9 @@
       var currentStatusId = t.ticketStatus?.id || 34;
       var isUnassigned = statusName === "En espera";
 
-      if (isUnassigned) {
+      if (!statusSelect) {
+        // Closed state - no status select
+      } else if (isUnassigned) {
         statusSelect.disabled = true;
         statusSelect.title = "Toma o asigna el ticket primero";
         statusSelect.innerHTML = '<option value="">' + statusName + '</option>';
@@ -4503,7 +4510,7 @@
         });
       }
 
-      statusSelect.addEventListener("change", async function() {
+      if (statusSelect) statusSelect.addEventListener("change", async function() {
         var selectedOpt = statusSelect.options[statusSelect.selectedIndex];
         var newStatusId = statusSelect.value;
         var newStatusName = selectedOpt.dataset.name || selectedOpt.textContent;
@@ -4680,6 +4687,49 @@
         migrateOnlyBtn.addEventListener("click", function() {
           overlay.remove();
           handleMondayClick(ticketId);
+        });
+      }
+
+      // Reopen button + select
+      var reopenBtn = document.getElementById("sp-qd-reopen-btn");
+      var reopenSelect = document.getElementById("sp-qd-reopen-select");
+      if (reopenBtn && reopenSelect) {
+        var teamConfigReopen = getTeamConfig();
+        teamConfigReopen.profiles.forEach(function(p) {
+          var opt = document.createElement("option");
+          opt.value = p.profileId;
+          opt.textContent = p.profileFullName;
+          reopenSelect.appendChild(opt);
+        });
+
+        reopenBtn.addEventListener("click", async function() {
+          var personId = reopenSelect.value;
+          if (!personId) { showErrorToast("Selecciona a quién reasignar"); return; }
+          reopenBtn.disabled = true;
+          reopenBtn.textContent = "⏳...";
+          try {
+            var res = await fetch(SP_API + "/reassign/" + ticketId, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+              body: JSON.stringify({ resolutionGroupId: teamConfigReopen.resolutionGroupId, serviceId: null, responsibleProfileId: parseInt(personId), resolutionGroup: { label: teamConfigReopen.resolutionGroupLabel, value: teamConfigReopen.resolutionGroupId } }),
+            });
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            var json2 = await res.json();
+            if (json2.success) {
+              showSuccessToast("Ticket reabierto y reasignado");
+              overlay.remove();
+              showQuickDetailModal(ticketId);
+            } else throw new Error("No success");
+          } catch(err) {
+            showErrorToast("Error: " + err.message);
+            reopenBtn.disabled = false;
+            reopenBtn.textContent = "🔓 Reabrir";
+          }
+        });
+
+        reopenSelect.addEventListener("change", function() {
+          if (reopenSelect.value) reopenBtn.textContent = "🔓 Reabrir y reasignar";
+          else reopenBtn.textContent = "🔓 Reabrir";
         });
       }
 
