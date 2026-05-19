@@ -3357,11 +3357,18 @@
           var text = ev.target.result;
           try {
             var parsed = JSON.parse(text);
-            csvPendingEmails = { emails: [], ids: [], byGroup: parsed };
-            var totalIds = Object.values(parsed).reduce(function(sum, arr) { return sum + arr.length; }, 0);
-            var groupCount = Object.keys(parsed).length;
+            // Expected format: [{ groupId: 19, excludedIds: [150, 153] }, ...]
+            if (!Array.isArray(parsed)) throw new Error("Debe ser un array");
+            var byGroup = {};
+            parsed.forEach(function(entry) {
+              if (!entry.groupId || !Array.isArray(entry.excludedIds)) return;
+              byGroup[String(entry.groupId)] = entry.excludedIds;
+            });
+            csvPendingEmails = { emails: [], ids: [], byGroup: byGroup };
+            var totalIds = Object.values(byGroup).reduce(function(sum, arr) { return sum + arr.length; }, 0);
+            var groupCount = Object.keys(byGroup).length;
             document.getElementById("sp-cfg-csv-count").textContent = totalIds + " IDs bloqueados en " + groupCount + " grupos";
-            document.getElementById("sp-cfg-csv-preview").textContent = Object.entries(parsed).slice(0, 3).map(function(e) { return "Grupo " + e[0] + ": [" + e[1].join(",") + "]"; }).join(" | ");
+            document.getElementById("sp-cfg-csv-preview").textContent = Object.entries(byGroup).slice(0, 3).map(function(e) { return "Grupo " + e[0] + ": [" + e[1].join(",") + "]"; }).join(" | ");
           } catch(e) {
             document.getElementById("sp-cfg-csv-count").textContent = "❌ JSON inválido";
             document.getElementById("sp-cfg-csv-preview").textContent = e.message;
