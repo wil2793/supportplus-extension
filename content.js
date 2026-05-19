@@ -1777,13 +1777,18 @@
   var profilesCache = {};
   var ignoredEmails = [];
   var ignoredIds = [];
+  var ignoredByGroup = {};
 
-  // Load ignored emails/ids from storage
+  // Load ignored from storage
   try {
     chrome.storage.local.get("ignoredEmails", function(result) {
       var data = result.ignoredEmails || {};
-      if (Array.isArray(data)) { ignoredEmails = data; } // legacy format
-      else { ignoredEmails = data.emails || []; ignoredIds = data.ids || []; }
+      if (Array.isArray(data)) { ignoredIds = data; } // legacy
+      else {
+        ignoredEmails = data.emails || [];
+        ignoredIds = data.ids || [];
+        ignoredByGroup = data.byGroup || {};
+      }
     });
   } catch(e) {}
 
@@ -1796,12 +1801,12 @@
     }).then(function(r) { return r.json(); }).then(function(json) {
       var profiles = json.data || json;
       if (!Array.isArray(profiles)) profiles = [];
-      // Filter out ignored emails and IDs
-      if (ignoredEmails.length || ignoredIds.length) {
+      // Filter out by group-specific blocked IDs
+      var blockedForGroup = ignoredByGroup[String(groupId)] || [];
+      if (blockedForGroup.length || ignoredIds.length) {
         profiles = profiles.filter(function(p) {
-          var email = (p.email || p.profileEmail || "").toLowerCase();
           var id = p.profileId || p.id;
-          if (ignoredEmails.includes(email)) return false;
+          if (blockedForGroup.includes(id)) return false;
           if (ignoredIds.includes(id)) return false;
           return true;
         });
@@ -3325,9 +3330,9 @@
         '<button id="sp-cfg-load-boards" style="width:100%;padding:8px;font-size:12px;cursor:pointer;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;margin-bottom:12px;">🔄 Cargar boards</button>' +
         '<input type="hidden" id="sp-cfg-board-id" value="' + currentBoardId + '">' +
         '<hr style="border:none;border-top:1px solid #eee;margin:12px 0;">' +
-        '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Correos a ignorar (CSV)</label>' +
+        '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">IDs bloqueados por grupo (JSON)</label>' +
         '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">' +
-          '<label style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:11px;background:#f5f5f5;">📄 Cargar CSV<input id="sp-cfg-csv-input" type="file" accept=".csv,.txt" style="display:none;"></label>' +
+          '<label style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:11px;background:#f5f5f5;">📄 Cargar JSON<input id="sp-cfg-csv-input" type="file" accept=".json,.txt" style="display:none;"></label>' +
           '<span id="sp-cfg-csv-count" style="font-size:11px;color:#888;">' + (stored.ignoredEmails ? ((stored.ignoredEmails.emails || []).length + (stored.ignoredEmails.ids || []).length || (Array.isArray(stored.ignoredEmails) ? stored.ignoredEmails.length : 0)) + ' registros ignorados' : 'Sin archivo') + '</span>' +
           (stored.ignoredEmails ? ' <button id="sp-cfg-csv-clear" style="padding:2px 6px;border:1px solid #D94040;border-radius:4px;background:#fff;color:#D94040;font-size:10px;cursor:pointer;">Limpiar</button>' : '') +
         '</div>' +
@@ -3350,23 +3355,17 @@
         var reader = new FileReader();
         reader.onload = function(ev) {
           var text = ev.target.result;
-          var lines = text.split(/[\r\n]+/).filter(function(s) { return s.trim(); });
-          var ignored = { emails: [], ids: [] };
-          lines.forEach(function(line, idx) {
-            if (idx === 0 && (line.toLowerCase().includes("correo") || line.toLowerCase().includes("email") || line.toLowerCase().includes("id"))) return; // skip header
-            var parts = line.split(/[,;|\t]+/).map(function(s) { return s.trim(); });
-            if (parts[0] && parts[0].includes("@")) ignored.emails.push(parts[0].toLowerCase());
-            if (parts[1] && !isNaN(parts[1])) ignored.ids.push(parseInt(parts[1]));
-            // If only one column
-            if (parts.length === 1) {
-              if (parts[0].includes("@")) ignored.emails.push(parts[0].toLowerCase());
-              else if (!isNaN(parts[0])) ignored.ids.push(parseInt(parts[0]));
-            }
-          });
-          csvPendingEmails = ignored;
-          var total = ignored.emails.length + ignored.ids.length;
-          document.getElementById("sp-cfg-csv-count").textContent = total + " registros cargados (" + ignored.emails.length + " correos, " + ignored.ids.length + " IDs)";
-          document.getElementById("sp-cfg-csv-preview").textContent = ignored.emails.slice(0, 3).concat(ignored.ids.slice(0, 3).map(function(id) { return "ID:" + id; })).join(", ");
+          try {
+            var parsed = JSON.parse(text);
+            csvPendingEmails = { emails: [], ids: [], byGroup: parsed };
+            var totalIds = Object.values(parsed).reduce(function(sum, arr) { return sum + arr.length; }, 0);
+            var groupCount = Object.keys(parsed).length;
+            document.getElementById("sp-cfg-csv-count").textContent = totalIds + " IDs bloqueados en " + groupCount + " grupos";
+            document.getElementById("sp-cfg-csv-preview").textContent = Object.entries(parsed).slice(0, 3).map(function(e) { return "Grupo " + e[0] + ": [" + e[1].join(",") + "]"; }).join(" | ");
+          } catch(e) {
+            document.getElementById("sp-cfg-csv-count").textContent = "❌ JSON inválido";
+            document.getElementById("sp-cfg-csv-preview").textContent = e.message;
+          }
         };
         reader.readAsText(file);
       });
