@@ -219,7 +219,7 @@
       container.id = id;
       container.style.cssText = "margin-bottom:8px;padding:6px 8px;border:1px solid #ddd;border-radius:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;position:relative;";
 
-      var selectedIds = items.map(function(i) { return String(i.id); });
+      var selectedIds = []; // Empty = show all
 
       function render() {
         container.innerHTML = "";
@@ -239,8 +239,8 @@
         // Add input for searching
         var input = document.createElement("input");
         input.type = "text";
-        input.placeholder = selectedIds.length ? "+ Agregar..." : "Buscar grupo...";
-        input.style.cssText = "border:none;outline:none;font-size:11px;flex:1;min-width:100px;padding:2px 4px;";
+        input.placeholder = selectedIds.length ? "+ Agregar..." : "🔍 Filtrar grupos...";
+        input.style.cssText = "border:none;outline:none;font-size:11px;flex:1;min-width:120px;padding:2px 4px;";
 
         var dropdown = document.createElement("div");
         dropdown.style.cssText = "position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:4px;max-height:150px;overflow-y:auto;z-index:10;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.1);";
@@ -248,7 +248,7 @@
         function showDropdown() {
           var query = input.value.toLowerCase();
           var available = items.filter(function(i) { return !selectedIds.includes(String(i.id)) && i.name.toLowerCase().includes(query); });
-          if (!available.length) { dropdown.style.display = "none"; return; }
+          if (!available.length || !query) { dropdown.style.display = "none"; return; }
           dropdown.innerHTML = "";
           available.slice(0, 10).forEach(function(item) {
             var opt = document.createElement("div");
@@ -257,6 +257,7 @@
             opt.addEventListener("mousedown", function(e) {
               e.preventDefault();
               selectedIds.push(String(item.id));
+              input.value = "";
               render();
               onChangeCallback(selectedIds);
             });
@@ -268,7 +269,7 @@
         }
 
         input.addEventListener("input", showDropdown);
-        input.addEventListener("focus", showDropdown);
+        input.addEventListener("focus", function() { if (input.value) showDropdown(); });
         input.addEventListener("blur", function() { setTimeout(function() { dropdown.style.display = "none"; }, 150); });
 
         container.appendChild(input);
@@ -283,7 +284,7 @@
     var summaryTagFilter = createTagFilter("sp-mgr-summary-filter", groupsInfo, function(selected) {
       summaryDiv.querySelectorAll("[id^='sp-mgr-summary-']").forEach(function(el) {
         var gId = el.id.replace("sp-mgr-summary-", "");
-        el.style.display = selected.includes(gId) ? "" : "none";
+        el.style.display = (!selected.length || selected.includes(gId)) ? "" : "none";
       });
     });
     panel.insertBefore(summaryTagFilter.element, summaryDiv);
@@ -301,7 +302,7 @@
     var collapseTagFilter = createTagFilter("sp-mgr-collapse-filter", groupsInfo, function(selected) {
       panel.querySelectorAll("[id^='sp-mgr-section-']").forEach(function(el) {
         var gId = el.id.replace("sp-mgr-section-", "");
-        el.style.display = selected.includes(gId) ? "" : "none";
+        el.style.display = (!selected.length || selected.includes(gId)) ? "" : "none";
       });
     });
     panel.appendChild(collapseTagFilter.element);
