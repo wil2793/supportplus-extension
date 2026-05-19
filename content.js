@@ -4325,13 +4325,15 @@
                   '<div style="color:#555;margin-top:2px;">' + cContent + '</div>' + cAttachHTML + '</div>';
               }).join("") : '<div style="color:#aaa;font-size:11px;padding:4px;">Sin comentarios</div>') +
             '</div>' +
-            // Add comment form
+            // Add comment form (hide if closed, unless DBA)
+            (statusName !== "Cerrado" || getTeamConfig().resolutionGroupId === 19 ? (
             '<div style="display:flex;gap:6px;margin-top:8px;align-items:center;">' +
               '<input id="sp-qd-comment-input" type="text" placeholder="Escribe un comentario..." style="flex:1;padding:6px 10px;font-size:12px;border:1px solid #ddd;border-radius:6px;outline:none;">' +
               '<label style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-attach-input" type="file" multiple style="display:none;"></label>' +
               '<button id="sp-qd-comment-send" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">Enviar</button>' +
             '</div>' +
-            '<div id="sp-qd-attach-list" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;"></div>' +
+            '<div id="sp-qd-attach-list" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;"></div>'
+            ) : '') +
           '</div>' +
         '</div></div>';
       document.body.appendChild(overlay);
