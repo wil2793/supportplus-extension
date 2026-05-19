@@ -1730,32 +1730,17 @@
   const TEAM_PANEL_ID = "sp-team-panel";
   var teamPanelLoading = false;
 
-  const TEAM_AREAS = {
-    dba: {
-      resolutionGroupId: 19,
-      resolutionGroupLabel: "Infraestructura DBA",
-      profiles: [
-        { profileId: 138, profileFullName: "Rickey Oswaldo Ehuan Vargas", email: "rickey.ehuan@macropay.mx" },
-        { profileId: 141, profileFullName: "Wille Hans Ditte Morales Sanchez", email: "wille.morales@macropay.mx" },
-        { profileId: 144, profileFullName: "Jorge Luis Balam Vargas", email: "jorge.balam@macropay.mx" },
-        { profileId: 146, profileFullName: "Eduardo Emmanuel Ravell May", email: "eduardo.ravell@macropay.mx" },
-        { profileId: 148, profileFullName: "Gamaliel Uriel Tzab Novelo", email: "gamaliel.tzab@macropay.mx" },
-        { profileId: 190, profileFullName: "Ariel Jesus Fernandez Mena", email: "ariel.fernandez@macropay.mx" },
-        { profileId: 294, profileFullName: "William Israel Alpuche Jimenez", email: "william.alpuche@macropay.mx" }
-      ]
-    },
-    aplicaciones: {
-      resolutionGroupId: 22,
-      resolutionGroupLabel: "Aplicaciones - Liberación e Implementación",
-      profiles: [
-        { profileId: 135, profileFullName: "Omar Francisco Canul Mutul", email: "omar.canul@macropay.mx" },
-        { profileId: 187, profileFullName: "Eduardo Emanuel Herrera Pech", email: "eduardo.herrera@macropay.mx" },
-        { profileId: 303, profileFullName: "Aaron Isaac Dorantes Ku", email: "aaron.dorantes@macropay.mx" }
-      ]
-    }
-  };
+  const TEAM_AREAS = {};
+  // Build TEAM_AREAS dynamically from GROUP_INFO
+  GROUP_INFO.forEach(function(g) {
+    TEAM_AREAS[g.id] = {
+      resolutionGroupId: g.id,
+      resolutionGroupLabel: g.name,
+      profiles: [] // loaded dynamically
+    };
+  });
 
-  var currentTeamArea = "dba"; // default
+  var currentTeamArea = "19"; // default (DBA)
   const GERENTE_NAME = "Rickey Oswaldo Ehuan Vargas";
 
   function isGerente() {
@@ -1763,12 +1748,12 @@
   }
 
   function getTeamConfig() {
-    return TEAM_AREAS[currentTeamArea] || TEAM_AREAS.dba;
+    return TEAM_AREAS[currentTeamArea] || TEAM_AREAS["19"];
   }
 
   // Returns all areas if gerente, otherwise just the configured one
   function getActiveAreas() {
-    if (isGerente()) return Object.values(TEAM_AREAS);
+    if (isGerente()) return [TEAM_AREAS["19"], TEAM_AREAS["22"]].filter(Boolean);
     return [getTeamConfig()];
   }
 
@@ -1776,22 +1761,32 @@
     return new Promise(function(resolve) {
       try {
         chrome.storage.local.get("teamArea", function(result) {
-          currentTeamArea = result.teamArea || "dba";
+          currentTeamArea = result.teamArea || "19";
           resolve();
         });
       } catch(e) { resolve(); }
     });
   }
 
-  const DBA_PROFILES = TEAM_AREAS.dba.profiles;
-  const DBA_PROFILE_NAMES = {};
-  DBA_PROFILES.forEach(function(p) { DBA_PROFILE_NAMES[p.profileId] = p.profileFullName; });
+  // Load profiles dynamically for a group
+  var profilesCache = {};
+  function loadProfilesForGroup(groupId) {
+    if (profilesCache[groupId]) return Promise.resolve(profilesCache[groupId]);
+    var spToken = localStorage.getItem("token");
+    if (!spToken) return Promise.resolve([]);
+    return fetch("https://macropayapi.supportplus.mx/tickets/web/active-profiles-by-resolution-group/" + groupId, {
+      headers: { accept: "application/json", authorization: "Bearer " + spToken }
+    }).then(function(r) { return r.json(); }).then(function(json) {
+      var profiles = json.data || json;
+      if (!Array.isArray(profiles)) profiles = [];
+      profilesCache[groupId] = profiles;
+      if (TEAM_AREAS[groupId]) TEAM_AREAS[groupId].profiles = profiles;
+      return profiles;
+    }).catch(function() { return []; });
+  }
 
-  // Build a global profile name map for all areas
-  const ALL_PROFILE_NAMES = {};
-  Object.values(TEAM_AREAS).forEach(function(area) {
-    area.profiles.forEach(function(p) { ALL_PROFILE_NAMES[p.profileId] = p.profileFullName; });
-  });
+  // Build a global profile name map (populated as profiles load)
+  var ALL_PROFILE_NAMES = {};
 
   async function loadTeamPanel() {
     if (isDetailView()) return;
@@ -1816,6 +1811,14 @@
     try {
       var areas = getActiveAreas();
       var myName = getLoggedUserName();
+
+      // Load profiles dynamically for each area
+      await Promise.all(areas.map(function(area) {
+        return loadProfilesForGroup(area.resolutionGroupId).then(function(profiles) {
+          area.profiles = profiles;
+          profiles.forEach(function(p) { ALL_PROFILE_NAMES[p.profileId] = p.profileFullName; });
+        });
+      }));
 
       // Render empty columns immediately
       var containerDiv = document.createElement("div");
@@ -3280,8 +3283,7 @@
         '<h3 style="margin:0 0 16px;">⚙️ Configuración</h3>' +
         '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Área de trabajo</label>' +
         '<select id="sp-cfg-area" style="width:100%;padding:8px;font-size:13px;border:1px solid #ddd;border-radius:6px;margin-bottom:12px;">' +
-          '<option value="dba"' + (currentArea === "dba" ? " selected" : "") + '>Infraestructura DBA</option>' +
-          '<option value="aplicaciones"' + (currentArea === "aplicaciones" ? " selected" : "") + '>Aplicaciones - Liberación e Implementación</option>' +
+          GROUP_INFO.map(function(g) { return '<option value="' + g.id + '"' + (String(currentArea) === String(g.id) ? ' selected' : '') + '>' + g.name + '</option>'; }).join("") +
         '</select>' +
         '<hr style="border:none;border-top:1px solid #eee;margin:12px 0;">' +
         '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Monday.com - API Token</label>' +
