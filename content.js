@@ -1038,7 +1038,7 @@
 
       // Always show close button (regardless of who holds it)
       const closeBtn = document.createElement("button");
-      closeBtn.id = DETAIL_BTN_ID;
+      closeBtn.className = "sp-detail-close-btn";
       closeBtn.textContent = "🔒 Cerrar ticket";
       closeBtn.style.cssText =
         "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#616161;color:#fff;font-weight:600;white-space:nowrap;";
