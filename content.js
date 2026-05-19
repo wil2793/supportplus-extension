@@ -1877,7 +1877,7 @@
         // Only open if it wasn't a drag (mouse didn't move much)
         if (dragStartPos && (Math.abs(e.clientX - dragStartPos.x) > 5 || Math.abs(e.clientY - dragStartPos.y) > 5)) return;
         var ticketId = ticket.dataset.ticketId;
-        if (ticketId) window.open("/es/dashboard/tickets/" + ticketId, "_blank");
+        if (ticketId) showQuickDetailModal(ticketId);
       });
       panel.addEventListener("mousedown", function(e) {
         dragStartPos = { x: e.clientX, y: e.clientY };
