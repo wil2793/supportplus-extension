@@ -4098,10 +4098,10 @@
             // Add comment form
             '<div style="display:flex;gap:6px;margin-top:8px;align-items:center;">' +
               '<input id="sp-qd-comment-input" type="text" placeholder="Escribe un comentario..." style="flex:1;padding:6px 10px;font-size:12px;border:1px solid #ddd;border-radius:6px;outline:none;">' +
-              '<label id="sp-qd-attach-label" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:14px;" title="Adjuntar archivo">📎<input id="sp-qd-attach-input" type="file" style="display:none;"></label>' +
+              '<label style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-attach-input" type="file" multiple style="display:none;"></label>' +
               '<button id="sp-qd-comment-send" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">Enviar</button>' +
             '</div>' +
-            '<div id="sp-qd-attach-name" style="font-size:10px;color:#1976D2;margin-top:4px;display:none;"></div>' +
+            '<div id="sp-qd-attach-list" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;"></div>' +
           '</div>' +
         '</div></div>';
       document.body.appendChild(overlay);
@@ -4109,24 +4109,38 @@
       document.getElementById("sp-qd-close").addEventListener("click", function() { overlay.remove(); });
       overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
 
-      // Attach file display
+      // Attach files - multiple with remove
       var attachInput = document.getElementById("sp-qd-attach-input");
-      var attachName = document.getElementById("sp-qd-attach-name");
+      var attachListDiv = document.getElementById("sp-qd-attach-list");
+      var pendingFiles = [];
+
+      function renderPendingFiles() {
+        attachListDiv.innerHTML = "";
+        pendingFiles.forEach(function(f, idx) {
+          var chip = document.createElement("span");
+          chip.style.cssText = "display:inline-flex;align-items:center;gap:3px;padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:4px;font-size:10px;color:#1976D2;";
+          chip.innerHTML = '📎 ' + f.name + ' <span data-idx="' + idx + '" style="cursor:pointer;color:#D94040;font-weight:700;margin-left:2px;">✕</span>';
+          chip.querySelector("[data-idx]").addEventListener("click", function() {
+            pendingFiles.splice(idx, 1);
+            renderPendingFiles();
+          });
+          attachListDiv.appendChild(chip);
+        });
+      }
+
       attachInput.addEventListener("change", function() {
-        if (attachInput.files.length) {
-          attachName.textContent = "📎 " + attachInput.files[0].name;
-          attachName.style.display = "block";
-        } else {
-          attachName.style.display = "none";
+        for (var i = 0; i < attachInput.files.length; i++) {
+          pendingFiles.push(attachInput.files[i]);
         }
+        attachInput.value = "";
+        renderPendingFiles();
       });
 
-      // Send comment (with optional attachment)
+      // Send comment (with optional attachments)
       document.getElementById("sp-qd-comment-send").addEventListener("click", async function() {
         var input = document.getElementById("sp-qd-comment-input");
         var text = input.value.trim();
-        var file = attachInput.files[0] || null;
-        if (!text && !file) return;
+        if (!text && !pendingFiles.length) return;
         var sendBtn = document.getElementById("sp-qd-comment-send");
         sendBtn.disabled = true;
         sendBtn.textContent = "...";
@@ -4142,29 +4156,27 @@
           var commentJson = await commentRes.json();
           var commentId = commentJson.data?.id || commentJson.id;
 
-          // Step 2: Upload file if present
-          var fileInfo = null;
-          if (file) {
+          // Step 2: Upload files if present
+          var uploadedFileNames = [];
+          if (pendingFiles.length && commentId) {
             var formData = new FormData();
-            formData.append("files", file);
+            pendingFiles.forEach(function(f) { formData.append("files", f); });
             var fileRes = await fetch("https://macropayapi.supportplus.mx/files", {
               method: "POST",
               headers: { authorization: "Bearer " + spToken },
               body: formData,
             });
-            if (!fileRes.ok) throw new Error("Error subiendo archivo: HTTP " + fileRes.status);
+            if (!fileRes.ok) throw new Error("Error subiendo archivos: HTTP " + fileRes.status);
             var fileJson = await fileRes.json();
             var uploadedFiles = fileJson.data || fileJson;
             if (Array.isArray(uploadedFiles) && uploadedFiles.length) {
-              fileInfo = uploadedFiles[0];
-              // Step 3: Attach file to comment
-              if (commentId && fileInfo.id) {
-                await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                  body: JSON.stringify({ attachments: [{ fileId: fileInfo.id }], commentId: commentId, isInternal: false }),
-                });
-              }
+              // Step 3: Attach files to comment
+              var attachPayload = uploadedFiles.map(function(f) { uploadedFileNames.push(f.name); return { fileId: f.id }; });
+              await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                body: JSON.stringify({ attachments: attachPayload, commentId: commentId, isInternal: false }),
+              });
             }
           }
 
@@ -4175,14 +4187,14 @@
           var list = document.getElementById("sp-qd-comments-list");
           var noComments = list.querySelector('[style*="color:#aaa"]');
           if (noComments) noComments.remove();
-          var attachLabel = fileInfo ? ' <span style="color:#1976D2;">📎 ' + fileInfo.name + '</span>' : '';
+          var attachLabel = uploadedFileNames.length ? ' <div style="margin-top:3px;">' + uploadedFileNames.map(function(n) { return '<span style="color:#1976D2;font-size:10px;">📎 ' + n + '</span>'; }).join(" ") + '</div>' : '';
           list.innerHTML += '<div style="padding:5px 8px;background:#e3f2fd;border-left:3px solid #1976D2;border-radius:4px;font-size:11px;margin-bottom:4px;">' +
             '<div style="display:flex;justify-content:space-between;"><b>' + myName + '</b><span style="color:#888;font-size:10px;">' + nowStr + '</span></div>' +
-            '<div style="color:#555;margin-top:2px;">' + commentText + attachLabel + '</div></div>';
+            '<div style="color:#555;margin-top:2px;">' + commentText + '</div>' + attachLabel + '</div>';
           list.scrollTop = list.scrollHeight;
           input.value = "";
-          attachInput.value = "";
-          attachName.style.display = "none";
+          pendingFiles = [];
+          renderPendingFiles();
         } catch(err) {
           showErrorToast("Error: " + err.message);
         }
