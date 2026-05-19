@@ -1002,7 +1002,7 @@
       const chip4 = container.querySelector(".MuiChip-root");
 
       // Show take button if waiting
-      if (isWaiting) {
+      if (isWaiting && !container.querySelector(".sp-detail-take")) {
         const takeBtn = document.createElement("button");
         takeBtn.className = "sp-detail-take";
         takeBtn.textContent = "🤚 Tomar ticket";
@@ -1019,7 +1019,7 @@
       }
 
       // Show steal button if assigned to someone else
-      if (isAssigned && holderName && myName && holderName !== myName) {
+      if (isAssigned && holderName && myName && holderName !== myName && !container.querySelector(".sp-detail-steal")) {
         const stealBtn = document.createElement("button");
         stealBtn.className = "sp-detail-steal";
         stealBtn.textContent = "🥷 Robar ticket";
