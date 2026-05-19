@@ -213,27 +213,80 @@
       return GROUP_INFO.find(function(g) { return g.id === gId; }) || { id: gId, name: "Grupo " + gId };
     });
 
-    // Filter select for summary
-    var summaryFilterDiv = document.createElement("div");
-    summaryFilterDiv.style.cssText = "margin-bottom:8px;text-align:center;";
-    summaryFilterDiv.innerHTML = '<select id="sp-mgr-summary-filter" multiple style="width:80%;max-width:600px;padding:6px;font-size:11px;border:1px solid #ddd;border-radius:6px;min-height:28px;"><option value="" disabled>Filtrar recuadros...</option></select>';
-    panel.insertBefore(summaryFilterDiv, summaryDiv);
+    // --- Tag filter component ---
+    function createTagFilter(id, items, onChangeCallback) {
+      var container = document.createElement("div");
+      container.id = id;
+      container.style.cssText = "margin-bottom:8px;padding:6px 8px;border:1px solid #ddd;border-radius:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;position:relative;";
 
-    var summaryFilter = document.getElementById("sp-mgr-summary-filter");
-    groupsInfo.forEach(function(dept) {
-      var opt = document.createElement("option");
-      opt.value = dept.id;
-      opt.textContent = dept.name;
-      opt.selected = true;
-      summaryFilter.appendChild(opt);
-    });
-    summaryFilter.addEventListener("change", function() {
-      var selected = Array.from(summaryFilter.selectedOptions).map(function(o) { return o.value; });
+      var selectedIds = items.map(function(i) { return String(i.id); });
+
+      function render() {
+        container.innerHTML = "";
+        selectedIds.forEach(function(sid) {
+          var item = items.find(function(i) { return String(i.id) === sid; });
+          if (!item) return;
+          var tag = document.createElement("span");
+          tag.style.cssText = "display:inline-flex;align-items:center;gap:3px;padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:4px;font-size:10px;color:#1976D2;";
+          tag.innerHTML = item.name + ' <span data-remove="' + sid + '" style="cursor:pointer;color:#D94040;font-weight:700;">✕</span>';
+          tag.querySelector("[data-remove]").addEventListener("click", function() {
+            selectedIds = selectedIds.filter(function(s) { return s !== sid; });
+            render();
+            onChangeCallback(selectedIds);
+          });
+          container.appendChild(tag);
+        });
+        // Add input for searching
+        var input = document.createElement("input");
+        input.type = "text";
+        input.placeholder = selectedIds.length ? "+ Agregar..." : "Buscar grupo...";
+        input.style.cssText = "border:none;outline:none;font-size:11px;flex:1;min-width:100px;padding:2px 4px;";
+
+        var dropdown = document.createElement("div");
+        dropdown.style.cssText = "position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:4px;max-height:150px;overflow-y:auto;z-index:10;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.1);";
+
+        function showDropdown() {
+          var query = input.value.toLowerCase();
+          var available = items.filter(function(i) { return !selectedIds.includes(String(i.id)) && i.name.toLowerCase().includes(query); });
+          if (!available.length) { dropdown.style.display = "none"; return; }
+          dropdown.innerHTML = "";
+          available.slice(0, 10).forEach(function(item) {
+            var opt = document.createElement("div");
+            opt.style.cssText = "padding:6px 8px;cursor:pointer;font-size:11px;border-bottom:1px solid #f0f0f0;";
+            opt.textContent = item.name;
+            opt.addEventListener("mousedown", function(e) {
+              e.preventDefault();
+              selectedIds.push(String(item.id));
+              render();
+              onChangeCallback(selectedIds);
+            });
+            opt.addEventListener("mouseenter", function() { opt.style.background = "#e3f2fd"; });
+            opt.addEventListener("mouseleave", function() { opt.style.background = ""; });
+            dropdown.appendChild(opt);
+          });
+          dropdown.style.display = "block";
+        }
+
+        input.addEventListener("input", showDropdown);
+        input.addEventListener("focus", showDropdown);
+        input.addEventListener("blur", function() { setTimeout(function() { dropdown.style.display = "none"; }, 150); });
+
+        container.appendChild(input);
+        container.appendChild(dropdown);
+      }
+
+      render();
+      return { element: container, getSelected: function() { return selectedIds; } };
+    }
+
+    // Summary filter
+    var summaryTagFilter = createTagFilter("sp-mgr-summary-filter", groupsInfo, function(selected) {
       summaryDiv.querySelectorAll("[id^='sp-mgr-summary-']").forEach(function(el) {
         var gId = el.id.replace("sp-mgr-summary-", "");
         el.style.display = selected.includes(gId) ? "" : "none";
       });
     });
+    panel.insertBefore(summaryTagFilter.element, summaryDiv);
 
     groupsInfo.forEach(function(dept) {
       var col = document.createElement("div");
@@ -244,27 +297,14 @@
       summaryDiv.appendChild(col);
     });
 
-    // Filter select for collapsibles
-    var collapseFilterDiv = document.createElement("div");
-    collapseFilterDiv.style.cssText = "margin-bottom:8px;text-align:center;";
-    collapseFilterDiv.innerHTML = '<select id="sp-mgr-collapse-filter" multiple style="width:80%;max-width:600px;padding:6px;font-size:11px;border:1px solid #ddd;border-radius:6px;min-height:28px;"><option value="" disabled>Filtrar colapsables...</option></select>';
-    panel.appendChild(collapseFilterDiv);
-
-    var collapseFilter = document.getElementById("sp-mgr-collapse-filter");
-    groupsInfo.forEach(function(dept) {
-      var opt = document.createElement("option");
-      opt.value = dept.id;
-      opt.textContent = dept.name;
-      opt.selected = true;
-      collapseFilter.appendChild(opt);
-    });
-    collapseFilter.addEventListener("change", function() {
-      var selected = Array.from(collapseFilter.selectedOptions).map(function(o) { return o.value; });
+    // Collapse filter
+    var collapseTagFilter = createTagFilter("sp-mgr-collapse-filter", groupsInfo, function(selected) {
       panel.querySelectorAll("[id^='sp-mgr-section-']").forEach(function(el) {
         var gId = el.id.replace("sp-mgr-section-", "");
         el.style.display = selected.includes(gId) ? "" : "none";
       });
     });
+    panel.appendChild(collapseTagFilter.element);
 
     // Collapsible detail per group
     groupsInfo.forEach(function(dept) {
