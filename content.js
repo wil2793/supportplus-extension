@@ -4219,11 +4219,20 @@
             '<button id="sp-qd-take-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🤚 Tomar</button>' +
             '<select id="sp-qd-assign-select" style="flex:1;padding:6px 8px;font-size:11px;border:1px solid #ddd;border-radius:6px;"><option value="">-- Asignar a --</option></select>' +
           '</div>' : '') +
-          // Action row (close + migrate) - only if assigned and not closed
-          (statusName !== "En espera" && statusName !== "Cerrado" ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
-            '<button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🔒 Cerrar</button>' +
-            '<button id="sp-qd-close-migrate-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🔒 Cerrar y Migrar</button>' +
-          '</div>' : '') +
+          // Action row - only if not closed and not waiting
+          (function() {
+            if (statusName === "En espera" || statusName === "Cerrado") return '';
+            var isMigrated = t.uniqueCode && getCache() && getCache()[t.uniqueCode];
+            if (isMigrated) {
+              return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
+                '<button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🔒 Cerrar</button>' +
+              '</div>';
+            } else {
+              return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
+                '<button id="sp-qd-close-migrate-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🔒 Cerrar y Migrar</button>' +
+              '</div>';
+            }
+          })() +
           // Migrate only (if closed and not migrated)
           (statusName === "Cerrado" && !(t.uniqueCode && getCache() && getCache()[t.uniqueCode]) ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
             '<button id="sp-qd-migrate-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🙂 Migrar a Monday</button>' +
