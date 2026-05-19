@@ -4795,7 +4795,7 @@
     colorRowsByStatus();
     makeWaitingRowsDraggable();
 
-    // Inject quick detail button on all rows
+    // Replace folio label with quick detail button on all rows
     document.querySelectorAll(".MuiDataGrid-row").forEach(function(row) {
       if (row.querySelector("." + DETAIL_QUICK_CLASS)) return;
       var ticketId = row.getAttribute("data-id");
@@ -4803,7 +4803,21 @@
       var firstCell = row.querySelector('[data-field="uniqueCode"]');
       if (!firstCell) return;
       var container = firstCell.querySelector(".MuiBox-root") || firstCell;
-      container.appendChild(createQuickDetailButton(ticketId));
+      var folioEl = container.querySelector("p.MuiTypography-body1");
+      if (!folioEl) return;
+      var folioText = folioEl.textContent.trim();
+      // Create button with folio text
+      var btn = document.createElement("button");
+      btn.className = DETAIL_QUICK_CLASS + " MuiButtonBase-root MuiButton-root MuiButton-contained MuiButton-containedPrimary MuiButton-sizeMedium MuiButton-containedSizeMedium MuiButton-colorPrimary";
+      btn.textContent = folioText;
+      btn.style.cssText = "padding:2px 8px;font-size:11px;cursor:pointer;min-width:auto;white-space:nowrap;";
+      btn.addEventListener("click", function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        showQuickDetailModal(ticketId);
+      });
+      // Replace folio with button
+      folioEl.replaceWith(btn);
     });
     injectBulkButton();
     injectBulkCloseButton();
