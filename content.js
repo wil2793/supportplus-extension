@@ -1775,6 +1775,15 @@
 
   // Load profiles dynamically for a group
   var profilesCache = {};
+  var ignoredEmails = [];
+
+  // Load ignored emails from storage
+  try {
+    chrome.storage.local.get("ignoredEmails", function(result) {
+      ignoredEmails = result.ignoredEmails || [];
+    });
+  } catch(e) {}
+
   function loadProfilesForGroup(groupId) {
     if (profilesCache[groupId]) return Promise.resolve(profilesCache[groupId]);
     var spToken = localStorage.getItem("token");
@@ -1784,6 +1793,13 @@
     }).then(function(r) { return r.json(); }).then(function(json) {
       var profiles = json.data || json;
       if (!Array.isArray(profiles)) profiles = [];
+      // Filter out ignored emails
+      if (ignoredEmails.length) {
+        profiles = profiles.filter(function(p) {
+          var email = (p.email || p.profileEmail || "").toLowerCase();
+          return !ignoredEmails.includes(email);
+        });
+      }
       profilesCache[groupId] = profiles;
       if (TEAM_AREAS[groupId]) TEAM_AREAS[groupId].profiles = profiles;
       return profiles;
@@ -3276,7 +3292,7 @@
     if (existing) existing.remove();
 
     // Load current values
-    chrome.storage.local.get(["mondayToken", "mondayBoardId", "mondayBoardName", "teamArea"], function(stored) {
+    chrome.storage.local.get(["mondayToken", "mondayBoardId", "mondayBoardName", "teamArea", "ignoredEmails"], function(stored) {
       var currentToken = stored.mondayToken || "";
       var currentBoardId = stored.mondayBoardId || "";
       var currentBoardName = stored.mondayBoardName || "";
@@ -3302,6 +3318,14 @@
         '<div id="sp-cfg-board-status" style="font-size:11px;color:#888;margin-bottom:12px;min-height:16px;">' + (currentBoardName ? "✅ " + currentBoardName : "Carga los boards primero") + '</div>' +
         '<button id="sp-cfg-load-boards" style="width:100%;padding:8px;font-size:12px;cursor:pointer;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;margin-bottom:12px;">🔄 Cargar boards</button>' +
         '<input type="hidden" id="sp-cfg-board-id" value="' + currentBoardId + '">' +
+        '<hr style="border:none;border-top:1px solid #eee;margin:12px 0;">' +
+        '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Correos a ignorar (CSV)</label>' +
+        '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">' +
+          '<label style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:11px;background:#f5f5f5;">📄 Cargar CSV<input id="sp-cfg-csv-input" type="file" accept=".csv,.txt" style="display:none;"></label>' +
+          '<span id="sp-cfg-csv-count" style="font-size:11px;color:#888;">' + (stored.ignoredEmails ? stored.ignoredEmails.length + ' correos ignorados' : 'Sin archivo') + '</span>' +
+          (stored.ignoredEmails ? ' <button id="sp-cfg-csv-clear" style="padding:2px 6px;border:1px solid #D94040;border-radius:4px;background:#fff;color:#D94040;font-size:10px;cursor:pointer;">Limpiar</button>' : '') +
+        '</div>' +
+        '<div id="sp-cfg-csv-preview" style="font-size:10px;color:#888;max-height:60px;overflow:auto;margin-bottom:12px;">' + (stored.ignoredEmails ? stored.ignoredEmails.slice(0, 5).join(", ") + (stored.ignoredEmails.length > 5 ? "..." : "") : "") + '</div>' +
         '<div style="display:flex;gap:8px;">' +
           '<button id="sp-cfg-save" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">💾 Guardar</button>' +
           '<button id="sp-cfg-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
@@ -3311,6 +3335,30 @@
       // Events
       document.getElementById("sp-cfg-cancel").addEventListener("click", function() { overlay.remove(); });
       overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+      // CSV ignored emails
+      var csvPendingEmails = stored.ignoredEmails || null;
+      document.getElementById("sp-cfg-csv-input").addEventListener("change", function(e) {
+        var file = e.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+          var text = ev.target.result;
+          var emails = text.split(/[\r\n,;]+/).map(function(s) { return s.trim().toLowerCase(); }).filter(function(s) { return s && s.includes("@"); });
+          csvPendingEmails = emails;
+          document.getElementById("sp-cfg-csv-count").textContent = emails.length + " correos cargados";
+          document.getElementById("sp-cfg-csv-preview").textContent = emails.slice(0, 5).join(", ") + (emails.length > 5 ? "..." : "");
+        };
+        reader.readAsText(file);
+      });
+      var clearBtn = document.getElementById("sp-cfg-csv-clear");
+      if (clearBtn) {
+        clearBtn.addEventListener("click", function() {
+          csvPendingEmails = [];
+          document.getElementById("sp-cfg-csv-count").textContent = "Limpiado";
+          document.getElementById("sp-cfg-csv-preview").textContent = "";
+        });
+      }
 
       // Load boards
       var allBoards = [];
@@ -3362,7 +3410,9 @@
         var boardId = document.getElementById("sp-cfg-board-id").value;
         var boardName = document.getElementById("sp-cfg-board-search").value.trim();
         var area = document.getElementById("sp-cfg-area").value;
-        chrome.storage.local.set({ mondayToken: token, mondayBoardId: boardId, mondayBoardName: boardName, teamArea: area }, function() {
+        var saveData = { mondayToken: token, mondayBoardId: boardId, mondayBoardName: boardName, teamArea: area };
+        if (csvPendingEmails !== null) saveData.ignoredEmails = csvPendingEmails;
+        chrome.storage.local.set(saveData, function() {
           overlay.remove();
           showSuccessToast("Configuración guardada");
           // Reload team area
