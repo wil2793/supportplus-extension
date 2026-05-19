@@ -1057,6 +1057,32 @@
       }
     }
 
+    // Show close button independently for non-closed tickets (even if migrated)
+    if (!isClosed && !container.querySelector(".sp-detail-close-btn")) {
+      var myAreaClose = getTeamConfig();
+      var canClose = !ticketGroupId || ticketGroupId === myAreaClose.resolutionGroupId || isGerente();
+      if (canClose) {
+        const closeBtnIndep = document.createElement("button");
+        closeBtnIndep.className = "sp-detail-close-btn";
+        closeBtnIndep.textContent = "🔒 Cerrar ticket";
+        closeBtnIndep.style.cssText =
+          "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#616161;color:#fff;font-weight:600;white-space:nowrap;margin-left:6px;";
+        closeBtnIndep.addEventListener("mouseenter", () => { if (!closeBtnIndep.disabled) closeBtnIndep.textContent = "🔐 Cerrar ticket"; });
+        closeBtnIndep.addEventListener("mouseleave", () => { if (!closeBtnIndep.disabled) closeBtnIndep.textContent = "🔒 Cerrar ticket"; });
+        closeBtnIndep.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          closeBtnIndep.disabled = true;
+          closeBtnIndep.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
+          await showCloseModal(ticketId, closeBtnIndep);
+          closeBtnIndep.textContent = "🔒 Cerrar ticket";
+          closeBtnIndep.disabled = false;
+        });
+        var chipClose = container.querySelector(".MuiChip-root");
+        container.insertBefore(closeBtnIndep, chipClose);
+      }
+    }
+
     // Show reopen button independently for closed tickets (even if migrated)
     if (isClosed && !container.querySelector(".sp-reopen-btn")) {
       var myAreaReopen = getTeamConfig();
