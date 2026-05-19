@@ -4261,8 +4261,11 @@
                   });
                   cAttachHTML += '</div>';
                 }
+                var myName = getLoggedUserName();
+                var isMyComment = c.fullName === myName || c.email === (t.ticketInfo?.email || "___");
+                var addAttachBtn = isMyComment ? ' <label class="sp-qd-add-attach" data-comment-id="' + c.id + '" style="cursor:pointer;font-size:12px;opacity:0.6;margin-left:4px;" title="Adjuntar evidencia">📎<input type="file" multiple style="display:none;"></label>' : '';
                 return '<div style="padding:5px 8px;background:#f9f9f9;border-left:3px solid #1976D2;border-radius:4px;font-size:11px;margin-bottom:4px;">' +
-                  '<div style="display:flex;justify-content:space-between;"><b>' + (c.fullName || "") + '</b><span style="color:#888;font-size:10px;">' + cDate + '</span></div>' +
+                  '<div style="display:flex;justify-content:space-between;align-items:center;"><b>' + (c.fullName || "") + '</b><span style="color:#888;font-size:10px;">' + cDate + addAttachBtn + '</span></div>' +
                   '<div style="color:#555;margin-top:2px;">' + cContent + '</div>' + cAttachHTML + '</div>';
               }).join("") : '<div style="color:#aaa;font-size:11px;padding:4px;">Sin comentarios</div>') +
             '</div>' +
@@ -4376,6 +4379,45 @@
       // Allow Enter to send
       document.getElementById("sp-qd-comment-input").addEventListener("keydown", function(e) {
         if (e.key === "Enter") document.getElementById("sp-qd-comment-send").click();
+      });
+
+      // Add attachment to existing comment
+      overlay.querySelectorAll(".sp-qd-add-attach").forEach(function(label) {
+        var fileInput = label.querySelector("input[type=file]");
+        fileInput.addEventListener("change", async function() {
+          if (!fileInput.files.length) return;
+          var commentId = label.dataset.commentId;
+          label.innerHTML = "⏳";
+          try {
+            var formData = new FormData();
+            for (var i = 0; i < fileInput.files.length; i++) {
+              formData.append("files", fileInput.files[i]);
+            }
+            var fileRes = await fetch("https://macropayapi.supportplus.mx/files", {
+              method: "POST",
+              headers: { authorization: "Bearer " + spToken },
+              body: formData,
+            });
+            if (!fileRes.ok) throw new Error("HTTP " + fileRes.status);
+            var fileJson = await fileRes.json();
+            var uploadedFiles = fileJson.data || fileJson;
+            if (Array.isArray(uploadedFiles) && uploadedFiles.length) {
+              var attachPayload = uploadedFiles.map(function(f) { return { fileId: f.id }; });
+              await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                body: JSON.stringify({ attachments: attachPayload, commentId: parseInt(commentId), isInternal: false }),
+              });
+              showSuccessToast("Evidencia adjuntada");
+              // Reload modal to show new attachments
+              overlay.remove();
+              showQuickDetailModal(ticketId);
+            }
+          } catch(err) {
+            showErrorToast("Error: " + err.message);
+            label.innerHTML = '📎<input type="file" multiple style="display:none;">';
+          }
+        });
       });
 
       // Status change - load valid options from API
