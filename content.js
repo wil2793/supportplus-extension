@@ -4087,10 +4087,12 @@
               }).join("") : '<div style="color:#aaa;font-size:11px;padding:4px;">Sin comentarios</div>') +
             '</div>' +
             // Add comment form
-            '<div style="display:flex;gap:6px;margin-top:8px;">' +
+            '<div style="display:flex;gap:6px;margin-top:8px;align-items:center;">' +
               '<input id="sp-qd-comment-input" type="text" placeholder="Escribe un comentario..." style="flex:1;padding:6px 10px;font-size:12px;border:1px solid #ddd;border-radius:6px;outline:none;">' +
+              '<label id="sp-qd-attach-label" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:14px;" title="Adjuntar archivo">📎<input id="sp-qd-attach-input" type="file" style="display:none;"></label>' +
               '<button id="sp-qd-comment-send" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">Enviar</button>' +
             '</div>' +
+            '<div id="sp-qd-attach-name" style="font-size:10px;color:#1976D2;margin-top:4px;display:none;"></div>' +
           '</div>' +
         '</div></div>';
       document.body.appendChild(overlay);
@@ -4098,35 +4100,82 @@
       document.getElementById("sp-qd-close").addEventListener("click", function() { overlay.remove(); });
       overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
 
-      // Send comment
+      // Attach file display
+      var attachInput = document.getElementById("sp-qd-attach-input");
+      var attachName = document.getElementById("sp-qd-attach-name");
+      attachInput.addEventListener("change", function() {
+        if (attachInput.files.length) {
+          attachName.textContent = "📎 " + attachInput.files[0].name;
+          attachName.style.display = "block";
+        } else {
+          attachName.style.display = "none";
+        }
+      });
+
+      // Send comment (with optional attachment)
       document.getElementById("sp-qd-comment-send").addEventListener("click", async function() {
         var input = document.getElementById("sp-qd-comment-input");
         var text = input.value.trim();
-        if (!text) return;
+        var file = attachInput.files[0] || null;
+        if (!text && !file) return;
         var sendBtn = document.getElementById("sp-qd-comment-send");
         sendBtn.disabled = true;
         sendBtn.textContent = "...";
         try {
+          // Step 1: Post comment
+          var commentText = text || "(archivo adjunto)";
           var commentRes = await fetch(SP_API + "/comment/" + ticketId, {
             method: "POST",
             headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-            body: JSON.stringify({ content: "<p>" + text + "</p>", internal: false }),
+            body: JSON.stringify({ content: "<p>" + commentText + "</p>", internal: false }),
           });
           if (!commentRes.ok) throw new Error("HTTP " + commentRes.status);
-          // Add comment to list in real time
+          var commentJson = await commentRes.json();
+          var commentId = commentJson.data?.id || commentJson.id;
+
+          // Step 2: Upload file if present
+          var fileInfo = null;
+          if (file) {
+            var formData = new FormData();
+            formData.append("files", file);
+            var fileRes = await fetch("https://macropayapi.supportplus.mx/files", {
+              method: "POST",
+              headers: { authorization: "Bearer " + spToken },
+              body: formData,
+            });
+            if (!fileRes.ok) throw new Error("Error subiendo archivo: HTTP " + fileRes.status);
+            var fileJson = await fileRes.json();
+            var uploadedFiles = fileJson.data || fileJson;
+            if (Array.isArray(uploadedFiles) && uploadedFiles.length) {
+              fileInfo = uploadedFiles[0];
+              // Step 3: Attach file to comment
+              if (commentId && fileInfo.id) {
+                await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                  body: JSON.stringify({ attachments: [{ fileId: fileInfo.id }], commentId: commentId, isInternal: false }),
+                });
+              }
+            }
+          }
+
+          // Update UI
           var now = new Date();
           var nowStr = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0") + "-" + String(now.getDate()).padStart(2,"0") + " " + String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0");
           var myName = getLoggedUserName() || "Yo";
           var list = document.getElementById("sp-qd-comments-list");
           var noComments = list.querySelector('[style*="color:#aaa"]');
           if (noComments) noComments.remove();
+          var attachLabel = fileInfo ? ' <span style="color:#1976D2;">📎 ' + fileInfo.name + '</span>' : '';
           list.innerHTML += '<div style="padding:5px 8px;background:#e3f2fd;border-left:3px solid #1976D2;border-radius:4px;font-size:11px;margin-bottom:4px;">' +
             '<div style="display:flex;justify-content:space-between;"><b>' + myName + '</b><span style="color:#888;font-size:10px;">' + nowStr + '</span></div>' +
-            '<div style="color:#555;margin-top:2px;">' + text + '</div></div>';
+            '<div style="color:#555;margin-top:2px;">' + commentText + attachLabel + '</div></div>';
           list.scrollTop = list.scrollHeight;
           input.value = "";
+          attachInput.value = "";
+          attachName.style.display = "none";
         } catch(err) {
-          showErrorToast("Error al comentar: " + err.message);
+          showErrorToast("Error: " + err.message);
         }
         sendBtn.disabled = false;
         sendBtn.textContent = "Enviar";
