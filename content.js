@@ -213,6 +213,28 @@
       return GROUP_INFO.find(function(g) { return g.id === gId; }) || { id: gId, name: "Grupo " + gId };
     });
 
+    // Filter select for summary
+    var summaryFilterDiv = document.createElement("div");
+    summaryFilterDiv.style.cssText = "margin-bottom:8px;text-align:center;";
+    summaryFilterDiv.innerHTML = '<select id="sp-mgr-summary-filter" multiple style="width:80%;max-width:600px;padding:6px;font-size:11px;border:1px solid #ddd;border-radius:6px;min-height:28px;"><option value="" disabled>Filtrar recuadros...</option></select>';
+    panel.insertBefore(summaryFilterDiv, summaryDiv);
+
+    var summaryFilter = document.getElementById("sp-mgr-summary-filter");
+    groupsInfo.forEach(function(dept) {
+      var opt = document.createElement("option");
+      opt.value = dept.id;
+      opt.textContent = dept.name;
+      opt.selected = true;
+      summaryFilter.appendChild(opt);
+    });
+    summaryFilter.addEventListener("change", function() {
+      var selected = Array.from(summaryFilter.selectedOptions).map(function(o) { return o.value; });
+      summaryDiv.querySelectorAll("[id^='sp-mgr-summary-']").forEach(function(el) {
+        var gId = el.id.replace("sp-mgr-summary-", "");
+        el.style.display = selected.includes(gId) ? "" : "none";
+      });
+    });
+
     groupsInfo.forEach(function(dept) {
       var col = document.createElement("div");
       col.id = "sp-mgr-summary-" + dept.id;
@@ -220,6 +242,28 @@
       col.innerHTML = '<div style="background:#1976D2;color:#fff;padding:6px 10px;font-size:10px;font-weight:700;">' + dept.name + '</div>' +
         '<div class="sp-mgr-count" style="padding:12px;font-size:24px;font-weight:700;color:#1976D2;">...</div>';
       summaryDiv.appendChild(col);
+    });
+
+    // Filter select for collapsibles
+    var collapseFilterDiv = document.createElement("div");
+    collapseFilterDiv.style.cssText = "margin-bottom:8px;text-align:center;";
+    collapseFilterDiv.innerHTML = '<select id="sp-mgr-collapse-filter" multiple style="width:80%;max-width:600px;padding:6px;font-size:11px;border:1px solid #ddd;border-radius:6px;min-height:28px;"><option value="" disabled>Filtrar colapsables...</option></select>';
+    panel.appendChild(collapseFilterDiv);
+
+    var collapseFilter = document.getElementById("sp-mgr-collapse-filter");
+    groupsInfo.forEach(function(dept) {
+      var opt = document.createElement("option");
+      opt.value = dept.id;
+      opt.textContent = dept.name;
+      opt.selected = true;
+      collapseFilter.appendChild(opt);
+    });
+    collapseFilter.addEventListener("change", function() {
+      var selected = Array.from(collapseFilter.selectedOptions).map(function(o) { return o.value; });
+      panel.querySelectorAll("[id^='sp-mgr-section-']").forEach(function(el) {
+        var gId = el.id.replace("sp-mgr-section-", "");
+        el.style.display = selected.includes(gId) ? "" : "none";
+      });
     });
 
     // Collapsible detail per group
