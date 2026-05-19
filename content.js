@@ -1776,11 +1776,14 @@
   // Load profiles dynamically for a group
   var profilesCache = {};
   var ignoredEmails = [];
+  var ignoredIds = [];
 
-  // Load ignored emails from storage
+  // Load ignored emails/ids from storage
   try {
     chrome.storage.local.get("ignoredEmails", function(result) {
-      ignoredEmails = result.ignoredEmails || [];
+      var data = result.ignoredEmails || {};
+      if (Array.isArray(data)) { ignoredEmails = data; } // legacy format
+      else { ignoredEmails = data.emails || []; ignoredIds = data.ids || []; }
     });
   } catch(e) {}
 
@@ -1793,11 +1796,14 @@
     }).then(function(r) { return r.json(); }).then(function(json) {
       var profiles = json.data || json;
       if (!Array.isArray(profiles)) profiles = [];
-      // Filter out ignored emails
-      if (ignoredEmails.length) {
+      // Filter out ignored emails and IDs
+      if (ignoredEmails.length || ignoredIds.length) {
         profiles = profiles.filter(function(p) {
           var email = (p.email || p.profileEmail || "").toLowerCase();
-          return !ignoredEmails.includes(email);
+          var id = p.profileId || p.id;
+          if (ignoredEmails.includes(email)) return false;
+          if (ignoredIds.includes(id)) return false;
+          return true;
         });
       }
       profilesCache[groupId] = profiles;
@@ -3322,7 +3328,7 @@
         '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Correos a ignorar (CSV)</label>' +
         '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">' +
           '<label style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:11px;background:#f5f5f5;">📄 Cargar CSV<input id="sp-cfg-csv-input" type="file" accept=".csv,.txt" style="display:none;"></label>' +
-          '<span id="sp-cfg-csv-count" style="font-size:11px;color:#888;">' + (stored.ignoredEmails ? stored.ignoredEmails.length + ' correos ignorados' : 'Sin archivo') + '</span>' +
+          '<span id="sp-cfg-csv-count" style="font-size:11px;color:#888;">' + (stored.ignoredEmails ? ((stored.ignoredEmails.emails || []).length + (stored.ignoredEmails.ids || []).length || (Array.isArray(stored.ignoredEmails) ? stored.ignoredEmails.length : 0)) + ' registros ignorados' : 'Sin archivo') + '</span>' +
           (stored.ignoredEmails ? ' <button id="sp-cfg-csv-clear" style="padding:2px 6px;border:1px solid #D94040;border-radius:4px;background:#fff;color:#D94040;font-size:10px;cursor:pointer;">Limpiar</button>' : '') +
         '</div>' +
         '<div id="sp-cfg-csv-preview" style="font-size:10px;color:#888;max-height:60px;overflow:auto;margin-bottom:12px;">' + (stored.ignoredEmails ? stored.ignoredEmails.slice(0, 5).join(", ") + (stored.ignoredEmails.length > 5 ? "..." : "") : "") + '</div>' +
@@ -3344,10 +3350,23 @@
         var reader = new FileReader();
         reader.onload = function(ev) {
           var text = ev.target.result;
-          var emails = text.split(/[\r\n,;]+/).map(function(s) { return s.trim().toLowerCase(); }).filter(function(s) { return s && s.includes("@"); });
-          csvPendingEmails = emails;
-          document.getElementById("sp-cfg-csv-count").textContent = emails.length + " correos cargados";
-          document.getElementById("sp-cfg-csv-preview").textContent = emails.slice(0, 5).join(", ") + (emails.length > 5 ? "..." : "");
+          var lines = text.split(/[\r\n]+/).filter(function(s) { return s.trim(); });
+          var ignored = { emails: [], ids: [] };
+          lines.forEach(function(line, idx) {
+            if (idx === 0 && (line.toLowerCase().includes("correo") || line.toLowerCase().includes("email") || line.toLowerCase().includes("id"))) return; // skip header
+            var parts = line.split(/[,;|\t]+/).map(function(s) { return s.trim(); });
+            if (parts[0] && parts[0].includes("@")) ignored.emails.push(parts[0].toLowerCase());
+            if (parts[1] && !isNaN(parts[1])) ignored.ids.push(parseInt(parts[1]));
+            // If only one column
+            if (parts.length === 1) {
+              if (parts[0].includes("@")) ignored.emails.push(parts[0].toLowerCase());
+              else if (!isNaN(parts[0])) ignored.ids.push(parseInt(parts[0]));
+            }
+          });
+          csvPendingEmails = ignored;
+          var total = ignored.emails.length + ignored.ids.length;
+          document.getElementById("sp-cfg-csv-count").textContent = total + " registros cargados (" + ignored.emails.length + " correos, " + ignored.ids.length + " IDs)";
+          document.getElementById("sp-cfg-csv-preview").textContent = ignored.emails.slice(0, 3).concat(ignored.ids.slice(0, 3).map(function(id) { return "ID:" + id; })).join(", ");
         };
         reader.readAsText(file);
       });
