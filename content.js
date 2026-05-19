@@ -186,6 +186,7 @@
     var canDrag = roleConfig ? roleConfig.canDragDrop : false;
 
     function tryInject() {
+      if (!window.location.pathname.includes("/dashboard/tickets-mesa")) return;
       var grid = document.querySelector(".MuiDataGrid-root");
       if (!grid) return;
       if (document.getElementById("sp-manager-panel")) return;
@@ -195,6 +196,7 @@
     // Initial inject with retry
     var attempts = 0;
     var interval = setInterval(function() {
+      if (!window.location.pathname.includes("/dashboard/tickets-mesa")) { attempts++; if (attempts > 40) clearInterval(interval); return; }
       var grid = document.querySelector(".MuiDataGrid-root");
       if (!grid && attempts < 40) { attempts++; return; }
       clearInterval(interval);
@@ -204,6 +206,12 @@
 
     // Observer to re-inject when navigating back
     var mgrObserver = new MutationObserver(function() {
+      // Remove panel if not on the right page
+      if (!window.location.pathname.includes("/dashboard/tickets-mesa")) {
+        var existing = document.getElementById("sp-manager-panel");
+        if (existing) existing.remove();
+        return;
+      }
       tryInject();
     });
     mgrObserver.observe(document.body, { childList: true, subtree: true });
