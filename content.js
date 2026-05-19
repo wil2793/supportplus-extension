@@ -3962,7 +3962,7 @@
       if (loadingToast) loadingToast.remove();
 
       // Build modal content
-      var desc = (t.description || "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]*>/g, "");
+      var desc = (t.description || "").replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
       var holderName = t.ticketHolder?.ticketHolderLog?.fullName || "Sin asignar";
       var holderEmail = t.ticketHolder?.ticketHolderLog?.email || "";
       var requesterName = t.ticketInfo?.fullName || "";
@@ -4070,7 +4070,7 @@
           // Description (compact)
           '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;margin-bottom:8px;">' +
             '<b style="font-size:10px;color:#888;">📝 Descripción</b>' +
-            '<pre style="margin:4px 0 0;font-size:11px;white-space:pre-wrap;word-break:break-word;font-family:system-ui;color:#333;max-height:80px;overflow:auto;">' + desc + '</pre>' +
+            '<div style="margin:4px 0 0;font-size:11px;line-height:1.5;color:#333;max-height:120px;overflow:auto;">' + desc + '</div>' +
           '</div>' +
           attachHTML +
           participantsHTML +
