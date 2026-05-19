@@ -13,6 +13,13 @@
       canConfig: true,
       canSwitchView: true
     },
+    ceo: {
+      email: "aaron.suarez@macropay.mx",
+      groups: "all",
+      canDragDrop: false,
+      canConfig: false,
+      canSwitchView: false
+    },
     director: {
       email: "francisco.toquero@macropay.mx",
       groups: [12, 18, 19, 20, 22],
@@ -30,11 +37,66 @@
   };
 
   const GROUP_INFO = [
+    { id: 9, name: "Mesa de Ayuda" },
+    { id: 10, name: "Soporte a Tiendas" },
+    { id: 11, name: "Soporte Tecnico" },
     { id: 12, name: "Infraestructura IAM" },
+    { id: 14, name: "SAP ABAP" },
+    { id: 15, name: "SAP BASIS" },
+    { id: 16, name: "SAP Funcional (Datos maestros)" },
     { id: 18, name: "Infraestructura (Cloud/ Servidores)" },
     { id: 19, name: "Infraestructura DBA" },
     { id: 20, name: "Infraestructura DevOps" },
-    { id: 22, name: "Aplicaciones- Liberacion e Implementacion" }
+    { id: 21, name: "Central de Monitoreo" },
+    { id: 22, name: "Aplicaciones- Liberacion e Implementacion" },
+    { id: 23, name: "Problemas" },
+    { id: 24, name: "Ciberseguridad" },
+    { id: 25, name: "Herramienta de Gestion" },
+    { id: 26, name: "SAP Funcional (Modulo Banking - CML)" },
+    { id: 27, name: "SAP Funcional (Modulo Compras)" },
+    { id: 28, name: "SAP Funcional (Modulo Finanzas)" },
+    { id: 29, name: "SAP Funcional (Modulo Garantias)" },
+    { id: 30, name: "SAP Funcional (Modulo Logistico y Distribucion)" },
+    { id: 31, name: "SAP Funcional (Modulo Presupuestos)" },
+    { id: 32, name: "SAP Funcional (Modulo Comercial)" },
+    { id: 33, name: "Salesforce Comunicaciones" },
+    { id: 34, name: "Salesforce Funcional" },
+    { id: 51, name: "Soporte Redes y Telecomunicaciones" },
+    { id: 52, name: "Telefonia movil" },
+    { id: 53, name: "Soporte Aplicativos y Sistemas (general)" },
+    { id: 55, name: "Control Auditoria" },
+    { id: 56, name: "Control Cadena Suministro" },
+    { id: 57, name: "Control Cambaceo" },
+    { id: 58, name: "Control Capital Humano" },
+    { id: 59, name: "Centro de Servicios" },
+    { id: 60, name: "Control CIAB" },
+    { id: 61, name: "Control Cobranza" },
+    { id: 62, name: "Control Comercial" },
+    { id: 64, name: "Control Compras Internas" },
+    { id: 65, name: "Control Cons/Mntto" },
+    { id: 66, name: "Control Control Interno" },
+    { id: 67, name: "Control Experiencia Cliente" },
+    { id: 68, name: "Control Finanzas" },
+    { id: 69, name: "Control Innovacion Crediticia" },
+    { id: 70, name: "Control Juridico" },
+    { id: 71, name: "Control Mercadotecnia" },
+    { id: 72, name: "Control MNVO" },
+    { id: 73, name: "Control Tiendas" },
+    { id: 74, name: "control Transformacion Digital" },
+    { id: 76, name: "Presupuestos TD" },
+    { id: 77, name: "Activo Fijo" },
+    { id: 78, name: "Mobile" },
+    { id: 79, name: "Control Productos Prendarios" },
+    { id: 80, name: "Categoría de inicio" },
+    { id: 83, name: "Soporte office 365" },
+    { id: 84, name: "Desarrollo" },
+    { id: 85, name: "PMO" },
+    { id: 86, name: "Desarrollo Organizacional" },
+    { id: 87, name: "CANCELAR PR" },
+    { id: 88, name: "Soporte a Tiendas - Interno" },
+    { id: 89, name: "Viaticos" },
+    { id: 90, name: "Compras Tecnologia" },
+    { id: 91, name: "Compras Internas" }
   ];
 
   var currentUserRole = "usuario";
@@ -76,7 +138,7 @@
 
   function initByRole() {
     var viewMode = getActiveViewMode();
-    if (viewMode === "director" || viewMode === "gerente") {
+    if (viewMode === "director" || viewMode === "gerente" || viewMode === "ceo") {
       initManagerView(viewMode);
     } else {
       initExtension();
@@ -99,6 +161,7 @@
       select.id = "sp-view-switcher";
       select.style.cssText = "padding:4px 8px;font-size:11px;border:1px solid rgba(255,255,255,0.3);border-radius:4px;background:rgba(255,255,255,0.1);color:#fff;margin-right:8px;cursor:pointer;";
       select.innerHTML = '<option value=""' + (!currentViewMode ? " selected" : "") + '>👤 Mi vista (Admin)</option>' +
+        '<option value="ceo"' + (currentViewMode === "ceo" ? " selected" : "") + '>🏛️ CEO</option>' +
         '<option value="director"' + (currentViewMode === "director" ? " selected" : "") + '>👔 Director</option>' +
         '<option value="gerente"' + (currentViewMode === "gerente" ? " selected" : "") + '>🏢 Gerente</option>' +
         '<option value="usuario"' + (currentViewMode === "usuario" ? " selected" : "") + '>🧑‍💻 Usuario</option>';
@@ -119,6 +182,7 @@
   function initManagerView(viewMode) {
     var roleConfig = ROLES[viewMode];
     var groups = roleConfig ? roleConfig.groups : [19];
+    if (groups === "all") groups = GROUP_INFO.map(function(g) { return g.id; });
     var canDrag = roleConfig ? roleConfig.canDragDrop : false;
 
     var attempts = 0;
