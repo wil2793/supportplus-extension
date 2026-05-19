@@ -184,12 +184,15 @@
     var groups = roleConfig ? roleConfig.groups : [19];
     if (groups === "all") groups = GROUP_INFO.map(function(g) { return g.id; });
     var canDrag = roleConfig ? roleConfig.canDragDrop : false;
+    var mgrLoading = false;
 
     function tryInject() {
+      if (mgrLoading) return;
       if (!window.location.pathname.includes("/dashboard/tickets-mesa")) return;
       var grid = document.querySelector(".MuiDataGrid-root");
       if (!grid) return;
       if (document.getElementById("sp-manager-panel")) return;
+      mgrLoading = true;
       loadManagerPanel(grid, groups, canDrag);
     }
 
@@ -201,6 +204,8 @@
       if (!grid && attempts < 40) { attempts++; return; }
       clearInterval(interval);
       if (!grid) return;
+      if (document.getElementById("sp-manager-panel")) return;
+      mgrLoading = true;
       loadManagerPanel(grid, groups, canDrag);
     }, 500);
 
@@ -209,7 +214,7 @@
       // Remove panel if not on the right page
       if (!window.location.pathname.includes("/dashboard/tickets-mesa")) {
         var existing = document.getElementById("sp-manager-panel");
-        if (existing) existing.remove();
+        if (existing) { existing.remove(); mgrLoading = false; }
         return;
       }
       tryInject();
