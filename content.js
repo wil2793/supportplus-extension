@@ -5,12 +5,13 @@
   document.head.appendChild(hideBackdrop);
 
   // --- NOTION CONFIG ---
-  const NOTION_DB_ID = "36420e0684b98054a2e6e6e84809a233";
+  const NOTION_DB_ID = "36420e0684b98054a2e6e6e84809a233"; // Rol de agua
+  const NOTION_USERS_DB_ID = "36620e0684b98051a190e51d38d97288"; // Usuarios Support Plus
 
   // Test Notion connection via background
-  chrome.runtime.sendMessage({ type: "notion-query", body: {} }, function(response) {
+  chrome.runtime.sendMessage({ type: "notion-query", dbId: NOTION_USERS_DB_ID, body: {} }, function(response) {
     if (response && response.success) {
-      console.log("[SP Notion] Conexión exitosa:", response.data.results ? response.data.results.length + " registros" : "OK");
+      console.log("[SP Notion] Usuarios:", response.data.results ? response.data.results.length + " registros" : "OK", response.data);
     } else {
       console.error("[SP Notion] Error:", response ? response.error : "Sin respuesta");
     }
