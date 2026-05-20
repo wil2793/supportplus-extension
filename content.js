@@ -3358,25 +3358,32 @@
       overlay.id = "sp-config-modal";
       overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
       overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:450px;width:90%;font-family:system-ui;">' +
-        '<h3 style="margin:0 0 16px;">⚙️ Configuración</h3>' +
-        '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Área de trabajo</label>' +
-        '<select id="sp-cfg-area" style="width:100%;padding:8px;font-size:13px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px;">' +
-          '<option value="">-- Selecciona tu grupo --</option>' +
-          GROUP_INFO.map(function(g) { return '<option value="' + g.id + '"' + (String(currentArea) === String(g.id) ? ' selected' : '') + '>' + g.name + '</option>'; }).join("") +
-        '</select>' +
-        '<div id="sp-cfg-members" style="margin-bottom:12px;max-height:150px;overflow-y:auto;border:1px solid #eee;border-radius:6px;padding:6px;display:' + (currentArea ? 'block' : 'none') + ';"><div style="color:#888;font-size:11px;">Cargando miembros...</div></div>' +
-        '<hr style="border:none;border-top:1px solid #eee;margin:12px 0;">' +
-        '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Monday.com - API Token</label>' +
-        '<input id="sp-cfg-token" type="password" value="' + currentToken + '" placeholder="Pega tu token de Monday" style="width:100%;padding:8px;font-size:12px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;margin-bottom:8px;">' +
-        '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Board</label>' +
-        '<div style="position:relative;margin-bottom:4px;">' +
-          '<input id="sp-cfg-board-search" type="text" value="' + currentBoardName.replace(/"/g, '&quot;') + '" placeholder="Buscar board..." style="width:100%;padding:8px;font-size:12px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;">' +
-          '<div id="sp-cfg-board-results" style="position:absolute;top:100%;left:0;right:0;max-height:180px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:4px;display:none;z-index:10;font-size:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>' +
+        '<h3 style="margin:0 0 12px;">⚙️ Configuración</h3>' +
+        '<div style="display:flex;gap:0;margin-bottom:12px;border-bottom:2px solid #eee;">' +
+          '<button id="sp-cfg-tab-area" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid #D94040;color:#D94040;">Área de trabajo</button>' +
+          '<button id="sp-cfg-tab-monday" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:none;background:transparent;cursor:pointer;color:#888;">Monday.com</button>' +
         '</div>' +
-        '<div id="sp-cfg-board-status" style="font-size:11px;color:#888;margin-bottom:12px;min-height:16px;">' + (currentBoardName ? "✅ " + currentBoardName : "Carga los boards primero") + '</div>' +
-        '<button id="sp-cfg-load-boards" style="width:100%;padding:8px;font-size:12px;cursor:pointer;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;margin-bottom:12px;">🔄 Cargar boards</button>' +
-        '<input type="hidden" id="sp-cfg-board-id" value="' + currentBoardId + '">' +
-        '<div style="display:flex;gap:8px;">' +
+        '<div id="sp-cfg-panel-area">' +
+          '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Área de trabajo</label>' +
+          '<select id="sp-cfg-area" style="width:100%;padding:8px;font-size:13px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px;">' +
+            '<option value="">-- Selecciona tu grupo --</option>' +
+            GROUP_INFO.map(function(g) { return '<option value="' + g.id + '"' + (String(currentArea) === String(g.id) ? ' selected' : '') + '>' + g.name + '</option>'; }).join("") +
+          '</select>' +
+          '<div id="sp-cfg-members" style="margin-bottom:12px;max-height:150px;overflow-y:auto;border:1px solid #eee;border-radius:6px;padding:6px;display:' + (currentArea ? 'block' : 'none') + ';"><div style="color:#888;font-size:11px;">Cargando miembros...</div></div>' +
+        '</div>' +
+        '<div id="sp-cfg-panel-monday" style="display:none;">' +
+          '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">API Token</label>' +
+          '<input id="sp-cfg-token" type="password" value="' + currentToken + '" placeholder="Pega tu token de Monday" style="width:100%;padding:8px;font-size:12px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;margin-bottom:8px;">' +
+          '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Board</label>' +
+          '<div style="position:relative;margin-bottom:4px;">' +
+            '<input id="sp-cfg-board-search" type="text" value="' + currentBoardName.replace(/"/g, '&quot;') + '" placeholder="Buscar board..." style="width:100%;padding:8px;font-size:12px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;">' +
+            '<div id="sp-cfg-board-results" style="position:absolute;top:100%;left:0;right:0;max-height:180px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:4px;display:none;z-index:10;font-size:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>' +
+          '</div>' +
+          '<div id="sp-cfg-board-status" style="font-size:11px;color:#888;margin-bottom:12px;min-height:16px;">' + (currentBoardName ? "✅ " + currentBoardName : "Carga los boards primero") + '</div>' +
+          '<button id="sp-cfg-load-boards" style="width:100%;padding:8px;font-size:12px;cursor:pointer;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;margin-bottom:12px;">🔄 Cargar boards</button>' +
+          '<input type="hidden" id="sp-cfg-board-id" value="' + currentBoardId + '">' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:12px;">' +
           '<button id="sp-cfg-save" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">💾 Guardar</button>' +
           '<button id="sp-cfg-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
         '</div></div>';
@@ -3385,6 +3392,22 @@
       // Events
       document.getElementById("sp-cfg-cancel").addEventListener("click", function() { overlay.remove(); });
       overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+      // Tab switching
+      var tabArea = document.getElementById("sp-cfg-tab-area");
+      var tabMonday = document.getElementById("sp-cfg-tab-monday");
+      var panelArea = document.getElementById("sp-cfg-panel-area");
+      var panelMonday = document.getElementById("sp-cfg-panel-monday");
+      tabArea.addEventListener("click", function() {
+        panelArea.style.display = "block"; panelMonday.style.display = "none";
+        tabArea.style.borderBottom = "2px solid #D94040"; tabArea.style.color = "#D94040";
+        tabMonday.style.borderBottom = "none"; tabMonday.style.color = "#888";
+      });
+      tabMonday.addEventListener("click", function() {
+        panelArea.style.display = "none"; panelMonday.style.display = "block";
+        tabMonday.style.borderBottom = "2px solid #D94040"; tabMonday.style.color = "#D94040";
+        tabArea.style.borderBottom = "none"; tabArea.style.color = "#888";
+      });
 
       // Members checkboxes
       var membersDiv = document.getElementById("sp-cfg-members");
