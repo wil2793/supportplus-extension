@@ -1766,7 +1766,11 @@
     return new Promise(function(resolve) {
       try {
         chrome.storage.local.get("teamArea", function(result) {
-          currentTeamArea = result.teamArea || "19";
+          var val = result.teamArea || "19";
+          // Migrate legacy values
+          if (val === "dba") val = "19";
+          if (val === "aplicaciones") val = "22";
+          currentTeamArea = val;
           resolve();
         });
       } catch(e) { resolve(); }
