@@ -180,10 +180,11 @@
 
   function initByRole() {
     var viewMode = getActiveViewMode();
+    // Always init extension (for config, buttons, etc.)
+    initExtension();
+    // Additionally load manager view for director/gerente/ceo
     if (viewMode === "director" || viewMode === "gerente" || viewMode === "ceo") {
       initManagerView(viewMode);
-    } else {
-      initExtension();
     }
     // Admin gets the view switcher
     if (currentUserRole === "admin") injectViewSwitcher();
@@ -219,6 +220,10 @@
       userWrapper.parentElement.insertBefore(select, userWrapper);
     }, 500);
   }
+
+  // --- Global config modal reference ---
+  var _showConfigModal = null;
+  document.addEventListener("sp-open-config", function() { if (_showConfigModal) _showConfigModal(); });
 
   // --- Manager view (director / gerente) ---
   function initManagerView(viewMode) {
@@ -3370,7 +3375,7 @@
   }
 
   // Allow opening config from outside initExtension
-  document.addEventListener("sp-open-config", function() { showConfigModal(); });
+  _showConfigModal = showConfigModal;
 
   function showConfigModal() {
     var existing = document.getElementById("sp-config-modal");
