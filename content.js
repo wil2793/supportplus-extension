@@ -153,7 +153,7 @@
         chrome.runtime.sendMessage({ type: "notion-query", dbId: NOTION_USERS_DB_ID, body: {} }, function(response) {
           if (!response || !response.success || !response.data.results) { resolve("usuario"); return; }
           var found = response.data.results.find(function(page) {
-            var correo = (page.properties.Correo?.title?.[0]?.plain_text || "").toLowerCase();
+            var correo = (page.properties.Correo?.rich_text?.[0]?.plain_text || page.properties.Correo?.title?.[0]?.plain_text || "").toLowerCase();
             return correo === email;
           });
           if (!found) { resolve(null); return; } // Not in Notion = no access
