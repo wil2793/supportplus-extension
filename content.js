@@ -1801,7 +1801,7 @@
     return new Promise(function(resolve) {
       try {
         chrome.storage.local.get("teamArea", function(result) {
-          var val = result.teamArea || "19";
+          var val = result.teamArea || "";
           // Migrate legacy values
           if (val === "dba") val = "19";
           if (val === "aplicaciones") val = "22";
@@ -1854,6 +1854,7 @@
   async function loadTeamPanel() {
     if (isDetailView()) return;
     if (teamPanelLoading) return;
+    if (!currentTeamArea) return; // No group configured
     if (document.getElementById("sp-manager-panel")) return; // Manager view active
     if (document.getElementById(TEAM_PANEL_ID)) return;
     teamPanelLoading = true;
@@ -3339,7 +3340,7 @@
     if (existing) existing.remove();
 
     // Load current values
-    chrome.storage.local.get(["mondayToken", "mondayBoardId", "mondayBoardName", "teamArea", "ignoredEmails"], function(stored) {
+    chrome.storage.local.get(["mondayToken", "mondayBoardId", "mondayBoardName", "teamArea", "ignoredEmails", "visibleByGroup"], function(stored) {
       var currentToken = stored.mondayToken || "";
       var currentBoardId = stored.mondayBoardId || "";
       var currentBoardName = stored.mondayBoardName || "";
@@ -3351,9 +3352,11 @@
       overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:450px;width:90%;font-family:system-ui;">' +
         '<h3 style="margin:0 0 16px;">⚙️ Configuración</h3>' +
         '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Área de trabajo</label>' +
-        '<select id="sp-cfg-area" style="width:100%;padding:8px;font-size:13px;border:1px solid #ddd;border-radius:6px;margin-bottom:12px;">' +
+        '<select id="sp-cfg-area" style="width:100%;padding:8px;font-size:13px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px;">' +
+          '<option value="">-- Selecciona tu grupo --</option>' +
           GROUP_INFO.map(function(g) { return '<option value="' + g.id + '"' + (String(currentArea) === String(g.id) ? ' selected' : '') + '>' + g.name + '</option>'; }).join("") +
         '</select>' +
+        '<div id="sp-cfg-members" style="margin-bottom:12px;max-height:150px;overflow-y:auto;border:1px solid #eee;border-radius:6px;padding:6px;display:' + (currentArea ? 'block' : 'none') + ';"><div style="color:#888;font-size:11px;">Cargando miembros...</div></div>' +
         '<hr style="border:none;border-top:1px solid #eee;margin:12px 0;">' +
         '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Monday.com - API Token</label>' +
         '<input id="sp-cfg-token" type="password" value="' + currentToken + '" placeholder="Pega tu token de Monday" style="width:100%;padding:8px;font-size:12px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;margin-bottom:8px;">' +
@@ -3382,6 +3385,40 @@
       // Events
       document.getElementById("sp-cfg-cancel").addEventListener("click", function() { overlay.remove(); });
       overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+      // Members checkboxes
+      var membersDiv = document.getElementById("sp-cfg-members");
+      var excludedMembers = stored.visibleByGroup || {};
+
+      function loadMembersForConfig(groupId) {
+        if (!groupId) { membersDiv.style.display = "none"; return; }
+        membersDiv.style.display = "block";
+        membersDiv.innerHTML = '<div style="color:#888;font-size:11px;">Cargando...</div>';
+        var spToken = localStorage.getItem("token");
+        fetch("https://macropayapi.supportplus.mx/tickets/web/active-profiles-by-resolution-group/" + groupId, {
+          headers: { accept: "application/json", authorization: "Bearer " + spToken }
+        }).then(function(r) { return r.json(); }).then(function(json) {
+          var profiles = json.data || json;
+          if (!Array.isArray(profiles) || !profiles.length) { membersDiv.innerHTML = '<div style="color:#888;font-size:11px;">Sin miembros</div>'; return; }
+          var visibleList = excludedMembers[String(groupId)];
+          var hasConfig = visibleList && Array.isArray(visibleList) && visibleList.length > 0;
+          membersDiv.innerHTML = '<div style="font-size:10px;color:#888;margin-bottom:4px;">Desmarca los que no quieras ver:</div>';
+          profiles.forEach(function(p) {
+            var isVisible = !hasConfig || visibleList.includes(p.profileId);
+            var label = document.createElement("label");
+            label.style.cssText = "display:flex;align-items:center;gap:4px;font-size:11px;padding:2px 0;cursor:pointer;";
+            label.innerHTML = '<input type="checkbox" data-pid="' + p.profileId + '"' + (isVisible ? ' checked' : '') + '> ' + p.profileFullName;
+            membersDiv.appendChild(label);
+          });
+        }).catch(function() { membersDiv.innerHTML = '<div style="color:#D94040;font-size:11px;">Error</div>'; });
+      }
+
+      // Load on area change
+      document.getElementById("sp-cfg-area").addEventListener("change", function() {
+        loadMembersForConfig(this.value);
+      });
+      // Load initially if area set
+      if (currentArea) loadMembersForConfig(currentArea);
 
       // CSV ignored emails
       var csvPendingEmails = stored.ignoredEmails || null;
@@ -3472,6 +3509,15 @@
         var boardName = document.getElementById("sp-cfg-board-search").value.trim();
         var area = document.getElementById("sp-cfg-area").value;
         var saveData = { mondayToken: token, mondayBoardId: boardId, mondayBoardName: boardName, teamArea: area };
+        // Save visible members (checked ones)
+        var memberChecks = membersDiv.querySelectorAll('input[data-pid]');
+        if (memberChecks.length && area) {
+          var visible = [];
+          memberChecks.forEach(function(cb) { if (cb.checked) visible.push(parseInt(cb.dataset.pid)); });
+          var vbg = excludedMembers; // reusing variable name but storing visible
+          vbg[String(area)] = visible;
+          saveData.visibleByGroup = vbg;
+        }
         if (csvPendingEmails !== null) saveData.ignoredEmails = csvPendingEmails;
         chrome.storage.local.set(saveData, function() {
           overlay.remove();
