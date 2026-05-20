@@ -4,6 +4,19 @@
   hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } } .MuiDataGrid-cell[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; } .MuiDataGrid-columnHeader[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; }";
   document.head.appendChild(hideBackdrop);
 
+  // --- NOTION CONFIG ---
+  const NOTION_TOKEN = "ntn_b88252428094Q3HApzvw5PhLmIvbYao1cm6wgVcdRUJe5C";
+  const NOTION_DB_ID = "36420e0684b98054a2e6e6e84809a233";
+  const NOTION_API = "https://api.notion.com/v1";
+  const NOTION_HEADERS = { "Authorization": "Bearer " + NOTION_TOKEN, "Notion-Version": "2022-06-28", "Content-Type": "application/json" };
+
+  // Test Notion connection
+  fetch(NOTION_API + "/databases/" + NOTION_DB_ID + "/query", {
+    method: "POST", headers: NOTION_HEADERS, body: JSON.stringify({})
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    console.log("[SP Notion] Conexión exitosa:", d.results ? d.results.length + " registros" : "Error", d);
+  }).catch(function(e) { console.error("[SP Notion] Error:", e); });
+
   // --- ROLES & PERMISSIONS ---
   const ROLES = {
     admin: {
