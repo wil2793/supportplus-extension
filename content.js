@@ -3524,6 +3524,10 @@
           showSuccessToast("Configuración guardada");
           // Reload team area
           currentTeamArea = area;
+          // Clear profiles cache to reload with new visibility
+          profilesCache = {};
+          // Update visibleByGroup in memory
+          if (saveData.visibleByGroup) visibleByGroup = saveData.visibleByGroup;
           // Remove panel to rebuild with new area
           var panel = document.getElementById(TEAM_PANEL_ID);
           if (panel) panel.remove();
