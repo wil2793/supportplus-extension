@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "SupportPlus Ticket Exporter",
-  "version": "3.9.3",
+  "version": "3.9.4",
   "description": "SupportPlus → Monday.com: Migra tickets con un click",
   "permissions": ["activeTab", "scripting", "storage"],
-  "host_permissions": ["https://macropay.supportplus.mx/*", "https://macropayapi.supportplus.mx/*", "https://api.monday.com/*", "https://cdn.sheetjs.com/*"],
+  "host_permissions": ["https://macropay.supportplus.mx/*", "https://macropayapi.supportplus.mx/*", "https://api.monday.com/*", "https://cdn.sheetjs.com/*", "https://api.notion.com/*"],
   "icons": {
     "16": "icon16.png",
     "48": "icon48.png",
