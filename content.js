@@ -147,7 +147,25 @@
       var email = data?.user?.email?.toLowerCase() || "";
       sessionUserName = data?.user?.name || "";
       try { chrome.storage.local.set({ userEmail: email }); } catch(e) {}
-      return getUserRole(email);
+
+      // Get role from Notion
+      var notionRole = await new Promise(function(resolve) {
+        chrome.runtime.sendMessage({ type: "notion-query", dbId: NOTION_USERS_DB_ID, body: {} }, function(response) {
+          if (!response || !response.success || !response.data.results) { resolve("usuario"); return; }
+          var found = response.data.results.find(function(page) {
+            var correo = (page.properties.Correo?.title?.[0]?.plain_text || "").toLowerCase();
+            return correo === email;
+          });
+          if (!found) { resolve(null); return; } // Not in Notion = no access
+          var activo = found.properties.Activo?.checkbox;
+          if (!activo) { resolve(null); return; } // Inactive = no access
+          var rol = (found.properties.Rol?.select?.name || "Usuario").toLowerCase();
+          // Map Notion roles to code roles
+          var roleMap = { "administrador": "admin", "gerente": "gerente", "director": "director", "ceo": "ceo", "usuario": "usuario" };
+          resolve(roleMap[rol] || "usuario");
+        });
+      });
+      return notionRole;
     } catch(e) { return "usuario"; }
   }
 
@@ -183,6 +201,7 @@
   }
 
   checkSession().then(function(role) {
+    if (role === null) return; // Not in Notion or inactive - no access
     currentUserRole = role;
     // Admin: restore saved view mode
     if (role === "admin") {
