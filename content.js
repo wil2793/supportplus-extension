@@ -3368,14 +3368,6 @@
         '<div id="sp-cfg-board-status" style="font-size:11px;color:#888;margin-bottom:12px;min-height:16px;">' + (currentBoardName ? "✅ " + currentBoardName : "Carga los boards primero") + '</div>' +
         '<button id="sp-cfg-load-boards" style="width:100%;padding:8px;font-size:12px;cursor:pointer;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;margin-bottom:12px;">🔄 Cargar boards</button>' +
         '<input type="hidden" id="sp-cfg-board-id" value="' + currentBoardId + '">' +
-        '<hr style="border:none;border-top:1px solid #eee;margin:12px 0;">' +
-        '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">IDs bloqueados por grupo (JSON)</label>' +
-        '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">' +
-          '<label style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:11px;background:#f5f5f5;">📄 Cargar JSON<input id="sp-cfg-csv-input" type="file" accept=".json,.txt" style="display:none;"></label>' +
-          '<span id="sp-cfg-csv-count" style="font-size:11px;color:#888;">' + (function() { try { var d = stored.ignoredEmails; if (!d) return "Sin archivo"; var bg = d.byGroup || {}; var total = Object.values(bg).reduce(function(s,a){return s+a.length;},0); return total + " IDs bloqueados en " + Object.keys(bg).length + " grupos"; } catch(e) { return "Sin archivo"; } })() + '</span>' +
-          (stored.ignoredEmails ? ' <button id="sp-cfg-csv-clear" style="padding:2px 6px;border:1px solid #D94040;border-radius:4px;background:#fff;color:#D94040;font-size:10px;cursor:pointer;">Limpiar</button>' : '') +
-        '</div>' +
-        '<div id="sp-cfg-csv-preview" style="font-size:10px;color:#888;max-height:60px;overflow:auto;margin-bottom:12px;">' + (function() { try { var d = stored.ignoredEmails; if (!d || !d.byGroup) return ""; return Object.entries(d.byGroup).slice(0,3).map(function(e){return "Grupo "+e[0]+": ["+e[1].join(",")+"]";}).join(" | "); } catch(e) { return ""; } })() + '</div>' +
         '<div style="display:flex;gap:8px;">' +
           '<button id="sp-cfg-save" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">💾 Guardar</button>' +
           '<button id="sp-cfg-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
@@ -3419,44 +3411,6 @@
       });
       // Load initially if area set
       if (currentArea) loadMembersForConfig(currentArea);
-
-      // CSV ignored emails
-      var csvPendingEmails = stored.ignoredEmails || null;
-      document.getElementById("sp-cfg-csv-input").addEventListener("change", function(e) {
-        var file = e.target.files[0];
-        if (!file) return;
-        var reader = new FileReader();
-        reader.onload = function(ev) {
-          var text = ev.target.result;
-          try {
-            var parsed = JSON.parse(text);
-            // Expected format: [{ groupId: 19, excludedIds: [150, 153] }, ...]
-            if (!Array.isArray(parsed)) throw new Error("Debe ser un array");
-            var byGroup = {};
-            parsed.forEach(function(entry) {
-              if (!entry.groupId || !Array.isArray(entry.excludedIds)) return;
-              byGroup[String(entry.groupId)] = entry.excludedIds;
-            });
-            csvPendingEmails = { emails: [], ids: [], byGroup: byGroup };
-            var totalIds = Object.values(byGroup).reduce(function(sum, arr) { return sum + arr.length; }, 0);
-            var groupCount = Object.keys(byGroup).length;
-            document.getElementById("sp-cfg-csv-count").textContent = totalIds + " IDs bloqueados en " + groupCount + " grupos";
-            document.getElementById("sp-cfg-csv-preview").textContent = Object.entries(byGroup).slice(0, 3).map(function(e) { return "Grupo " + e[0] + ": [" + e[1].join(",") + "]"; }).join(" | ");
-          } catch(e) {
-            document.getElementById("sp-cfg-csv-count").textContent = "❌ JSON inválido";
-            document.getElementById("sp-cfg-csv-preview").textContent = e.message;
-          }
-        };
-        reader.readAsText(file);
-      });
-      var clearBtn = document.getElementById("sp-cfg-csv-clear");
-      if (clearBtn) {
-        clearBtn.addEventListener("click", function() {
-          csvPendingEmails = [];
-          document.getElementById("sp-cfg-csv-count").textContent = "Limpiado";
-          document.getElementById("sp-cfg-csv-preview").textContent = "";
-        });
-      }
 
       // Load boards
       var allBoards = [];
@@ -3518,7 +3472,6 @@
           vbg[String(area)] = visible;
           saveData.visibleByGroup = vbg;
         }
-        if (csvPendingEmails !== null) saveData.ignoredEmails = csvPendingEmails;
         chrome.storage.local.set(saveData, function() {
           overlay.remove();
           showSuccessToast("Configuración guardada");
