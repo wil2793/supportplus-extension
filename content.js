@@ -114,6 +114,9 @@
   }
 
   // --- Session check ---
+  var sessionUserName = ""; // Full name from session API, cached globally
+  var sessionProfileId = null; // profileId resolved at startup
+
   async function checkSession() {
     try {
       var res = await fetch("https://macropay.supportplus.mx/api/auth/session", {
@@ -122,9 +125,41 @@
       if (!res.ok) return "usuario";
       var data = await res.json();
       var email = data?.user?.email?.toLowerCase() || "";
+      sessionUserName = data?.user?.name || "";
       try { chrome.storage.local.set({ userEmail: email }); } catch(e) {}
       return getUserRole(email);
     } catch(e) { return "usuario"; }
+  }
+
+  // Resolve profileId from session name at startup (called once after teamArea is loaded)
+  async function resolveSessionProfileId() {
+    if (sessionProfileId) return sessionProfileId;
+    var name = sessionUserName || getLoggedUserNameFromDOM();
+    if (!name) return null;
+    var spToken = localStorage.getItem("token");
+    if (!spToken) return null;
+    var groupId = currentTeamArea || "19";
+    try {
+      var res = await fetch("https://macropayapi.supportplus.mx/tickets/web/active-profiles-by-resolution-group/" + groupId, {
+        headers: { accept: "application/json", authorization: "Bearer " + spToken }
+      });
+      if (!res.ok) return null;
+      var json = await res.json();
+      var profiles = json.data || json;
+      if (!Array.isArray(profiles)) return null;
+      var me = profiles.find(function(p) { return p.profileFullName === name; });
+      if (me) {
+        sessionProfileId = me.profileId;
+        try { chrome.storage.local.set({ sessionProfileId: me.profileId }); } catch(e) {}
+      }
+      return sessionProfileId;
+    } catch(e) { return null; }
+  }
+
+  // Helper to get name from DOM (fallback if session name not available yet)
+  function getLoggedUserNameFromDOM() {
+    var el = document.querySelector('[class*="warapperNameUserAndLogout"] p');
+    return el ? el.textContent.trim() : "";
   }
 
   checkSession().then(function(role) {
@@ -1771,6 +1806,8 @@
           if (val === "dba") val = "19";
           if (val === "aplicaciones") val = "22";
           currentTeamArea = val;
+          // Resolve profileId in background (non-blocking)
+          resolveSessionProfileId();
           resolve();
         });
       } catch(e) { resolve(); }
@@ -1779,20 +1816,12 @@
 
   // Load profiles dynamically for a group
   var profilesCache = {};
-  var ignoredEmails = [];
-  var ignoredIds = [];
-  var ignoredByGroup = {};
+  var visibleByGroup = {}; // { groupId: [profileId1, profileId2, ...] } — only visible members
 
-  // Load ignored from storage
+  // Load visible members from storage
   try {
-    chrome.storage.local.get("ignoredEmails", function(result) {
-      var data = result.ignoredEmails || {};
-      if (Array.isArray(data)) { ignoredIds = data; } // legacy
-      else {
-        ignoredEmails = data.emails || [];
-        ignoredIds = data.ids || [];
-        ignoredByGroup = data.byGroup || {};
-      }
+    chrome.storage.local.get("visibleByGroup", function(result) {
+      visibleByGroup = result.visibleByGroup || {};
     });
   } catch(e) {}
 
@@ -1805,14 +1834,12 @@
     }).then(function(r) { return r.json(); }).then(function(json) {
       var profiles = json.data || json;
       if (!Array.isArray(profiles)) profiles = [];
-      // Filter out by group-specific blocked IDs
-      var blockedForGroup = ignoredByGroup[String(groupId)] || [];
-      if (blockedForGroup.length || ignoredIds.length) {
+      // Filter by visible members (if configured for this group)
+      var visibleForGroup = visibleByGroup[String(groupId)];
+      if (visibleForGroup && Array.isArray(visibleForGroup) && visibleForGroup.length > 0) {
         profiles = profiles.filter(function(p) {
           var id = p.profileId || p.id;
-          if (blockedForGroup.includes(id)) return false;
-          if (ignoredIds.includes(id)) return false;
-          return true;
+          return visibleForGroup.includes(id);
         });
       }
       profilesCache[groupId] = profiles;
@@ -2334,6 +2361,8 @@
   // --- Take ticket (reassign) ---
   let myProfileId = null;
   async function getMyProfileId() {
+    // Use cached sessionProfileId if available
+    if (sessionProfileId) return sessionProfileId;
     if (myProfileId) return myProfileId;
     const spToken = getToken();
     if (!spToken) return null;
@@ -2347,7 +2376,10 @@
       const json = await res.json();
       const profiles = json.data || json;
       const me = profiles.find(function(p) { return p.profileFullName === myName; });
-      if (me) myProfileId = me.profileId;
+      if (me) {
+        myProfileId = me.profileId;
+        sessionProfileId = me.profileId; // Also cache globally
+      }
       return myProfileId;
     } catch (e) { return null; }
   }
@@ -5358,6 +5390,14 @@
   });
   observer.observe(document.body, { childList: true, subtree: true });
   loadTeamArea().then(function() {
+    // Resolve profileId from session name
+    var myName = getLoggedUserName();
+    if (myName && currentTeamArea) {
+      loadProfilesForGroup(currentTeamArea).then(function(profiles) {
+        var me = profiles.find(function(p) { return p.profileFullName === myName; });
+        if (me) { sessionProfileId = me.profileId; myProfileId = me.profileId; }
+      }).catch(function() {});
+    }
     ensureSyncStarted().then(() => injectButtons());
   });
 
