@@ -268,6 +268,25 @@
     var spToken = localStorage.getItem("token");
     if (!spToken) return;
 
+    // Inject config button for manager views
+    var cfgAttempts = 0;
+    var cfgInterval = setInterval(function() {
+      if (document.getElementById("sp-config-btn") || cfgAttempts > 20) { clearInterval(cfgInterval); return; }
+      var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
+      if (!userWrapper) { cfgAttempts++; return; }
+      clearInterval(cfgInterval);
+      var btn = document.createElement("button");
+      btn.id = "sp-config-btn";
+      btn.textContent = "⚙️";
+      btn.title = "Configuración SupportPlus Tools";
+      btn.style.cssText = "padding:4px 10px;font-size:14px;cursor:pointer;border:none;border-radius:6px;background:rgba(255,255,255,0.15);color:#fff;margin-right:8px;";
+      btn.addEventListener("click", function() {
+        // Dispatch custom event to open config
+        document.dispatchEvent(new CustomEvent("sp-open-config"));
+      });
+      userWrapper.parentElement.insertBefore(btn, userWrapper);
+    }, 500);
+
     var panel = document.createElement("div");
     panel.id = "sp-manager-panel";
     panel.style.cssText = "margin-bottom:12px;font-family:system-ui;";
@@ -3350,6 +3369,9 @@
     userWrapper.parentElement.insertBefore(btn, userWrapper);
   }
 
+  // Allow opening config from outside initExtension
+  document.addEventListener("sp-open-config", function() { showConfigModal(); });
+
   function showConfigModal() {
     var existing = document.getElementById("sp-config-modal");
     if (existing) existing.remove();
@@ -3368,7 +3390,7 @@
         '<h3 style="margin:0 0 12px;">⚙️ Configuración</h3>' +
         '<div style="display:flex;gap:0;margin-bottom:12px;border-bottom:2px solid #eee;">' +
           '<button id="sp-cfg-tab-area" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid #D94040;color:#D94040;">Área de trabajo</button>' +
-          '<button id="sp-cfg-tab-monday" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:none;background:transparent;cursor:pointer;color:#888;">Monday.com</button>' +
+          (currentUserRole === "usuario" || currentUserRole === "admin" ? '<button id="sp-cfg-tab-monday" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:none;background:transparent;cursor:pointer;color:#888;">Monday.com</button>' : '') +
         '</div>' +
         '<div id="sp-cfg-panel-area">' +
           '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Área de trabajo</label>' +
@@ -3410,9 +3432,9 @@
       tabArea.addEventListener("click", function() {
         panelArea.style.display = "block"; panelMonday.style.display = "none";
         tabArea.style.borderBottom = "2px solid #D94040"; tabArea.style.color = "#D94040";
-        tabMonday.style.borderBottom = "none"; tabMonday.style.color = "#888";
+        if (tabMonday) { tabMonday.style.borderBottom = "none"; tabMonday.style.color = "#888"; }
       });
-      tabMonday.addEventListener("click", function() {
+      if (tabMonday) tabMonday.addEventListener("click", function() {
         panelArea.style.display = "none"; panelMonday.style.display = "block";
         tabMonday.style.borderBottom = "2px solid #D94040"; tabMonday.style.color = "#D94040";
         tabArea.style.borderBottom = "none"; tabArea.style.color = "#888";
