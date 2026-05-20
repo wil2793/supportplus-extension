@@ -1769,6 +1769,14 @@
   // --- Team panel ---
   const TEAM_PANEL_ID = "sp-team-panel";
   var teamPanelLoading = false;
+  var hasMondayConfig = false;
+
+  // Check if Monday is configured
+  try {
+    chrome.storage.local.get(["mondayToken", "mondayBoardId"], function(r) {
+      hasMondayConfig = !!(r.mondayToken && r.mondayBoardId);
+    });
+  } catch(e) {}
 
   const TEAM_AREAS = {};
   // Build TEAM_AREAS dynamically from GROUP_INFO
@@ -4375,8 +4383,7 @@
               '<div id="sp-qd-take-extra" style="display:none;margin-top:6px;">' +
                 '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label>' +
                 '<input id="sp-qd-take-close-comment" type="text" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;">' +
-                '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Migrar a Monday</label>' +
-                '<select id="sp-qd-take-group" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;"><option value="">-- No migrar --</option></select>' +
+                (hasMondayConfig ? '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Migrar a Monday</label><select id="sp-qd-take-group" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;"><option value="">-- No migrar --</option></select>' : '') +
               '</div>' +
             '</div>' +
           '</div>' : '') +
@@ -4384,21 +4391,22 @@
           (function() {
             if (statusName === "En espera" || statusName === "Cerrado") return '';
             var isMigrated = t.uniqueCode && getCache() && getCache()[t.uniqueCode];
+            var showMondayOption = hasMondayConfig && !isMigrated;
             var closeHTML = '<div style="margin-bottom:8px;">' +
               '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">' +
-                '<button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:' + (isMigrated ? '#616161' : '#D94040') + ';color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">' + (isMigrated ? '🔒 Cerrar' : '🔒 Cerrar y Migrar') + '</button>' +
+                '<button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:' + (showMondayOption ? '#D94040' : '#616161') + ';color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">' + (showMondayOption ? '🔒 Cerrar y Migrar' : '🔒 Cerrar') + '</button>' +
               '</div>' +
               '<div id="sp-qd-close-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:11px;">' +
                 '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label>' +
                 '<input id="sp-qd-close-comment" type="text" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;">' +
-                (!isMigrated ? '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Migrar a Monday</label><select id="sp-qd-close-group" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;margin-bottom:6px;"><option value="">-- Selecciona destino --</option></select>' : '') +
-                '<button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:' + (isMigrated ? '#616161' : '#D94040') + ';color:#fff;cursor:pointer;font-size:11px;font-weight:600;">Confirmar</button>' +
+                (showMondayOption ? '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Migrar a Monday</label><select id="sp-qd-close-group" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;margin-bottom:6px;"><option value="">-- Selecciona destino --</option></select>' : '') +
+                '<button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:' + (showMondayOption ? '#D94040' : '#616161') + ';color:#fff;cursor:pointer;font-size:11px;font-weight:600;">Confirmar</button>' +
               '</div>' +
             '</div>';
             return closeHTML;
           })() +
-          // Migrate only (if closed and not migrated)
-          (statusName === "Cerrado" && !(t.uniqueCode && getCache() && getCache()[t.uniqueCode]) ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
+          // Migrate only (if closed, not migrated, and Monday configured)
+          (statusName === "Cerrado" && hasMondayConfig && !(t.uniqueCode && getCache() && getCache()[t.uniqueCode]) ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
             '<button id="sp-qd-migrate-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🙂 Migrar a Monday</button>' +
           '</div>' : '') +
           // Reopen row (if closed)
