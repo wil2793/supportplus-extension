@@ -5,17 +5,16 @@
   document.head.appendChild(hideBackdrop);
 
   // --- NOTION CONFIG ---
-  const NOTION_TOKEN = "ntn_b88252428094Q3HApzvw5PhLmIvbYao1cm6wgVcdRUJe5C";
   const NOTION_DB_ID = "36420e0684b98054a2e6e6e84809a233";
-  const NOTION_API = "https://api.notion.com/v1";
-  const NOTION_HEADERS = { "Authorization": "Bearer " + NOTION_TOKEN, "Notion-Version": "2022-06-28", "Content-Type": "application/json" };
 
-  // Test Notion connection
-  fetch(NOTION_API + "/databases/" + NOTION_DB_ID + "/query", {
-    method: "POST", headers: NOTION_HEADERS, body: JSON.stringify({})
-  }).then(function(r) { return r.json(); }).then(function(d) {
-    console.log("[SP Notion] Conexión exitosa:", d.results ? d.results.length + " registros" : "Error", d);
-  }).catch(function(e) { console.error("[SP Notion] Error:", e); });
+  // Test Notion connection via background
+  chrome.runtime.sendMessage({ type: "notion-query", body: {} }, function(response) {
+    if (response && response.success) {
+      console.log("[SP Notion] Conexión exitosa:", response.data.results ? response.data.results.length + " registros" : "OK");
+    } else {
+      console.error("[SP Notion] Error:", response ? response.error : "Sin respuesta");
+    }
+  });
 
   // --- ROLES & PERMISSIONS ---
   const ROLES = {
