@@ -3333,10 +3333,10 @@
         '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">IDs bloqueados por grupo (JSON)</label>' +
         '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">' +
           '<label style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:11px;background:#f5f5f5;">📄 Cargar JSON<input id="sp-cfg-csv-input" type="file" accept=".json,.txt" style="display:none;"></label>' +
-          '<span id="sp-cfg-csv-count" style="font-size:11px;color:#888;">' + (stored.ignoredEmails ? ((stored.ignoredEmails.emails || []).length + (stored.ignoredEmails.ids || []).length || (Array.isArray(stored.ignoredEmails) ? stored.ignoredEmails.length : 0)) + ' registros ignorados' : 'Sin archivo') + '</span>' +
+          '<span id="sp-cfg-csv-count" style="font-size:11px;color:#888;">' + (function() { try { var d = stored.ignoredEmails; if (!d) return "Sin archivo"; var bg = d.byGroup || {}; var total = Object.values(bg).reduce(function(s,a){return s+a.length;},0); return total + " IDs bloqueados en " + Object.keys(bg).length + " grupos"; } catch(e) { return "Sin archivo"; } })() + '</span>' +
           (stored.ignoredEmails ? ' <button id="sp-cfg-csv-clear" style="padding:2px 6px;border:1px solid #D94040;border-radius:4px;background:#fff;color:#D94040;font-size:10px;cursor:pointer;">Limpiar</button>' : '') +
         '</div>' +
-        '<div id="sp-cfg-csv-preview" style="font-size:10px;color:#888;max-height:60px;overflow:auto;margin-bottom:12px;">' + (stored.ignoredEmails ? stored.ignoredEmails.slice(0, 5).join(", ") + (stored.ignoredEmails.length > 5 ? "..." : "") : "") + '</div>' +
+        '<div id="sp-cfg-csv-preview" style="font-size:10px;color:#888;max-height:60px;overflow:auto;margin-bottom:12px;">' + (function() { try { var d = stored.ignoredEmails; if (!d || !d.byGroup) return ""; return Object.entries(d.byGroup).slice(0,3).map(function(e){return "Grupo "+e[0]+": ["+e[1].join(",")+"]";}).join(" | "); } catch(e) { return ""; } })() + '</div>' +
         '<div style="display:flex;gap:8px;">' +
           '<button id="sp-cfg-save" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">💾 Guardar</button>' +
           '<button id="sp-cfg-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
