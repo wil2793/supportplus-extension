@@ -114,6 +114,7 @@
 
   var currentUserRole = "usuario";
   var currentViewMode = null; // null = use own role's view
+  var currentUserGroups = []; // Groups from Notion relation (dynamic)
 
   function getUserRole(email) {
     for (var key in ROLES) {
@@ -148,10 +149,10 @@
       sessionUserName = data?.user?.name || "";
       try { chrome.storage.local.set({ userEmail: email }); } catch(e) {}
 
-      // Get role from Notion
-      var notionRole = await new Promise(function(resolve) {
+      // Get role and groups from Notion
+      var notionResult = await new Promise(function(resolve) {
         chrome.runtime.sendMessage({ type: "notion-query", dbId: NOTION_USERS_DB_ID, body: {} }, function(response) {
-          if (!response || !response.success || !response.data.results) { resolve("usuario"); return; }
+          if (!response || !response.success || !response.data.results) { resolve({ role: "usuario", groups: [] }); return; }
           var found = response.data.results.find(function(page) {
             var correo = (page.properties.Correo?.rich_text?.[0]?.plain_text || page.properties.Correo?.title?.[0]?.plain_text || "").toLowerCase();
             return correo === email;
@@ -160,12 +161,45 @@
           var activo = found.properties.Activo?.checkbox;
           if (!activo) { resolve(null); return; } // Inactive = no access
           var rol = (found.properties.Rol?.select?.name || "Usuario").toLowerCase();
-          // Map Notion roles to code roles
           var roleMap = { "administrador": "admin", "gerente": "gerente", "director": "director", "ceo": "ceo", "usuario": "usuario" };
-          resolve(roleMap[rol] || "usuario");
+          var mappedRole = roleMap[rol] || "usuario";
+
+          // Extract group page IDs from relation
+          var groupRelation = found.properties["Grupos Suppor Plus"]?.relation || [];
+          var groupPageIds = groupRelation.map(function(r) { return r.id; });
+
+          // Also get profileId if available
+          var spId = found.properties["Id Support Plus"]?.number;
+          if (spId) {
+            sessionProfileId = spId;
+            try { chrome.storage.local.set({ myProfileId: spId }); } catch(e) {}
+          }
+
+          resolve({ role: mappedRole, groupPageIds: groupPageIds });
         });
       });
-      return notionRole;
+
+      if (!notionResult) return null; // Not in Notion or inactive
+
+      // Resolve group page IDs to actual group IDs using the Groups DB
+      if (notionResult.groupPageIds && notionResult.groupPageIds.length > 0) {
+        var groupIds = await new Promise(function(resolve) {
+          chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b9800e9a57df46019a03e0", body: {} }, function(response) {
+            if (!response || !response.success || !response.data.results) { resolve([]); return; }
+            var ids = [];
+            for (var page of response.data.results) {
+              if (notionResult.groupPageIds.includes(page.id)) {
+                var idSP = page.properties.IdSupportPlus?.title?.[0]?.plain_text;
+                if (idSP) ids.push(parseInt(idSP));
+              }
+            }
+            resolve(ids);
+          });
+        });
+        currentUserGroups = groupIds;
+      }
+
+      return notionResult.role;
     } catch(e) { return "usuario"; }
   }
 
@@ -214,9 +248,12 @@
     var viewMode = getActiveViewMode();
     // Always init extension (for config, buttons, etc.)
     initExtension();
-    // Additionally load manager view for director/gerente/ceo
+    // If user has multiple groups OR is director/gerente/ceo, show manager view
     if (viewMode === "director" || viewMode === "gerente" || viewMode === "ceo") {
       initManagerView(viewMode);
+    } else if (viewMode === "usuario" && currentUserGroups.length > 1) {
+      // User with multiple groups gets manager-like view
+      initManagerView("gerente");
     }
     // Admin gets the view switcher
     if (currentUserRole === "admin") injectViewSwitcher();
@@ -259,10 +296,12 @@
 
   // --- Manager view (director / gerente) ---
   function initManagerView(viewMode) {
-    var roleConfig = ROLES[viewMode];
-    var groups = roleConfig ? roleConfig.groups : [19];
-    if (groups === "all") groups = GROUP_INFO.map(function(g) { return g.id; });
-    var canDrag = roleConfig ? roleConfig.canDragDrop : false;
+    // Use groups from Notion (dynamic) instead of hardcoded ROLES
+    var groups = currentUserGroups.length > 0 ? currentUserGroups : [19];
+    if (viewMode === "ceo" && currentUserGroups.length === 0) {
+      groups = GROUP_INFO.map(function(g) { return g.id; });
+    }
+    var canDrag = (viewMode === "gerente" || viewMode === "admin" || viewMode === "director");
     var mgrLoading = false;
 
     function tryInject() {
