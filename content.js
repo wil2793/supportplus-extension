@@ -222,8 +222,8 @@
     }
     // Always init extension (for config, buttons, etc.)
     initExtension();
-    // If user has multiple groups, show manager view (regardless of role name)
-    if (currentUserGroups.length > 1) {
+    // Always show manager view (unified) - groups determine if filter/counter shows
+    if (currentUserGroups.length > 0) {
       initManagerView(getActiveViewMode());
     }
     // Admin gets the view switcher
@@ -355,10 +355,12 @@
     panel.style.cssText = "margin-bottom:12px;font-family:system-ui;";
     grid.parentElement.insertBefore(panel, grid);
 
-    // Summary row (no drag)
+    var singleGroup = (groups.length === 1);
+
+    // Summary row (no drag) - only if multiple groups
     var summaryDiv = document.createElement("div");
     summaryDiv.style.cssText = "display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:12px;";
-    panel.appendChild(summaryDiv);
+    if (!singleGroup) panel.appendChild(summaryDiv);
 
     var groupsInfo = groups.map(function(gId) {
       return GROUP_INFO.find(function(g) { return g.id === gId; }) || { id: gId, name: "Grupo " + gId };
@@ -431,32 +433,36 @@
       return { element: container, getSelected: function() { return selectedIds; } };
     }
 
-    // Summary filter
-    var summaryTagFilter = createTagFilter("sp-mgr-summary-filter", groupsInfo, function(selected) {
-      summaryDiv.querySelectorAll("[id^='sp-mgr-summary-']").forEach(function(el) {
-        var gId = el.id.replace("sp-mgr-summary-", "");
-        el.style.display = (!selected.length || selected.includes(gId)) ? "" : "none";
+    // Summary filter - only if multiple groups
+    if (!singleGroup) {
+      var summaryTagFilter = createTagFilter("sp-mgr-summary-filter", groupsInfo, function(selected) {
+        summaryDiv.querySelectorAll("[id^='sp-mgr-summary-']").forEach(function(el) {
+          var gId = el.id.replace("sp-mgr-summary-", "");
+          el.style.display = (!selected.length || selected.includes(gId)) ? "" : "none";
+        });
       });
-    });
-    panel.insertBefore(summaryTagFilter.element, summaryDiv);
+      panel.insertBefore(summaryTagFilter.element, summaryDiv);
 
-    groupsInfo.forEach(function(dept) {
-      var col = document.createElement("div");
-      col.id = "sp-mgr-summary-" + dept.id;
-      col.style.cssText = "min-width:160px;border:2px solid #1976D2;border-radius:8px;overflow:hidden;flex-shrink:0;text-align:center;";
-      col.innerHTML = '<div style="background:#1976D2;color:#fff;padding:6px 10px;font-size:10px;font-weight:700;">' + dept.name + '</div>' +
-        '<div class="sp-mgr-count" style="padding:12px;font-size:24px;font-weight:700;color:#1976D2;">...</div>';
-      summaryDiv.appendChild(col);
-    });
-
-    // Collapse filter
-    var collapseTagFilter = createTagFilter("sp-mgr-collapse-filter", groupsInfo, function(selected) {
-      panel.querySelectorAll("[id^='sp-mgr-section-']").forEach(function(el) {
-        var gId = el.id.replace("sp-mgr-section-", "");
-        el.style.display = (!selected.length || selected.includes(gId)) ? "" : "none";
+      groupsInfo.forEach(function(dept) {
+        var col = document.createElement("div");
+        col.id = "sp-mgr-summary-" + dept.id;
+        col.style.cssText = "min-width:160px;border:2px solid #1976D2;border-radius:8px;overflow:hidden;flex-shrink:0;text-align:center;";
+        col.innerHTML = '<div style="background:#1976D2;color:#fff;padding:6px 10px;font-size:10px;font-weight:700;">' + dept.name + '</div>' +
+          '<div class="sp-mgr-count" style="padding:12px;font-size:24px;font-weight:700;color:#1976D2;">...</div>';
+        summaryDiv.appendChild(col);
       });
-    });
-    panel.appendChild(collapseTagFilter.element);
+    }
+
+    // Collapse filter - only if multiple groups
+    if (!singleGroup) {
+      var collapseTagFilter = createTagFilter("sp-mgr-collapse-filter", groupsInfo, function(selected) {
+        panel.querySelectorAll("[id^='sp-mgr-section-']").forEach(function(el) {
+          var gId = el.id.replace("sp-mgr-section-", "");
+          el.style.display = (!selected.length || selected.includes(gId)) ? "" : "none";
+        });
+      });
+      panel.appendChild(collapseTagFilter.element);
+    }
 
     // Collapsible detail per group
     groupsInfo.forEach(function(dept) {
@@ -466,12 +472,19 @@
 
       var header = document.createElement("div");
       header.style.cssText = "padding:8px 12px;background:#f5f5f5;cursor:pointer;font-size:12px;font-weight:600;display:flex;justify-content:space-between;align-items:center;";
-      header.innerHTML = '<span>📂 ' + dept.name + '</span><span class="sp-mgr-toggle" style="font-size:14px;">▶</span>';
+      header.innerHTML = '<span>📂 ' + dept.name + '</span><span class="sp-mgr-toggle" style="font-size:14px;">' + (singleGroup ? '▼' : '▶') + '</span>';
 
       var body = document.createElement("div");
       body.className = "sp-mgr-body";
-      body.style.cssText = "display:none;padding:8px;overflow-x:auto;";
+      body.style.cssText = (singleGroup ? "display:block;" : "display:none;") + "padding:8px;overflow-x:auto;";
       body.innerHTML = '<div class="sp-mgr-columns" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;"></div>';
+
+      // If single group, auto-load and hide header
+      if (singleGroup) {
+        body.dataset.loaded = "true";
+        header.style.display = "none";
+        loadManagerGroupDetail(dept.id, body.querySelector(".sp-mgr-columns"), spToken, canDrag);
+      }
 
       header.addEventListener("click", function() {
         var isOpen = body.style.display !== "none";
