@@ -5337,10 +5337,10 @@
       if (result.errors) throw new Error(result.errors[0].message);
       syncPromise = null;
       localStorage.removeItem(CACHE_KEY);
-      hideToast();
+      var lt = document.getElementById("sp-loading-toast"); if (lt) lt.remove();
       showSuccessToast("✅ Migrado a Monday");
     } catch (err) {
-      hideToast();
+      var lt2 = document.getElementById("sp-loading-toast"); if (lt2) lt2.remove();
       showErrorToast("Error Monday: " + err.message);
     }
   }
