@@ -197,6 +197,29 @@
 
   function initByRole() {
     var viewMode = getActiveViewMode();
+    // If admin is simulating another view, load that role's groups
+    if (currentUserRole === "admin" && currentViewMode && currentViewMode !== "admin") {
+      chrome.storage.local.get("notionRolesGroups", function(r) {
+        var rolesGroups = r.notionRolesGroups || {};
+        // Find groups for the simulated role (match by key)
+        var roleGroups = rolesGroups[currentViewMode] || [];
+        // Try partial match if exact not found (e.g. "gerente" matches "gerente dba")
+        if (!roleGroups.length) {
+          Object.keys(rolesGroups).forEach(function(key) {
+            if (key.includes(currentViewMode) && rolesGroups[key].length > 0) {
+              roleGroups = rolesGroups[key];
+            }
+          });
+        }
+        if (roleGroups.length > 0) currentUserGroups = roleGroups;
+        initExtension();
+        if (viewMode === "director" || viewMode === "gerente" || viewMode === "ceo") {
+          initManagerView(viewMode);
+        }
+        injectViewSwitcher();
+      });
+      return;
+    }
     // Always init extension (for config, buttons, etc.)
     initExtension();
     // Additionally load manager view for director/gerente/ceo, or user with multiple groups
