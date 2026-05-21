@@ -4,6 +4,11 @@
   hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } } .MuiDataGrid-cell[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; } .MuiDataGrid-columnHeader[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; }";
   document.head.appendChild(hideBackdrop);
 
+  // --- NOTION CONFIG ---
+  const NOTION_USERS_DB_ID = "36620e0684b98051a190e51d38d97288";
+  const NOTION_ROLES_DB_ID = "36720e0684b9807aba20c1c3d0536c09";
+  const NOTION_GROUPS_DB_ID = "36620e0684b9800e9a57df46019a03e0";
+
   // --- ROLES & PERMISSIONS ---
   const ROLES = {
     admin: {
@@ -149,14 +154,15 @@
             if (!found) { resolve({ notFound: true }); return; }
             var activo = found.properties.Activo?.checkbox;
             if (!activo) { resolve({ inactive: true }); return; }
-            var rol = (found.properties.Rol?.select?.name || "Usuario").toLowerCase();
-            var roleMap = { "administrador": "admin", "gerente": "gerente", "director": "director", "ceo": "ceo", "usuario": "usuario" };
-            var mappedRole = roleMap[rol] || "usuario";
+            // Rol is now a relation to the Roles table
+            var rolRelation = found.properties.Rol?.relation || [];
+            var rolPageId = rolRelation.length > 0 ? rolRelation[0].id : null;
+            // Get groups from user's "Grupos Suppor Plus" relation
             var groupRelation = found.properties["Grupos Suppor Plus"]?.relation || [];
             var groupPageIds = groupRelation.map(function(r) { return r.id; });
             var spId = found.properties["Id Support Plus"]?.number;
             if (spId) { sessionProfileId = spId; try { chrome.storage.local.set({ myProfileId: spId }); } catch(e) {} }
-            resolve({ role: mappedRole, groupPageIds: groupPageIds });
+            resolve({ rolPageId: rolPageId, groupPageIds: groupPageIds });
           });
         } catch(e) { resolve(null); }
       });
@@ -168,11 +174,40 @@
       // If user inactive
       if (notionResult.inactive) return "inactive";
 
+      // Resolve the role name from the Roles table
+      var roleName = "usuario";
+      if (notionResult.rolPageId) {
+        var roleResult = await new Promise(function(resolve) {
+          try {
+            chrome.runtime.sendMessage({ type: "notion-query", dbId: NOTION_ROLES_DB_ID, body: {} }, function(response) {
+              if (chrome.runtime.lastError || !response || !response.success || !response.data.results) { resolve("usuario"); return; }
+              var rolePage = response.data.results.find(function(p) { return p.id === notionResult.rolPageId; });
+              if (!rolePage) { resolve("usuario"); return; }
+              var name = (rolePage.properties.Nombre?.title?.[0]?.plain_text || "Usuario").toLowerCase();
+              // Also get groups from the role if user doesn't have direct groups
+              var roleGroups = rolePage.properties.MSP_cat_Grupos?.relation || [];
+              resolve({ name: name, roleGroupPageIds: roleGroups.map(function(r) { return r.id; }) });
+            });
+          } catch(e) { resolve("usuario"); }
+        });
+
+        if (typeof roleResult === "string") {
+          roleName = roleResult;
+        } else {
+          var roleNameMap = { "administrador": "admin", "gerente dba": "gerente", "gerente": "gerente", "director": "director", "ceo": "ceo", "usuario dba": "usuario", "usuario": "usuario" };
+          roleName = roleNameMap[roleResult.name] || "usuario";
+          // If user has no direct groups, use the role's groups
+          if (notionResult.groupPageIds.length === 0 && roleResult.roleGroupPageIds.length > 0) {
+            notionResult.groupPageIds = roleResult.roleGroupPageIds;
+          }
+        }
+      }
+
       // Resolve group page IDs to actual group IDs
       if (notionResult.groupPageIds && notionResult.groupPageIds.length > 0) {
         var groupIds = await new Promise(function(resolve) {
           try {
-            chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b9800e9a57df46019a03e0", body: {} }, function(response) {
+            chrome.runtime.sendMessage({ type: "notion-query", dbId: NOTION_GROUPS_DB_ID, body: {} }, function(response) {
               if (chrome.runtime.lastError || !response || !response.success || !response.data.results) { resolve([]); return; }
               var ids = [];
               for (var page of response.data.results) {
@@ -188,7 +223,7 @@
         currentUserGroups = groupIds;
       }
 
-      return notionResult.role;
+      return roleName;
     } catch(e) { return "usuario"; }
   }
 
