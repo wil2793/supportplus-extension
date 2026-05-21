@@ -4,19 +4,6 @@
   hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } } .MuiDataGrid-cell[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; } .MuiDataGrid-columnHeader[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; }";
   document.head.appendChild(hideBackdrop);
 
-  // --- NOTION CONFIG ---
-  const NOTION_DB_ID = "36420e0684b98054a2e6e6e84809a233"; // Rol de agua
-  const NOTION_USERS_DB_ID = "36620e0684b98051a190e51d38d97288"; // Usuarios Support Plus
-
-  // Test Notion connection via background
-  chrome.runtime.sendMessage({ type: "notion-query", dbId: NOTION_USERS_DB_ID, body: {} }, function(response) {
-    if (response && response.success) {
-      console.log("[SP Notion] Usuarios:", response.data.results ? response.data.results.length + " registros" : "OK", response.data);
-    } else {
-      console.error("[SP Notion] Error:", response ? response.error : "Sin respuesta");
-    }
-  });
-
   // --- ROLES & PERMISSIONS ---
   const ROLES = {
     admin: {
@@ -149,57 +136,56 @@
       sessionUserName = data?.user?.name || "";
       try { chrome.storage.local.set({ userEmail: email }); } catch(e) {}
 
-      // Get role and groups from Notion
+      // Try to get role from Notion (via background service worker)
       var notionResult = await new Promise(function(resolve) {
-        chrome.runtime.sendMessage({ type: "notion-query", dbId: NOTION_USERS_DB_ID, body: {} }, function(response) {
-          if (!response || !response.success || !response.data.results) { resolve({ role: "usuario", groups: [] }); return; }
-          var found = response.data.results.find(function(page) {
-            var correo = (page.properties.Correo?.rich_text?.[0]?.plain_text || page.properties.Correo?.title?.[0]?.plain_text || "").toLowerCase();
-            return correo === email;
+        try {
+          chrome.runtime.sendMessage({ type: "notion-query", dbId: NOTION_USERS_DB_ID, body: {} }, function(response) {
+            if (chrome.runtime.lastError) { resolve(null); return; }
+            if (!response || !response.success || !response.data.results) { resolve(null); return; }
+            var found = response.data.results.find(function(page) {
+              var correo = (page.properties.Correo?.rich_text?.[0]?.plain_text || page.properties.Correo?.title?.[0]?.plain_text || "").toLowerCase();
+              return correo === email;
+            });
+            if (!found) { resolve({ notFound: true }); return; }
+            var activo = found.properties.Activo?.checkbox;
+            if (!activo) { resolve({ inactive: true }); return; }
+            var rol = (found.properties.Rol?.select?.name || "Usuario").toLowerCase();
+            var roleMap = { "administrador": "admin", "gerente": "gerente", "director": "director", "ceo": "ceo", "usuario": "usuario" };
+            var mappedRole = roleMap[rol] || "usuario";
+            var groupRelation = found.properties["Grupos Suppor Plus"]?.relation || [];
+            var groupPageIds = groupRelation.map(function(r) { return r.id; });
+            var spId = found.properties["Id Support Plus"]?.number;
+            if (spId) { sessionProfileId = spId; try { chrome.storage.local.set({ myProfileId: spId }); } catch(e) {} }
+            resolve({ role: mappedRole, groupPageIds: groupPageIds });
           });
-          if (!found) { resolve(null); return; } // Not in Notion = no access
-          var activo = found.properties.Activo?.checkbox;
-          if (!activo) { resolve("inactive"); return; } // Inactive = show message
-          var rol = (found.properties.Rol?.select?.name || "Usuario").toLowerCase();
-          var roleMap = { "administrador": "admin", "gerente": "gerente", "director": "director", "ceo": "ceo", "usuario": "usuario" };
-          var mappedRole = roleMap[rol] || "usuario";
-
-          // Extract group page IDs from relation
-          var groupRelation = found.properties["Grupos Suppor Plus"]?.relation || [];
-          var groupPageIds = groupRelation.map(function(r) { return r.id; });
-
-          // Also get profileId if available
-          var spId = found.properties["Id Support Plus"]?.number;
-          if (spId) {
-            sessionProfileId = spId;
-            try { chrome.storage.local.set({ myProfileId: spId }); } catch(e) {}
-          }
-
-          resolve({ role: mappedRole, groupPageIds: groupPageIds });
-        });
+        } catch(e) { resolve(null); }
       });
 
-      if (!notionResult) return null; // Not in Notion or inactive
+      // If Notion failed completely, fallback to hardcoded roles
+      if (!notionResult) return getUserRole(email);
+      // If user not in Notion, no access
+      if (notionResult.notFound) return null;
+      // If user inactive
+      if (notionResult.inactive) return "inactive";
 
-      // Resolve group page IDs to actual group IDs using the Groups DB
+      // Resolve group page IDs to actual group IDs
       if (notionResult.groupPageIds && notionResult.groupPageIds.length > 0) {
         var groupIds = await new Promise(function(resolve) {
-          chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b9800e9a57df46019a03e0", body: {} }, function(response) {
-            if (!response || !response.success || !response.data.results) { console.warn("[SP] Groups DB query failed", response); resolve([]); return; }
-            var ids = [];
-            for (var page of response.data.results) {
-              if (notionResult.groupPageIds.includes(page.id)) {
-                var idSP = page.properties.IdSupportPlus?.title?.[0]?.plain_text;
-                if (idSP) ids.push(parseInt(idSP));
+          try {
+            chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b9800e9a57df46019a03e0", body: {} }, function(response) {
+              if (chrome.runtime.lastError || !response || !response.success || !response.data.results) { resolve([]); return; }
+              var ids = [];
+              for (var page of response.data.results) {
+                if (notionResult.groupPageIds.includes(page.id)) {
+                  var idSP = page.properties.IdSupportPlus?.title?.[0]?.plain_text;
+                  if (idSP) ids.push(parseInt(idSP));
+                }
               }
-            }
-            resolve(ids);
-          });
+              resolve(ids);
+            });
+          } catch(e) { resolve([]); }
         });
         currentUserGroups = groupIds;
-        console.log("[SP] User groups from Notion:", currentUserGroups);
-      } else {
-        console.log("[SP] No groups in Notion for this user");
       }
 
       return notionResult.role;
@@ -238,13 +224,9 @@
   }
 
   checkSession().then(function(role) {
-    if (role === null) return; // Not in Notion = no access at all
-    if (role === "inactive") {
-      showInactiveMessage();
-      return;
-    }
+    if (role === null) return; // Not in Notion = no access
+    if (role === "inactive") { showInactiveMessage(); return; }
     currentUserRole = role;
-    console.log("[SP] Role:", role, "Groups:", currentUserGroups);
     // Admin: restore saved view mode
     if (role === "admin") {
       currentViewMode = localStorage.getItem("sp_view_mode") || null;
@@ -272,11 +254,10 @@
     var viewMode = getActiveViewMode();
     // Always init extension (for config, buttons, etc.)
     initExtension();
-    // If user has multiple groups OR is director/gerente/ceo, show manager view
+    // Additionally load manager view for director/gerente/ceo, or user with multiple groups
     if (viewMode === "director" || viewMode === "gerente" || viewMode === "ceo") {
       initManagerView(viewMode);
     } else if (viewMode === "usuario" && currentUserGroups.length > 1) {
-      // User with multiple groups gets manager-like view
       initManagerView("gerente");
     }
     // Admin gets the view switcher
@@ -320,10 +301,17 @@
 
   // --- Manager view (director / gerente) ---
   function initManagerView(viewMode) {
-    // Use groups from Notion (dynamic) instead of hardcoded ROLES
-    var groups = currentUserGroups.length > 0 ? currentUserGroups : [19];
-    if (viewMode === "ceo" && currentUserGroups.length === 0) {
+    // Use groups from Notion if available, fallback to hardcoded ROLES
+    var roleConfig = ROLES[viewMode];
+    var groups;
+    if (currentUserGroups.length > 0) {
+      groups = currentUserGroups;
+    } else if (roleConfig && roleConfig.groups === "all") {
       groups = GROUP_INFO.map(function(g) { return g.id; });
+    } else if (roleConfig) {
+      groups = roleConfig.groups;
+    } else {
+      groups = [19];
     }
     var canDrag = (viewMode === "gerente" || viewMode === "admin" || viewMode === "director");
     var mgrLoading = false;
@@ -4925,7 +4913,7 @@
               var selectedGroup = takeGroupSelect.value;
               if (selectedGroup) {
                 overlay.remove();
-                handleMondayClick(ticketId, selectedGroup);
+                handleMondayClick(ticketId);
                 return;
               }
               showSuccessToast("Ticket tomado y cerrado");
@@ -5035,7 +5023,7 @@
               // Migrate if selected
               if (selectedGroup) {
                 overlay.remove();
-                handleMondayClick(ticketId, selectedGroup);
+                handleMondayClick(ticketId);
                 return;
               }
               showSuccessToast("Ticket cerrado");
@@ -5323,7 +5311,7 @@
   }
 
   // --- Handle single click ---
-  async function handleMondayClick(ticketId, autoGroupId) {
+  async function handleMondayClick(ticketId) {
     const mondayToken = await getMondayToken();
     if (!mondayToken) return alert("⚠️ Configura tu token de Monday en el popup de la extensión primero.");
     const boardId = await getMondayBoardId();
@@ -5346,61 +5334,7 @@
       return alert("Error: " + err.message);
     }
     if (!boardData.length) return alert("No se encontró el board. Verifica el Board ID en el popup.");
-
-    // If autoGroupId is provided, skip the modal and migrate directly
-    if (autoGroupId) {
-      await autoMigrateToMonday(ticketData, ticketId, boardData, mondayToken, meId, autoGroupId);
-    } else {
-      showMondayModal(ticketData, ticketId, boardData, mondayToken, meId);
-    }
-  }
-
-  // --- Auto migrate (no modal) ---
-  async function autoMigrateToMonday(ticket, ticketId, boards, mondayToken, meId, groupId) {
-    showLoadingToast("Migrando a Monday...");
-    const url = `${BASE_URL}/${ticketId}`;
-    const desc = (ticket.description || "").replace(/<[^>]*>/g, "");
-    const itemName = ticket.subject || "Sin asunto";
-    const createdDate = new Date(ticket.createdAt).toISOString().slice(0, 10);
-    const spPriority = (ticket.incidentPriorityName || ticket.incidentPriority?.name || "").toLowerCase().trim();
-    const priorityIndex = PRIORITY_MAP[spPriority] ?? PRIORITY_MAP["medio"];
-    const holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
-
-    let personValue = {};
-    if (holderEmail) {
-      try {
-        const users = await getMondayUsers(mondayToken);
-        const userId = users[holderEmail.toLowerCase()];
-        if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
-      } catch (e) {}
-    }
-
-    const columnValues = JSON.stringify({
-      descripci_n_mkn9e5f4: { text: desc },
-      ...(personValue.personsAndTeams ? { multiple_person_mm25nvfq: personValue } : {}),
-      status: { index: 1 },
-      priority_mkn9kbe9: { index: priorityIndex },
-      cronograma_mkn9hwe3: { from: createdDate, to: createdDate },
-      link_mknkdctz: { url: url, text: ticket.uniqueCode || url },
-      text_mm2c9nhc: ticket.uniqueCode || ticketId,
-    });
-
-    try {
-      const result = await mondayQuery(mondayToken,
-        `mutation ($boardId: ID!, $groupId: String!, $itemName: String!, $columnValues: JSON!) {
-          create_item(board_id: $boardId, group_id: $groupId, item_name: $itemName, column_values: $columnValues) { id }
-        }`,
-        { boardId: boards[0].id, groupId: groupId, itemName: itemName, columnValues: columnValues }
-      );
-      if (result.errors) throw new Error(result.errors[0].message);
-      syncPromise = null;
-      localStorage.removeItem(CACHE_KEY);
-      hideToast();
-      showSuccessToast("✅ Migrado a Monday");
-    } catch (err) {
-      hideToast();
-      showErrorToast("Error Monday: " + err.message);
-    }
+    showMondayModal(ticketData, ticketId, boardData, mondayToken, meId);
   }
 
   // --- Single modal ---
