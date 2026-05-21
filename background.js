@@ -89,9 +89,19 @@ async function syncNotionData() {
       usersMap[email] = { name: nombre, role: mappedRole, groups: finalGroups, profileId, active };
     }
 
+    // Build roles list for the view switcher (exclude admin)
+    const rolesList = [];
+    for (const r of roles) {
+      const name = (r.properties.Nombre?.title?.[0]?.plain_text || "");
+      const active = r.properties.Activo?.checkbox;
+      if (active && name.toLowerCase() !== "administrador") {
+        rolesList.push(name);
+      }
+    }
+
     // Save to storage
-    await chrome.storage.local.set({ notionUsers: usersMap, notionSyncTime: Date.now() });
-    console.log("[SP Background] Notion synced:", Object.keys(usersMap).length, "users");
+    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionSyncTime: Date.now() });
+    console.log("[SP Background] Notion synced:", Object.keys(usersMap).length, "users,", rolesList.length, "roles");
   } catch (e) {
     console.error("[SP Background] Notion sync error:", e);
   }

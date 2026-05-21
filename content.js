@@ -221,25 +221,21 @@
 
       var select = document.createElement("select");
       select.id = "sp-view-switcher";
-      select.style.cssText = "padding:4px 8px;font-size:11px;border:1px solid rgba(255,255,255,0.3);border-radius:4px;background:rgba(255,255,255,0.1);color:#fff;margin-right:8px;cursor:pointer;";
+      select.style.cssText = "padding:4px 8px;font-size:11px;border:1px solid rgba(255,255,255,0.3);border-radius:4px;background:rgba(30,30,30,0.9);color:#fff;margin-right:8px;cursor:pointer;";
       // Default option
-      select.innerHTML = '<option value=""' + (!currentViewMode ? " selected" : "") + '>👤 Mi vista (Admin)</option>';
-      // Load roles from Notion (stored by background)
-      chrome.storage.local.get("notionUsers", function(r) {
-        var usersMap = r.notionUsers || {};
-        // Collect unique roles (exclude admin)
-        var rolesSet = {};
-        Object.values(usersMap).forEach(function(u) {
-          if (u.role && u.role !== "admin") rolesSet[u.role] = true;
-        });
-        var roleIcons = { "ceo": "🏛️", "director": "👔", "gerente": "🏢", "usuario": "🧑‍💻" };
-        Object.keys(rolesSet).forEach(function(role) {
-          var icon = roleIcons[role] || "👁️";
-          var label = role.charAt(0).toUpperCase() + role.slice(1);
+      select.innerHTML = '<option value="" style="background:#222;color:#fff;"' + (!currentViewMode ? " selected" : "") + '>👤 Mi vista (Admin)</option>';
+      // Load roles from Notion storage
+      chrome.storage.local.get("notionRoles", function(r) {
+        var rolesList = r.notionRoles || [];
+        var roleIcons = { "ceo": "🏛️", "director": "👔", "gerente dba": "🏢", "gerente": "🏢", "usuario dba": "🧑‍💻", "usuario": "🧑‍💻" };
+        rolesList.forEach(function(roleName) {
+          var roleKey = roleName.toLowerCase();
+          var icon = roleIcons[roleKey] || "👁️";
           var opt = document.createElement("option");
-          opt.value = role;
-          opt.textContent = icon + " " + label;
-          if (currentViewMode === role) opt.selected = true;
+          opt.value = roleKey;
+          opt.textContent = icon + " " + roleName;
+          opt.style.cssText = "background:#222;color:#fff;";
+          if (currentViewMode === roleKey) opt.selected = true;
           select.appendChild(opt);
         });
       });
