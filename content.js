@@ -4901,7 +4901,7 @@
               var selectedGroup = takeGroupSelect.value;
               if (selectedGroup) {
                 overlay.remove();
-                handleMondayClick(ticketId);
+                handleMondayClick(ticketId, selectedGroup);
                 return;
               }
               showSuccessToast("Ticket tomado y cerrado");
@@ -5011,7 +5011,7 @@
               // Migrate if selected
               if (selectedGroup) {
                 overlay.remove();
-                handleMondayClick(ticketId);
+                handleMondayClick(ticketId, selectedGroup);
                 return;
               }
               showSuccessToast("Ticket cerrado");
@@ -5299,7 +5299,7 @@
   }
 
   // --- Handle single click ---
-  async function handleMondayClick(ticketId) {
+  async function handleMondayClick(ticketId, autoGroupId) {
     const mondayToken = await getMondayToken();
     if (!mondayToken) return alert("⚠️ Configura tu token de Monday en el popup de la extensión primero.");
     const boardId = await getMondayBoardId();
@@ -5322,7 +5322,61 @@
       return alert("Error: " + err.message);
     }
     if (!boardData.length) return alert("No se encontró el board. Verifica el Board ID en el popup.");
-    showMondayModal(ticketData, ticketId, boardData, mondayToken, meId);
+
+    // If autoGroupId is provided, skip the modal and migrate directly
+    if (autoGroupId) {
+      await autoMigrateToMonday(ticketData, ticketId, boardData, mondayToken, meId, autoGroupId);
+    } else {
+      showMondayModal(ticketData, ticketId, boardData, mondayToken, meId);
+    }
+  }
+
+  // --- Auto migrate (no modal) ---
+  async function autoMigrateToMonday(ticket, ticketId, boards, mondayToken, meId, groupId) {
+    showLoadingToast("Migrando a Monday...");
+    const url = `${BASE_URL}/${ticketId}`;
+    const desc = (ticket.description || "").replace(/<[^>]*>/g, "");
+    const itemName = ticket.subject || "Sin asunto";
+    const createdDate = new Date(ticket.createdAt).toISOString().slice(0, 10);
+    const spPriority = (ticket.incidentPriorityName || ticket.incidentPriority?.name || "").toLowerCase().trim();
+    const priorityIndex = PRIORITY_MAP[spPriority] ?? PRIORITY_MAP["medio"];
+    const holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
+
+    let personValue = {};
+    if (holderEmail) {
+      try {
+        const users = await getMondayUsers(mondayToken);
+        const userId = users[holderEmail.toLowerCase()];
+        if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
+      } catch (e) {}
+    }
+
+    const columnValues = JSON.stringify({
+      descripci_n_mkn9e5f4: { text: desc },
+      ...(personValue.personsAndTeams ? { multiple_person_mm25nvfq: personValue } : {}),
+      status: { index: 1 },
+      priority_mkn9kbe9: { index: priorityIndex },
+      cronograma_mkn9hwe3: { from: createdDate, to: createdDate },
+      link_mknkdctz: { url: url, text: ticket.uniqueCode || url },
+      text_mm2c9nhc: ticket.uniqueCode || ticketId,
+    });
+
+    try {
+      const result = await mondayQuery(mondayToken,
+        `mutation ($boardId: ID!, $groupId: String!, $itemName: String!, $columnValues: JSON!) {
+          create_item(board_id: $boardId, group_id: $groupId, item_name: $itemName, column_values: $columnValues) { id }
+        }`,
+        { boardId: boards[0].id, groupId: groupId, itemName: itemName, columnValues: columnValues }
+      );
+      if (result.errors) throw new Error(result.errors[0].message);
+      syncPromise = null;
+      localStorage.removeItem(CACHE_KEY);
+      hideToast();
+      showSuccessToast("✅ Migrado a Monday");
+    } catch (err) {
+      hideToast();
+      showErrorToast("Error Monday: " + err.message);
+    }
   }
 
   // --- Single modal ---
