@@ -5,38 +5,6 @@
   hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } } .MuiDataGrid-cell[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; } .MuiDataGrid-columnHeader[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; }";
   document.head.appendChild(hideBackdrop);
 
-  // --- ROLES & PERMISSIONS ---
-  const ROLES = {
-    admin: {
-      email: "william.alpuche@macropay.mx",
-      groups: [12, 18, 19, 20, 22],
-      canDragDrop: true,
-      canConfig: true,
-      canSwitchView: true
-    },
-    ceo: {
-      email: "aaron.suarez@macropay.mx",
-      groups: "all",
-      canDragDrop: false,
-      canConfig: false,
-      canSwitchView: false
-    },
-    director: {
-      email: "francisco.toquero@macropay.mx",
-      groups: [12, 18, 19, 20, 22],
-      canDragDrop: true,
-      canConfig: false,
-      canSwitchView: false
-    },
-    gerente: {
-      email: "rickey.ehuan@macropay.mx",
-      groups: [19, 22],
-      canDragDrop: true,
-      canConfig: true,
-      canSwitchView: false
-    }
-  };
-
   const GROUP_INFO = [
     { id: 9, name: "Mesa de Ayuda" },
     { id: 10, name: "Soporte a Tiendas" },
@@ -102,14 +70,7 @@
 
   var currentUserRole = "usuario";
   var currentViewMode = null; // null = use own role's view
-  var currentUserGroups = []; // Groups from Notion relation (dynamic)
-
-  function getUserRole(email) {
-    for (var key in ROLES) {
-      if (ROLES[key].email === email) return key;
-    }
-    return "usuario";
-  }
+  var currentUserGroups = []; // Groups from Notion
 
   function getActiveViewMode() {
     return currentViewMode || currentUserRole;
@@ -156,8 +117,8 @@
         });
       }
 
-      // If still no Notion data, fallback to hardcoded roles
-      if (!notionData) return getUserRole(email);
+      // If still no Notion data, wait and don't load (no fallback to hardcoded)
+      if (!notionData) return null;
 
       // Find user in Notion data
       var userData = notionData[email];
@@ -288,17 +249,14 @@
 
   // --- Manager view (director / gerente) ---
   function initManagerView(viewMode) {
-    // Use groups from Notion if available, fallback to hardcoded ROLES
-    var roleConfig = ROLES[viewMode];
+    // Groups come from Notion (currentUserGroups)
     var groups;
     if (currentUserGroups.length > 0) {
       groups = currentUserGroups;
-    } else if (roleConfig && roleConfig.groups === "all") {
+    } else if (viewMode === "ceo") {
       groups = GROUP_INFO.map(function(g) { return g.id; });
-    } else if (roleConfig) {
-      groups = roleConfig.groups;
     } else {
-      groups = [19];
+      groups = [19]; // fallback
     }
     var canDrag = (viewMode === "gerente" || viewMode === "admin" || viewMode === "director");
     var mgrLoading = false;
