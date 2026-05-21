@@ -4493,15 +4493,16 @@
               '<button id="sp-qd-take-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🤚 Tomar</button>' +
               '<select id="sp-qd-assign-select" style="flex:1;padding:6px 8px;font-size:11px;border:1px solid #ddd;border-radius:6px;"><option value="">-- Asignar a --</option></select>' +
             '</div>' +
-            '<div style="padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:11px;">' +
+            '<div id="sp-qd-take-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:11px;">' +
               '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario al tomar</label>' +
               '<input id="sp-qd-take-comment" type="text" value="se revisa" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;">' +
               '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;"><input type="checkbox" id="sp-qd-take-done"> <b>Ticket realizado</b></label>' +
               '<div id="sp-qd-take-extra" style="display:none;margin-top:6px;">' +
                 '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label>' +
                 '<input id="sp-qd-take-close-comment" type="text" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;">' +
-                (hasMondayConfig ? '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Migrar a Monday</label><select id="sp-qd-take-group" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;"><option value="">-- No migrar --</option></select>' : '') +
+                (hasMondayConfig ? '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Migrar a Monday</label><select id="sp-qd-take-group" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;"><option value="">-- Selecciona destino --</option></select>' : '') +
               '</div>' +
+              '<button id="sp-qd-take-confirm" style="margin-top:8px;padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:11px;font-weight:600;">Confirmar</button>' +
             '</div>' +
           '</div>' : '') +
           // Action row - only if not closed and not waiting
@@ -4834,64 +4835,93 @@
           });
         });
 
-        // Take button - assign to me with comment + optional close/migrate
-        takeBtn.addEventListener("click", async function() {
-          var comment = document.getElementById("sp-qd-take-comment").value.trim() || "se revisa";
-          takeBtn.disabled = true;
-          takeBtn.textContent = "⏳...";
-          try {
-            var myProfId = await getMyProfileId();
-            if (!myProfId) throw new Error("No se pudo obtener tu perfil");
-            var res = await fetch(SP_API + "/reassign/" + ticketId, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-              body: JSON.stringify({ resolutionGroupId: teamConfig.resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: teamConfig.resolutionGroupLabel, value: teamConfig.resolutionGroupId }, ticketCommentRequest: { internal: false, content: comment } }),
+        // Take button - show form first, then confirm executes action
+        var takeFormShown = false;
+        takeBtn.addEventListener("click", function() {
+          if (takeFormShown) return;
+          takeFormShown = true;
+          // Show form, hide assign select and comments section
+          var takeForm = document.getElementById("sp-qd-take-form");
+          if (takeForm) takeForm.style.display = "block";
+          if (assignSelect) assignSelect.style.display = "none";
+          var commentsSection = overlay.querySelector('[style*="Comentarios"]');
+          if (!commentsSection) {
+            // Find comments section by looking for the h4/label
+            overlay.querySelectorAll("div").forEach(function(d) {
+              if (d.textContent.includes("Comentarios") && d.querySelector("input[placeholder*='comentario']")) {
+                d.style.display = "none";
+              }
             });
-            if (!res.ok) throw new Error("HTTP " + res.status);
-            var json2 = await res.json();
-            if (!json2.success) throw new Error("No success");
-
-            if (takeDoneCheck.checked) {
-              // Close comment
-              var closeComment = document.getElementById("sp-qd-take-close-comment").value.trim();
-              if (closeComment) {
-                await fetch(SP_API + "/comment/" + ticketId, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                  body: JSON.stringify({ content: "<p>" + closeComment + "</p>", internal: false }),
-                });
-              }
-              // Close ticket
-              await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                body: JSON.stringify({ nextTicketStatusId: 9, ticketCommentRequest: null }),
-              });
-              // Migrate if selected
-              var selectedGroup = takeGroupSelect.value;
-              if (selectedGroup) {
-                overlay.remove();
-                handleMondayClick(ticketId);
-                return;
-              }
-              showSuccessToast("Ticket tomado y cerrado");
-            } else {
-              showSuccessToast("Ticket tomado");
-            }
-            overlay.remove();
-            showQuickDetailModal(ticketId);
-          } catch(err) {
-            showErrorToast("Error: " + err.message);
-            takeBtn.disabled = false;
-            takeBtn.textContent = "🤚 Tomar";
           }
+          // Hide the bottom comment input area
+          var commentInput = overlay.querySelector("input[placeholder*='comentario']");
+          if (commentInput) {
+            var commentRow = commentInput.closest("div[style*='display:flex']") || commentInput.parentElement;
+            if (commentRow) commentRow.style.display = "none";
+          }
+          takeBtn.textContent = "✅ Listo para tomar";
+          takeBtn.style.background = "#2E7D32";
+          takeBtn.disabled = true;
         });
+
+        // Confirm button - executes the take action
+        var takeConfirmBtn = document.getElementById("sp-qd-take-confirm");
+        if (takeConfirmBtn) {
+          takeConfirmBtn.addEventListener("click", async function() {
+            var comment = document.getElementById("sp-qd-take-comment").value.trim() || "se revisa";
+            takeConfirmBtn.disabled = true;
+            takeConfirmBtn.textContent = "⏳...";
+            try {
+              var myProfId = await getMyProfileId();
+              if (!myProfId) throw new Error("No se pudo obtener tu perfil");
+              var res = await fetch(SP_API + "/reassign/" + ticketId, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                body: JSON.stringify({ resolutionGroupId: teamConfig.resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: teamConfig.resolutionGroupLabel, value: teamConfig.resolutionGroupId }, ticketCommentRequest: { internal: false, content: comment } }),
+              });
+              if (!res.ok) throw new Error("HTTP " + res.status);
+              var json2 = await res.json();
+              if (!json2.success) throw new Error("No success");
+
+              if (takeDoneCheck.checked) {
+                var closeComment = document.getElementById("sp-qd-take-close-comment").value.trim();
+                if (closeComment) {
+                  await fetch(SP_API + "/comment/" + ticketId, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                    body: JSON.stringify({ content: "<p>" + closeComment + "</p>", internal: false }),
+                  });
+                }
+                await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                  body: JSON.stringify({ nextTicketStatusId: 9, ticketCommentRequest: null }),
+                });
+                var selectedGroup = takeGroupSelect ? takeGroupSelect.value : "";
+                if (selectedGroup) {
+                  overlay.remove();
+                  handleMondayClick(ticketId, selectedGroup);
+                  return;
+                }
+                showSuccessToast("Ticket tomado y cerrado");
+              } else {
+                showSuccessToast("Ticket tomado");
+              }
+              overlay.remove();
+              showQuickDetailModal(ticketId);
+            } catch(err) {
+              showErrorToast("Error: " + err.message);
+              takeConfirmBtn.disabled = false;
+              takeConfirmBtn.textContent = "Confirmar";
+            }
+          });
+        }
 
         // Assign select - assign to selected member
         assignSelect.addEventListener("change", async function() {
           var selectedId = assignSelect.value;
           if (!selectedId) return;
-          var comment = document.getElementById("sp-qd-take-comment").value.trim() || "se revisa";
+          var comment = document.getElementById("sp-qd-take-comment")?.value?.trim() || "se revisa";
           assignSelect.disabled = true;
           showLoadingToast("Asignando ticket...");
           try {
@@ -4905,7 +4935,7 @@
             if (json2.success) {
               showSuccessToast("Ticket asignado");
               overlay.remove();
-              showQuickDetailModal(ticketId); // Reload modal
+              showQuickDetailModal(ticketId);
             } else throw new Error("No success");
           } catch(err) {
             showErrorToast("Error: " + err.message);
