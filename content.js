@@ -544,6 +544,25 @@
       var profiles = json.data || json;
       if (!Array.isArray(profiles)) { container.innerHTML = '<div style="color:#888;font-size:11px;">Sin miembros</div>'; return; }
 
+      // Filter out users that are inactive in Notion
+      chrome.storage.local.get("notionUsers", function(stored) {
+        var notionUsers = stored.notionUsers || {};
+        profiles = profiles.filter(function(p) {
+          // Find this profile in Notion by profileId
+          var found = Object.values(notionUsers).find(function(u) { return u.profileId === p.profileId; });
+          // If not in Notion, show them (they haven't been registered yet)
+          // If in Notion and inactive, hide them
+          if (found && !found.active) return false;
+          return true;
+        });
+
+        renderGroupDetail(groupId, container, profiles, spToken, canDrag);
+      });
+    }).catch(function() { container.innerHTML = '<div style="color:#888;font-size:11px;">Error al cargar</div>'; });
+  }
+
+  function renderGroupDetail(groupId, container, profiles, spToken, canDrag) {
+
       // Create "Sin asignar" column at the left
       var unassignedCol = document.createElement("div");
       unassignedCol.style.cssText = "min-width:160px;max-width:200px;border:1px solid #FF8F00;border-radius:6px;overflow:hidden;flex-shrink:0;";
@@ -705,9 +724,6 @@
           listEl.innerHTML = html;
         }
       }).catch(function() {});
-    }).catch(function() {
-      container.innerHTML = '<div style="color:#D94040;font-size:11px;">Error al cargar miembros</div>';
-    });
   }
 
   function initExtension() {
