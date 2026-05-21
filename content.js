@@ -169,8 +169,8 @@
   }
 
   checkSession().then(function(role) {
-    if (role === null) return; // Not in Notion = no access
-    if (role === "inactive") { showInactiveMessage(); return; }
+    if (role === null) { showAccessMessage("⚠️ Usuario no registrado en SupportPlus Tools. Solicite su alta con el administrador."); return; }
+    if (role === "inactive") { showAccessMessage("⚠️ Usuario inactivo en SupportPlus Tools. Solicite su reactivación con el administrador."); return; }
     currentUserRole = role;
     // Admin: restore saved view mode
     if (role === "admin") {
@@ -179,7 +179,7 @@
     initByRole();
   });
 
-  function showInactiveMessage() {
+  function showAccessMessage(text) {
     var attempts = 0;
     var interval = setInterval(function() {
       var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
@@ -190,7 +190,7 @@
       var msg = document.createElement("div");
       msg.id = "sp-inactive-msg";
       msg.style.cssText = "padding:4px 12px;font-size:11px;border-radius:4px;background:rgba(217,64,64,0.15);color:#D94040;border:1px solid rgba(217,64,64,0.3);margin-right:8px;font-weight:600;";
-      msg.textContent = "⚠️ Usuario inactivo en SupportPlus Tools";
+      msg.textContent = text;
       userWrapper.parentElement.insertBefore(msg, userWrapper);
     }, 500);
   }
