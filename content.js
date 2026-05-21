@@ -103,15 +103,12 @@
         chrome.storage.local.get("notionUsers", function(r) { resolve(r.notionUsers || null); });
       });
 
-      // If no Notion data yet, trigger sync and wait
+      // Always trigger a background re-sync (non-blocking)
+      try { chrome.runtime.sendMessage({ type: "sync-notion" }); } catch(e) {}
+
+      // If no Notion data yet, wait for sync
       if (!notionData) {
-        await new Promise(function(resolve) {
-          try {
-            chrome.runtime.sendMessage({ type: "sync-notion" }, function() { resolve(); });
-          } catch(e) { resolve(); }
-        });
-        // Wait a bit and re-read
-        await new Promise(function(r) { setTimeout(r, 2000); });
+        await new Promise(function(r) { setTimeout(r, 3000); });
         notionData = await new Promise(function(resolve) {
           chrome.storage.local.get("notionUsers", function(r) { resolve(r.notionUsers || null); });
         });
