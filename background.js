@@ -47,7 +47,7 @@ async function syncNotionData() {
     // Build groups map: pageId -> groupId (number)
     const groupsMap = {};
     for (const g of groups) {
-      const idSP = g.properties.IdSupportPlus?.title?.[0]?.plain_text;
+      const idSP = g.properties.IdSupportPlus?.title?.[0]?.plain_text || g.properties.IdSupportPlus?.rich_text?.[0]?.plain_text;
       if (idSP) groupsMap[g.id] = parseInt(idSP);
     }
 
