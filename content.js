@@ -5527,4 +5527,12 @@
     if (!isDetailView()) refreshTeamPanel();
   }, 60000);
   } // end initExtension
+
+  // Re-sync Notion on page focus (detect changes without reload)
+  document.addEventListener("visibilitychange", function() {
+    if (document.visibilityState === "visible") {
+      try { chrome.runtime.sendMessage({ type: "sync-notion" }); } catch(e) {}
+    }
+  });
+
 })();
