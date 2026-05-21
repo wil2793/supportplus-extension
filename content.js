@@ -4812,32 +4812,28 @@
           });
         });
 
-        // Take button - show form first, then confirm executes action
+        // Take button - just show the form, hide bottom comments
         var takeFormShown = false;
         takeBtn.addEventListener("click", function() {
           if (takeFormShown) return;
           takeFormShown = true;
-          // Show form, hide assign select and comments section
+          // Show take form
           var takeForm = document.getElementById("sp-qd-take-form");
           if (takeForm) takeForm.style.display = "block";
+          // Hide assign select
           if (assignSelect) assignSelect.style.display = "none";
-          var commentsSection = overlay.querySelector('[style*="Comentarios"]');
-          if (!commentsSection) {
-            // Find comments section by looking for the h4/label
-            overlay.querySelectorAll("div").forEach(function(d) {
-              if (d.textContent.includes("Comentarios") && d.querySelector("input[placeholder*='comentario']")) {
-                d.style.display = "none";
-              }
-            });
-          }
-          // Hide the bottom comment input area
-          var commentInput = overlay.querySelector("input[placeholder*='comentario']");
-          if (commentInput) {
-            var commentRow = commentInput.closest("div[style*='display:flex']") || commentInput.parentElement;
-            if (commentRow) commentRow.style.display = "none";
-          }
-          takeBtn.textContent = "✅ Listo para tomar";
-          takeBtn.style.background = "#2E7D32";
+          // Hide bottom comment input row
+          var allInputs = overlay.querySelectorAll("input[placeholder*='comentario']");
+          allInputs.forEach(function(inp) {
+            // Only hide the bottom one (not the one inside take form)
+            if (!inp.closest("#sp-qd-take-form")) {
+              var row = inp.parentElement;
+              if (row) row.style.display = "none";
+            }
+          });
+          // Change button appearance
+          takeBtn.textContent = "🤚 Tomar";
+          takeBtn.style.background = "#0D47A1";
           takeBtn.disabled = true;
         });
 
