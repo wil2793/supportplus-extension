@@ -213,7 +213,7 @@
         }
         if (roleGroups.length > 0) currentUserGroups = roleGroups;
         initExtension();
-        if (viewMode === "director" || viewMode === "gerente" || viewMode === "ceo") {
+        if (currentUserGroups.length > 1) {
           initManagerView(viewMode);
         }
         injectViewSwitcher();
@@ -222,11 +222,9 @@
     }
     // Always init extension (for config, buttons, etc.)
     initExtension();
-    // Additionally load manager view for director/gerente/ceo, or user with multiple groups
-    if (viewMode === "director" || viewMode === "gerente" || viewMode === "ceo") {
-      initManagerView(viewMode);
-    } else if (viewMode === "usuario" && currentUserGroups.length > 1) {
-      initManagerView("gerente");
+    // If user has multiple groups, show manager view (regardless of role name)
+    if (currentUserGroups.length > 1) {
+      initManagerView(getActiveViewMode());
     }
     // Admin gets the view switcher
     if (currentUserRole === "admin") injectViewSwitcher();
