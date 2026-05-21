@@ -4944,6 +4944,16 @@
 
         closeActionBtn.addEventListener("click", function() {
           closeForm.style.display = closeForm.style.display === "none" ? "block" : "none";
+          // Hide bottom comment input when close form is shown
+          if (closeForm.style.display === "block") {
+            var allInputs = overlay.querySelectorAll("input[placeholder*='comentario']");
+            allInputs.forEach(function(inp) {
+              if (!inp.closest("#sp-qd-close-form")) {
+                var row = inp.parentElement;
+                if (row) row.style.display = "none";
+              }
+            });
+          }
         });
 
         var closeConfirmBtn = document.getElementById("sp-qd-close-confirm");
@@ -4984,7 +4994,7 @@
               // Migrate if selected
               if (selectedGroup) {
                 overlay.remove();
-                handleMondayClick(ticketId);
+                handleMondayClick(ticketId, selectedGroup);
                 return;
               }
               showSuccessToast("Ticket cerrado");
