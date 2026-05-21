@@ -1147,25 +1147,6 @@
         });
         container.insertBefore(stealBtn, chip4);
       }
-
-      // Always show close button (regardless of who holds it)
-      const closeBtn = document.createElement("button");
-      closeBtn.className = "sp-detail-close-btn";
-      closeBtn.textContent = "🔒 Cerrar ticket";
-      closeBtn.style.cssText =
-        "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#616161;color:#fff;font-weight:600;white-space:nowrap;";
-      closeBtn.addEventListener("mouseenter", () => { if (!closeBtn.disabled) closeBtn.textContent = "🔐 Cerrar ticket"; });
-      closeBtn.addEventListener("mouseleave", () => { if (!closeBtn.disabled) closeBtn.textContent = "🔒 Cerrar ticket"; });
-      closeBtn.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        closeBtn.disabled = true;
-        closeBtn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
-        await showCloseModal(ticketId, closeBtn);
-        closeBtn.textContent = "🔒 Cerrar ticket";
-        closeBtn.disabled = false;
-      });
-      container.insertBefore(closeBtn, chip4);
       }
     }
 
