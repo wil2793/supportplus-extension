@@ -159,7 +159,7 @@
           });
           if (!found) { resolve(null); return; } // Not in Notion = no access
           var activo = found.properties.Activo?.checkbox;
-          if (!activo) { resolve(null); return; } // Inactive = no access
+          if (!activo) { resolve("inactive"); return; } // Inactive = show message
           var rol = (found.properties.Rol?.select?.name || "Usuario").toLowerCase();
           var roleMap = { "administrador": "admin", "gerente": "gerente", "director": "director", "ceo": "ceo", "usuario": "usuario" };
           var mappedRole = roleMap[rol] || "usuario";
@@ -185,7 +185,7 @@
       if (notionResult.groupPageIds && notionResult.groupPageIds.length > 0) {
         var groupIds = await new Promise(function(resolve) {
           chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b9800e9a57df46019a03e0", body: {} }, function(response) {
-            if (!response || !response.success || !response.data.results) { resolve([]); return; }
+            if (!response || !response.success || !response.data.results) { console.warn("[SP] Groups DB query failed", response); resolve([]); return; }
             var ids = [];
             for (var page of response.data.results) {
               if (notionResult.groupPageIds.includes(page.id)) {
@@ -197,6 +197,9 @@
           });
         });
         currentUserGroups = groupIds;
+        console.log("[SP] User groups from Notion:", currentUserGroups);
+      } else {
+        console.log("[SP] No groups in Notion for this user");
       }
 
       return notionResult.role;
@@ -235,14 +238,35 @@
   }
 
   checkSession().then(function(role) {
-    if (role === null) return; // Not in Notion or inactive - no access
+    if (role === null) return; // Not in Notion = no access at all
+    if (role === "inactive") {
+      showInactiveMessage();
+      return;
+    }
     currentUserRole = role;
+    console.log("[SP] Role:", role, "Groups:", currentUserGroups);
     // Admin: restore saved view mode
     if (role === "admin") {
       currentViewMode = localStorage.getItem("sp_view_mode") || null;
     }
     initByRole();
   });
+
+  function showInactiveMessage() {
+    var attempts = 0;
+    var interval = setInterval(function() {
+      var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
+      if (!userWrapper && attempts < 30) { attempts++; return; }
+      clearInterval(interval);
+      if (!userWrapper) return;
+      if (document.getElementById("sp-inactive-msg")) return;
+      var msg = document.createElement("div");
+      msg.id = "sp-inactive-msg";
+      msg.style.cssText = "padding:4px 12px;font-size:11px;border-radius:4px;background:rgba(217,64,64,0.15);color:#D94040;border:1px solid rgba(217,64,64,0.3);margin-right:8px;font-weight:600;";
+      msg.textContent = "⚠️ Usuario inactivo en SupportPlus Tools";
+      userWrapper.parentElement.insertBefore(msg, userWrapper);
+    }, 500);
+  }
 
   function initByRole() {
     var viewMode = getActiveViewMode();
