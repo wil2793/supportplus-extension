@@ -5092,11 +5092,16 @@
             fileModal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.8);z-index:999999;display:flex;flex-direction:column;align-items:center;justify-content:center;";
             var isImage = /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(fileName);
             var isPdf = /\.pdf$/i.test(fileName);
+            var isText = /\.(txt|sql|csv|json|xml|log|md|yml|yaml|ini|conf|sh|bat|ps1|py|js|ts|html|css|env)$/i.test(fileName);
             var contentHTML = '';
             if (isImage) {
               contentHTML = '<img src="' + url + '" style="max-width:90vw;max-height:80vh;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">';
             } else if (isPdf) {
               contentHTML = '<iframe src="' + url + '" style="width:90vw;height:85vh;border:none;border-radius:8px;"></iframe>';
+            } else if (isText) {
+              var textContent = new TextDecoder("utf-8").decode(byteArray);
+              var escaped = textContent.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+              contentHTML = '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:85vh;overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + escaped + '</pre></div>';
             } else {
               contentHTML = '<div style="background:#fff;padding:24px;border-radius:8px;text-align:center;"><p style="margin:0 0 12px;font-size:14px;">No se puede previsualizar: <b>' + fileName + '</b></p><a href="' + url + '" download="' + fileName + '" style="padding:8px 16px;background:#1976D2;color:#fff;border-radius:6px;text-decoration:none;font-size:13px;">📥 Descargar</a></div>';
             }
