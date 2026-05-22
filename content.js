@@ -545,16 +545,22 @@
       if (!Array.isArray(profiles)) { container.innerHTML = '<div style="color:#888;font-size:11px;">Sin miembros</div>'; return; }
 
       // Filter out users that are inactive in Notion
-      chrome.storage.local.get("notionUsers", function(stored) {
+      chrome.storage.local.get(["notionUsers", "visibleByGroup"], function(stored) {
         var notionUsers = stored.notionUsers || {};
         profiles = profiles.filter(function(p) {
-          // Find this profile in Notion by profileId
           var found = Object.values(notionUsers).find(function(u) { return u.profileId === p.profileId; });
-          // If not in Notion, show them (they haven't been registered yet)
-          // If in Notion and inactive, hide them
           if (found && !found.active) return false;
           return true;
         });
+
+        // Filter by visible members (from config checkboxes)
+        var visibleByGroup = stored.visibleByGroup || {};
+        var visibleIds = visibleByGroup[String(groupId)];
+        if (visibleIds && visibleIds.length > 0) {
+          profiles = profiles.filter(function(p) {
+            return visibleIds.includes(p.profileId);
+          });
+        }
 
         renderGroupDetail(groupId, container, profiles, spToken, canDrag);
       });
