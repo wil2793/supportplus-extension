@@ -3867,12 +3867,26 @@
     if (document.getElementById(WATER_BTN_ID)) return;
     var dashBtn = document.getElementById(DASHBOARD_BTN_ID);
     if (!dashBtn) return;
-    var btn = document.createElement("button");
-    btn.id = WATER_BTN_ID;
-    btn.textContent = "💧 Agua";
-    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#0288D1;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-    btn.addEventListener("click", showWaterModal);
-    dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
+    // Only show if user's email is in the water table
+    chrome.storage.local.get("userEmail", function(r) {
+      var email = (r.userEmail || "").toLowerCase();
+      if (!email) return;
+      chrome.runtime.sendMessage({ type: "notion-query", dbId: "36420e0684b98054a2e6e6e84809a233", body: {} }, function(response) {
+        if (!response || !response.success || !response.data.results) return;
+        var found = response.data.results.some(function(page) {
+          var correo = (page.properties.Correo?.title?.[0]?.plain_text || page.properties.Correo?.rich_text?.[0]?.plain_text || "").toLowerCase();
+          return correo === email;
+        });
+        if (!found) return;
+        if (document.getElementById(WATER_BTN_ID)) return;
+        var btn = document.createElement("button");
+        btn.id = WATER_BTN_ID;
+        btn.textContent = "💧 Agua";
+        btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#0288D1;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+        btn.addEventListener("click", showWaterModal);
+        dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
+      });
+    });
   }
 
   function showWaterModal() {
