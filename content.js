@@ -585,6 +585,14 @@
         container.appendChild(col);
       });
 
+      // Click on ticket opens modal
+      container.addEventListener("click", function(e) {
+        var ticket = e.target.closest(".sp-mgr-ticket");
+        if (!ticket) return;
+        var ticketId = ticket.dataset.ticketId;
+        if (ticketId) showQuickDetailModal(parseInt(ticketId));
+      });
+
       // Setup drag and drop if allowed
       if (canDrag) {
         container.addEventListener("dragstart", function(e) {
