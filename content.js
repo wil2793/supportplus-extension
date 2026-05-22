@@ -4496,7 +4496,8 @@
       overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:800px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
           '<h3 style="margin:0;font-size:15px;">📋 ' + (t.uniqueCode || ticketId) + ' <span class="sp-qd-copy-folio" data-copy="' + (t.uniqueCode || ticketId) + '" style="cursor:pointer;font-size:12px;opacity:0.6;" title="Copiar folio">📋</span> <span style="font-weight:400;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-size:12px;">(' + statusName + ')</span></h3>' +
-          '<div style="display:flex;gap:6px;">' +
+          '<div style="display:flex;gap:6px;align-items:center;">' +
+            '<span id="sp-qd-actions" style="display:flex;gap:4px;"></span>' +
             '<a href="/es/dashboard/tickets/' + ticketId + '" target="_blank" style="padding:5px 10px;border:1px solid #1976D2;border-radius:6px;font-size:11px;text-decoration:none;color:#1976D2;">Abrir ↗</a>' +
             '<button id="sp-qd-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
           '</div>' +
@@ -4562,7 +4563,7 @@
           // People row
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
             '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:11px;">' +
-              '<b style="color:#888;">👤 Solicitante:</b> ' + requesterName + (requesterEmail ? ' <span style="color:#888;">(' + requesterEmail + ')</span>' : '') +
+              '<b style="color:#888;">👤 Solicitante:</b> ' + requesterName + ' <span class="sp-qd-copy-name" data-copy="' + requesterName + '" style="cursor:pointer;font-size:10px;opacity:0.6;" title="Copiar nombre">📋</span>' + (requesterEmail ? ' <span style="color:#888;">(' + requesterEmail + ')</span>' : '') +
               (department ? '<br><span style="color:#aaa;">' + department + ' | ' + location + '</span>' : '') +
             '</div>' +
             '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:11px;">' +
@@ -4572,7 +4573,7 @@
           // Description (compact)
           '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;margin-bottom:8px;">' +
             '<b style="font-size:10px;color:#888;">📝 Descripción</b>' +
-            '<div style="margin:4px 0 0;font-size:11px;line-height:1.5;color:#333;max-height:120px;overflow:auto;">' + desc + '</div>' +
+            '<div style="margin:4px 0 0;font-size:11px;line-height:1.5;color:#333;max-height:200px;overflow:auto;">' + desc + '</div>' +
           '</div>' +
           attachHTML +
           participantsHTML +
@@ -4616,6 +4617,19 @@
       document.getElementById("sp-qd-close").addEventListener("click", function() { overlay.remove(); });
       overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
 
+      // Move action buttons to header
+      var actionsContainer = document.getElementById("sp-qd-actions");
+      if (actionsContainer) {
+        var closeBtn = document.getElementById("sp-qd-close-btn");
+        if (closeBtn) { closeBtn.style.padding = "5px 10px"; closeBtn.style.fontSize = "11px"; actionsContainer.appendChild(closeBtn); }
+        var takeBtn = document.getElementById("sp-qd-take-btn");
+        if (takeBtn) { takeBtn.style.padding = "5px 10px"; actionsContainer.appendChild(takeBtn); }
+        var migrateBtn = document.getElementById("sp-qd-migrate-btn");
+        if (migrateBtn) { migrateBtn.style.padding = "5px 10px"; migrateBtn.style.fontSize = "11px"; actionsContainer.appendChild(migrateBtn); }
+        var reopenBtn = document.getElementById("sp-qd-reopen-btn");
+        if (reopenBtn) { reopenBtn.style.padding = "5px 10px"; reopenBtn.style.fontSize = "11px"; actionsContainer.appendChild(reopenBtn); }
+      }
+
       // Copy folio button
       var copyFolioBtn = overlay.querySelector(".sp-qd-copy-folio");
       if (copyFolioBtn) {
@@ -4623,6 +4637,17 @@
           navigator.clipboard.writeText(copyFolioBtn.dataset.copy).then(function() {
             copyFolioBtn.textContent = "✅";
             setTimeout(function() { copyFolioBtn.textContent = "📋"; }, 1500);
+          });
+        });
+      }
+
+      // Copy requester name button
+      var copyNameBtn = overlay.querySelector(".sp-qd-copy-name");
+      if (copyNameBtn) {
+        copyNameBtn.addEventListener("click", function() {
+          navigator.clipboard.writeText(copyNameBtn.dataset.copy).then(function() {
+            copyNameBtn.textContent = "✅";
+            setTimeout(function() { copyNameBtn.textContent = "📋"; }, 1500);
           });
         });
       }
