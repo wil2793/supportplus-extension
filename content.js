@@ -4789,7 +4789,9 @@
       });
 
       // Send comment (with optional attachments)
-      document.getElementById("sp-qd-comment-send").addEventListener("click", async function() {
+      var commentSendBtn = document.getElementById("sp-qd-comment-send");
+      if (commentSendBtn) {
+      commentSendBtn.addEventListener("click", async function() {
         var input = document.getElementById("sp-qd-comment-input");
         var text = input.value.trim();
         if (!text && !pendingFiles.length) return;
@@ -4853,11 +4855,15 @@
         sendBtn.disabled = false;
         sendBtn.textContent = "Enviar";
       });
+      } // end if commentSendBtn
 
       // Allow Enter to send
-      document.getElementById("sp-qd-comment-input").addEventListener("keydown", function(e) {
-        if (e.key === "Enter") document.getElementById("sp-qd-comment-send").click();
-      });
+      var commentInputEl = document.getElementById("sp-qd-comment-input");
+      if (commentInputEl) {
+        commentInputEl.addEventListener("keydown", function(e) {
+          if (e.key === "Enter") document.getElementById("sp-qd-comment-send").click();
+        });
+      }
 
       // Add attachment to existing comment
       overlay.querySelectorAll(".sp-qd-add-attach").forEach(function(label) {
@@ -5197,6 +5203,7 @@
       var migrateOnlyBtn = document.getElementById("sp-qd-migrate-btn");
       if (migrateOnlyBtn) {
         migrateOnlyBtn.addEventListener("click", function() {
+          console.log("[SP] Migrate button clicked, ticketId:", ticketId);
           overlay.remove();
           handleMondayClick(ticketId);
         });
@@ -5246,6 +5253,7 @@
       }
 
       // View attachments in modal
+      console.log("[SP] Registering download listeners, found:", overlay.querySelectorAll(".sp-qd-download").length);
       overlay.querySelectorAll(".sp-qd-download").forEach(function(btn) {
         btn.addEventListener("click", async function() {
           var fileId = btn.dataset.fileId;
@@ -5295,7 +5303,7 @@
             } else if (isText) {
               var textContent = new TextDecoder("utf-8").decode(byteArray);
               var escaped = textContent.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-              contentHTML = '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:85vh;overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + escaped + '</pre></div>';
+              contentHTML = '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:85vh;overflow:auto;position:relative;"><button id="sp-file-copy-text" style="position:absolute;top:8px;right:8px;padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:11px;font-weight:600;">📋 Copiar</button><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + escaped + '</pre></div>';
             } else {
               contentHTML = '<div style="background:#fff;padding:24px;border-radius:8px;text-align:center;"><p style="margin:0 0 12px;font-size:14px;">No se puede previsualizar: <b>' + fileName + '</b></p><a href="' + url + '" download="' + fileName + '" style="padding:8px 16px;background:#1976D2;color:#fff;border-radius:6px;text-decoration:none;font-size:13px;">📥 Descargar</a></div>';
             }
@@ -5303,6 +5311,15 @@
             document.body.appendChild(fileModal);
             document.getElementById("sp-file-close").addEventListener("click", function() { fileModal.remove(); URL.revokeObjectURL(url); });
             fileModal.addEventListener("click", function(e) { if (e.target === fileModal) { fileModal.remove(); URL.revokeObjectURL(url); } });
+            var copyTextBtn = document.getElementById("sp-file-copy-text");
+            if (copyTextBtn) {
+              copyTextBtn.addEventListener("click", function() {
+                navigator.clipboard.writeText(textContent).then(function() {
+                  copyTextBtn.textContent = "✅ Copiado";
+                  setTimeout(function() { copyTextBtn.textContent = "📋 Copiar"; }, 2000);
+                });
+              });
+            }
           } catch(err) {
             btn.textContent = "❌ Error";
             setTimeout(function() { btn.textContent = "📎 " + fileName; btn.disabled = false; }, 2000);
