@@ -3469,7 +3469,7 @@
           '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Área de trabajo</label>' +
           '<select id="sp-cfg-area" style="width:100%;padding:8px;font-size:13px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px;">' +
             '<option value="">-- Selecciona tu grupo --</option>' +
-            GROUP_INFO.map(function(g) { return '<option value="' + g.id + '"' + (String(currentArea) === String(g.id) ? ' selected' : '') + '>' + g.name + '</option>'; }).join("") +
+            (currentUserGroups.length > 0 ? currentUserGroups : GROUP_INFO.map(function(g){return g.id;})).map(function(gId) { var g = GROUP_INFO.find(function(gi){return gi.id === gId;}) || {id:gId,name:"Grupo "+gId}; return '<option value="' + g.id + '"' + (String(currentArea) === String(g.id) ? ' selected' : '') + '>' + g.name + '</option>'; }).join("") +
           '</select>' +
           '<div id="sp-cfg-members" style="margin-bottom:8px;max-height:150px;overflow-y:auto;border:1px solid #eee;border-radius:6px;padding:6px;display:' + (currentArea ? 'block' : 'none') + ';"><div style="color:#888;font-size:11px;">Cargando miembros...</div></div>' +
           '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Mi perfil</label>' +
