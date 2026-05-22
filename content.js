@@ -275,7 +275,9 @@
 
   // --- Global config modal reference ---
   var _showConfigModal = null;
+  var _showQuickDetailModal = null;
   document.addEventListener("sp-open-config", function() { if (_showConfigModal) _showConfigModal(); });
+  document.addEventListener("sp-open-ticket", function(e) { if (e.detail && e.detail.ticketId && _showQuickDetailModal) _showQuickDetailModal(e.detail.ticketId); });
 
   // --- Manager view (director / gerente) ---
   function initManagerView(viewMode) {
@@ -585,12 +587,16 @@
         container.appendChild(col);
       });
 
-      // Click on ticket opens modal
+      // Click on ticket opens modal (only if not dragging)
+      var isDragging = false;
+      container.addEventListener("mousedown", function(e) { isDragging = false; });
+      container.addEventListener("mousemove", function(e) { if (e.buttons) isDragging = true; });
       container.addEventListener("click", function(e) {
+        if (isDragging) return;
         var ticket = e.target.closest(".sp-mgr-ticket");
         if (!ticket) return;
         var ticketId = ticket.dataset.ticketId;
-        if (ticketId) showQuickDetailModal(parseInt(ticketId));
+        if (ticketId) document.dispatchEvent(new CustomEvent("sp-open-ticket", { detail: { ticketId: parseInt(ticketId) } }));
       });
 
       // Setup drag and drop if allowed
@@ -741,6 +747,7 @@
   }
 
   function initExtension() {
+  _showQuickDetailModal = showQuickDetailModal;
   // --- Toast helpers ---
   function ensureToastStyles() {
     if (!document.getElementById("sp-toast-style")) {
