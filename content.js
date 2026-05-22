@@ -4145,7 +4145,7 @@
         var json = await res.json();
         var tickets = (json.data || json).content || [];
         if (tickets.length > 0) {
-          window.open("/es/dashboard/tickets/" + tickets[0].id, "_blank");
+          showQuickDetailModal(tickets[0].id);
         } else {
           showErrorToast("Ticket no encontrado: " + val);
         }
