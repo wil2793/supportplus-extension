@@ -719,6 +719,12 @@
       closedCol.style.cssText = "min-width:160px;max-width:200px;border:1px solid #2E7D32;border-radius:6px;overflow:hidden;flex-shrink:0;";
       closedCol.innerHTML = '<div style="background:#2E7D32;color:#fff;padding:4px 8px;font-size:10px;font-weight:700;text-align:center;">✅ Cerrados hoy <span class="sp-mgr-closed-count">(...)</span></div>' +
         '<div class="sp-mgr-closed-list" style="padding:3px;max-height:180px;overflow-y:auto;background:#fafafa;min-height:25px;"></div>';
+      closedCol.addEventListener("click", function(e) {
+        var ticket = e.target.closest(".sp-mgr-ticket");
+        if (!ticket) return;
+        var ticketId = ticket.dataset.ticketId;
+        if (ticketId) document.dispatchEvent(new CustomEvent("sp-open-ticket", { detail: { ticketId: parseInt(ticketId) } }));
+      });
       container.appendChild(closedCol);
 
       // Fetch closed today
