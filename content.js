@@ -4780,13 +4780,13 @@
         });
       }
 
-      attachInput.addEventListener("change", function() {
+      if (attachInput) { attachInput.addEventListener("change", function() {
         for (var i = 0; i < attachInput.files.length; i++) {
           pendingFiles.push(attachInput.files[i]);
         }
         attachInput.value = "";
         renderPendingFiles();
-      });
+      }); }
 
       // Send comment (with optional attachments)
       var commentSendBtn = document.getElementById("sp-qd-comment-send");
