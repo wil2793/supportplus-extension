@@ -3861,6 +3861,74 @@
     });
   }
 
+  // --- Water Role Button ---
+  const WATER_BTN_ID = "sp-water-btn";
+  function injectWaterButton() {
+    if (document.getElementById(WATER_BTN_ID)) return;
+    var dashBtn = document.getElementById(DASHBOARD_BTN_ID);
+    if (!dashBtn) return;
+    var btn = document.createElement("button");
+    btn.id = WATER_BTN_ID;
+    btn.textContent = "💧 Agua";
+    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#0288D1;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+    btn.addEventListener("click", showWaterModal);
+    dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
+  }
+
+  function showWaterModal() {
+    var existing = document.getElementById("sp-water-modal");
+    if (existing) { existing.remove(); return; }
+    showLoadingToast("Cargando rol de agua...");
+    chrome.runtime.sendMessage({ type: "notion-query", dbId: "36420e0684b98054a2e6e6e84809a233", body: { sorts: [{ property: "Orden", direction: "ascending" }] } }, function(response) {
+      var lt = document.getElementById("sp-loading-toast"); if (lt) lt.remove();
+      if (!response || !response.success || !response.data.results) { showErrorToast("Error al cargar datos de agua"); return; }
+      var rows = response.data.results.map(function(page) {
+        var p = page.properties;
+        return {
+          nombre: p.Nombre?.rich_text?.[0]?.plain_text || "",
+          orden: p.Orden?.number || 0,
+          g1: p["Garrafón 1"]?.checkbox || false,
+          g2: p["Garrafón 2"]?.checkbox || false,
+          g3: p["Garrafón 3"]?.checkbox || false,
+          chesco: p.Chesco?.checkbox || false
+        };
+      });
+      var overlay = document.createElement("div");
+      overlay.id = "sp-water-modal";
+      overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+      var tableRows = rows.map(function(r) {
+        return '<tr>' +
+          '<td style="padding:6px 10px;border-bottom:1px solid #eee;">' + r.orden + '</td>' +
+          '<td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:600;">' + r.nombre + '</td>' +
+          '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.g1 ? '✅' : '❌') + '</td>' +
+          '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.g2 ? '✅' : '❌') + '</td>' +
+          '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.g3 ? '✅' : '❌') + '</td>' +
+          '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.chesco ? '✅' : '❌') + '</td>' +
+        '</tr>';
+      }).join("");
+      overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:600px;width:95%;font-family:system-ui;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+          '<h3 style="margin:0;font-size:16px;">💧 Rol de Agua</h3>' +
+          '<button id="sp-water-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
+        '</div>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+          '<thead><tr style="background:#f5f5f5;">' +
+            '<th style="padding:6px 10px;text-align:left;">#</th>' +
+            '<th style="padding:6px 10px;text-align:left;">Nombre</th>' +
+            '<th style="padding:6px 10px;text-align:center;">G1</th>' +
+            '<th style="padding:6px 10px;text-align:center;">G2</th>' +
+            '<th style="padding:6px 10px;text-align:center;">G3</th>' +
+            '<th style="padding:6px 10px;text-align:center;">Chesco</th>' +
+          '</tr></thead>' +
+          '<tbody>' + tableRows + '</tbody>' +
+        '</table>' +
+      '</div>';
+      document.body.appendChild(overlay);
+      document.getElementById("sp-water-close").addEventListener("click", function() { overlay.remove(); });
+      overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+    });
+  }
+
   // --- Report Excel ---
   const REPORT_BTN_ID = "sp-report-btn";
   var reportGenerating = false;
@@ -5263,6 +5331,7 @@
     injectConfigButton();
     injectSearchButton();
     injectDashboardButton();
+    injectWaterButton();
     injectReportButton();
     injectMondayStatsButton();
     injectQuickSearch();
