@@ -83,8 +83,8 @@ async function syncNotionData() {
       const roleNameMap = { "administrador": "admin", "gerente dba": "gerente", "gerente": "gerente", "director": "director", "ceo": "ceo", "usuario dba": "usuario", "usuario": "usuario" };
       const mappedRole = roleNameMap[roleName] || "usuario";
 
-      // Groups: user's direct groups, or role's groups as fallback
-      const finalGroups = userGroups.length > 0 ? userGroups : roleGroups;
+      // Groups: always use role's groups (they define what the user can see)
+      const finalGroups = roleGroups.length > 0 ? roleGroups : userGroups;
 
       usersMap[email] = { name: nombre, role: mappedRole, groups: finalGroups, profileId, active };
     }
