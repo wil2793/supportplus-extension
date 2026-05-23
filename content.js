@@ -5307,7 +5307,7 @@
             } else {
               contentHTML = '<div style="background:#fff;padding:24px;border-radius:8px;text-align:center;"><p style="margin:0 0 12px;font-size:14px;">No se puede previsualizar: <b>' + fileName + '</b></p><a href="' + url + '" download="' + fileName + '" style="padding:8px 16px;background:#1976D2;color:#fff;border-radius:6px;text-decoration:none;font-size:13px;">📥 Descargar</a></div>';
             }
-            fileModal.innerHTML = '<div style="display:flex;justify-content:flex-end;width:90vw;margin-bottom:8px;"><button id="sp-file-close" style="padding:6px 14px;border:none;border-radius:6px;background:rgba(255,255,255,0.9);cursor:pointer;font-size:13px;">✕ Cerrar</button></div>' + contentHTML;
+            fileModal.innerHTML = '<div style="display:flex;justify-content:flex-end;width:90vw;margin-bottom:8px;gap:8px;"><a id="sp-file-download" href="' + url + '" download="' + fileName + '" style="padding:6px 14px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:13px;text-decoration:none;">📥 Descargar</a><button id="sp-file-close" style="padding:6px 14px;border:none;border-radius:6px;background:rgba(255,255,255,0.9);cursor:pointer;font-size:13px;">✕ Cerrar</button></div>' + contentHTML;
             document.body.appendChild(fileModal);
             document.getElementById("sp-file-close").addEventListener("click", function() { fileModal.remove(); URL.revokeObjectURL(url); });
             fileModal.addEventListener("click", function(e) { if (e.target === fileModal) { fileModal.remove(); URL.revokeObjectURL(url); } });
