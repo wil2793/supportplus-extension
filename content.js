@@ -536,6 +536,25 @@
         }).catch(function() {});
       });
     }, 60000);
+
+    // Refresh open collapsibles on focus or after actions
+    function refreshOpenCollapsibles() {
+      panel.querySelectorAll(".sp-mgr-body").forEach(function(body) {
+        if (body.style.display !== "none" && body.dataset.loaded) {
+          var section = body.parentElement;
+          var groupId = section.id.replace("sp-mgr-section-", "");
+          var columns = body.querySelector(".sp-mgr-columns");
+          if (columns) {
+            columns.innerHTML = "";
+            loadManagerGroupDetail(parseInt(groupId), columns, spToken, canDrag);
+          }
+        }
+      });
+    }
+    document.addEventListener("visibilitychange", function() {
+      if (document.visibilityState === "visible") refreshOpenCollapsibles();
+    });
+    document.addEventListener("sp-refresh-panel", refreshOpenCollapsibles);
   }
 
   function loadManagerGroupDetail(groupId, container, spToken, canDrag) {
@@ -4523,6 +4542,8 @@
   async function showQuickDetailModal(ticketId) {
     var existing = document.getElementById("sp-quick-detail-modal");
     if (existing) existing.remove();
+    // Refresh panel when modal reloads (after actions)
+    document.dispatchEvent(new CustomEvent("sp-refresh-panel"));
 
     showLoadingToast("Cargando detalle...");
 
