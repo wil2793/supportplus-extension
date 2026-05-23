@@ -4247,7 +4247,7 @@
       if (!spToken) { showErrorToast("No hay token"); goBtn.textContent = "→"; goBtn.disabled = false; return; }
 
       try {
-        var res = await fetch(SP_SEARCH_API + "?uniqueCode=" + encodeURIComponent(val) + "&resolutionGroupId=" + getTeamConfig().resolutionGroupId + "&page=0&size=1", {
+        var res = await fetch(SP_SEARCH_API + "?uniqueCode=" + encodeURIComponent(val) + "&page=0&size=1", {
           headers: { accept: "application/json", authorization: "Bearer " + spToken },
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
