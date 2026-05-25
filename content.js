@@ -200,7 +200,12 @@
   }
 
   function initByRole() {
-    updateMondayConfig();
+    // Update Monday config based on canMigrateMonday permission
+    try {
+      chrome.storage.local.get(["mondayBoardId"], function(r) {
+        hasMondayConfig = !!r.mondayBoardId && canMigrateMonday;
+      });
+    } catch(e) {}
     var viewMode = getActiveViewMode();
     // If admin is simulating another view, load that role's groups
     if (currentUserRole === "admin" && currentViewMode && currentViewMode !== "admin") {
