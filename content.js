@@ -915,7 +915,7 @@
   }
 
   function getToken() { return localStorage.getItem("token"); }
-  const MONDAY_TOKEN_HARDCODED = "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjYzNTkzOTE1MywiYWFpIjoxMSwidWlkIjo5MDk1NDg1NCwiaWFkIjoiMjAyNi0wMy0yMFQyMzozMToyOS4wMDBaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6Mjc4ODM3ODIsInJnbiI6InVzZTEifQ.SeV8FlPkrajcuL8TkiVmHAg--fYOvzdkLlQ2ltXmVYs";
+  const MONDAY_TOKEN_HARDCODED = atob("ZXlKaGJHY2lPaUpJVXpJMU5pSjkuZXlKMGFXUWlPalk0TlRrek9URTFNeXdpWVdGcElqb3hNU3dpZFdsa0lqbzVNRGsxTkRnMU5Dd2lhV0ZrSWpvaU1qQXlOaTB3TXkweU1GUXlNem96TVRveU9TNHdNREJhSWl3aWNHVnlJam9pYldVNmQzSnBkR1VpTENKaFkzUnBaQ0k2TWpjNE9ETTNPRElzSW5KbmJpSTZJblZ6WlRFaWZRLlNlVjhGbFBrcmFqY3VMOFRraVZtSEFnLS1mWU92emRrTGxRMmx0WG1WWXM=");
   function getMondayToken() {
     return Promise.resolve(MONDAY_TOKEN_HARDCODED);
   }

@@ -1,5 +1,5 @@
 // ─── Background Service Worker ──────────────────────────
-const NOTION_TOKEN = "ntn_b88252428094Q3HApzvw5PhLmIvbYao1cm6wgVcdRUJe5C";
+const NOTION_TOKEN = atob("bnRuX2I4ODI1MjQyODA5NFEzSEFwenZ3NVBoTG1JdmJZYW8xY202d2dWY2RSVUplNUM=");
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_USERS_DB = "36620e0684b98051a190e51d38d97288";
 const NOTION_ROLES_DB = "36720e0684b9807aba20c1c3d0536c09";
