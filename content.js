@@ -3961,13 +3961,20 @@
       if (!response || !response.success || !response.data.results) { showErrorToast("Error al cargar datos de agua"); return; }
       var rows = response.data.results.map(function(page) {
         var p = page.properties;
+        var cumpleDate = p["Cumpleaños"]?.date?.start || "";
+        var cumpleDisplay = "";
+        if (cumpleDate) {
+          var parts = cumpleDate.split("-");
+          cumpleDisplay = parts[2] + "/" + parts[1]; // DD/MM
+        }
         return {
           nombre: p.Nombre?.rich_text?.[0]?.plain_text || "",
           orden: p.Orden?.number || 0,
           g1: p["Garrafón 1"]?.checkbox || false,
           g2: p["Garrafón 2"]?.checkbox || false,
           g3: p["Garrafón 3"]?.checkbox || false,
-          chesco: p.Chesco?.checkbox || false
+          chesco: p.Chesco?.checkbox || false,
+          cumple: cumpleDisplay
         };
       });
       var overlay = document.createElement("div");
@@ -3981,6 +3988,7 @@
           '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.g2 ? '✅' : '❌') + '</td>' +
           '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.g3 ? '✅' : '❌') + '</td>' +
           '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.chesco ? '✅' : '❌') + '</td>' +
+          '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.cumple || '-') + '</td>' +
         '</tr>';
       }).join("");
       overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:600px;width:95%;font-family:system-ui;">' +
@@ -3996,6 +4004,7 @@
             '<th style="padding:6px 10px;text-align:center;">G2</th>' +
             '<th style="padding:6px 10px;text-align:center;">G3</th>' +
             '<th style="padding:6px 10px;text-align:center;">Chesco</th>' +
+            '<th style="padding:6px 10px;text-align:center;">🎂</th>' +
           '</tr></thead>' +
           '<tbody>' + tableRows + '</tbody>' +
         '</table>' +
