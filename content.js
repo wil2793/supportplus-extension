@@ -4729,10 +4729,9 @@
           (statusName === "Cerrado" && hasMondayConfig && !(t.uniqueCode && getCache() && getCache()[t.uniqueCode]) ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
             '<button id="sp-qd-migrate-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🙂 Migrar a Monday</button>' +
           '</div>' : '') +
-          // Reopen row (if closed)
+          // Reopen row (if closed) - no select, reopen assigns to current holder
           (statusName === "Cerrado" ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
             '<button id="sp-qd-reopen-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#FF8F00;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🔓 Reabrir</button>' +
-            '<select id="sp-qd-reopen-select" style="flex:1;padding:6px 8px;font-size:11px;border:1px solid #ddd;border-radius:6px;"><option value="">-- Reasignar a --</option></select>' +
           '</div>' : '') +
           // People row
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
@@ -5274,21 +5273,18 @@
         });
       }
 
-      // Reopen button + select
+      // Reopen button - reassigns to current holder to reopen
       var reopenBtn = document.getElementById("sp-qd-reopen-btn");
-      var reopenSelect = document.getElementById("sp-qd-reopen-select");
-      if (reopenBtn && reopenSelect) {
-        var teamConfigReopen = getTeamConfig();
-        teamConfigReopen.profiles.forEach(function(p) {
-          var opt = document.createElement("option");
-          opt.value = p.profileId;
-          opt.textContent = p.profileFullName;
-          reopenSelect.appendChild(opt);
-        });
-
+      if (reopenBtn) {
         reopenBtn.addEventListener("click", async function() {
-          var personId = reopenSelect.value;
-          if (!personId) { showErrorToast("Selecciona a quién reasignar"); return; }
+          // Get the holder's profileId from the ticket data
+          var holderProfileId = t.ticketHolder?.ticketHolderLog ? null : null;
+          // We need to find the profileId of the current holder
+          var holderEmail = t.ticketHolder?.ticketHolderLog?.email || "";
+          var teamConfigReopen = getTeamConfig();
+          var holderProfile = teamConfigReopen.profiles ? teamConfigReopen.profiles.find(function(p) { return p.email === holderEmail; }) : null;
+          var personId = holderProfile ? holderProfile.profileId : sessionProfileId;
+          if (!personId) { showErrorToast("No se pudo determinar el analista"); return; }
           reopenBtn.disabled = true;
           reopenBtn.textContent = "⏳...";
           try {
@@ -5300,7 +5296,7 @@
             if (!res.ok) throw new Error("HTTP " + res.status);
             var json2 = await res.json();
             if (json2.success) {
-              showSuccessToast("Ticket reabierto y reasignado");
+              showSuccessToast("Ticket reabierto");
               overlay.remove();
               showQuickDetailModal(ticketId);
             } else throw new Error("No success");
@@ -5309,11 +5305,6 @@
             reopenBtn.disabled = false;
             reopenBtn.textContent = "🔓 Reabrir";
           }
-        });
-
-        reopenSelect.addEventListener("change", function() {
-          if (reopenSelect.value) reopenBtn.textContent = "🔓 Reabrir y reasignar";
-          else reopenBtn.textContent = "🔓 Reabrir";
         });
       }
 
