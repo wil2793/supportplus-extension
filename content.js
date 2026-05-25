@@ -71,6 +71,7 @@
   var currentUserRole = "usuario";
   var currentViewMode = null; // null = use own role's view
   var currentUserGroups = []; // Groups from Notion
+  var canMigrateMonday = false; // Permission from Notion role
 
   function getActiveViewMode() {
     return currentViewMode || currentUserRole;
@@ -132,6 +133,9 @@
       if (userData.groups && userData.groups.length > 0) {
         currentUserGroups = userData.groups;
       }
+
+      // Set Monday migration permission
+      canMigrateMonday = !!userData.canMigrate;
 
       return userData.role;
     } catch(e) { return "usuario"; }
@@ -196,6 +200,7 @@
   }
 
   function initByRole() {
+    updateMondayConfig();
     var viewMode = getActiveViewMode();
     // If admin is simulating another view, load that role's groups
     if (currentUserRole === "admin" && currentViewMode && currentViewMode !== "admin") {
@@ -1951,13 +1956,20 @@
   const TEAM_PANEL_ID = "sp-team-panel";
   var teamPanelLoading = false;
   var hasMondayConfig = false;
+  var mondayBoardConfigured = false;
 
-  // Check if Monday board is configured (token is hardcoded)
+  // Check if Monday board is configured
   try {
     chrome.storage.local.get(["mondayBoardId"], function(r) {
-      hasMondayConfig = !!r.mondayBoardId;
+      mondayBoardConfigured = !!r.mondayBoardId;
+      hasMondayConfig = mondayBoardConfigured && canMigrateMonday;
     });
   } catch(e) {}
+
+  // Re-check hasMondayConfig after role is loaded (called from initByRole)
+  function updateMondayConfig() {
+    hasMondayConfig = mondayBoardConfigured && canMigrateMonday;
+  }
 
   const TEAM_AREAS = {};
   // Build TEAM_AREAS dynamically from GROUP_INFO
@@ -3545,7 +3557,7 @@
         '<h3 style="margin:0 0 12px;">⚙️ Configuración</h3>' +
         '<div style="display:flex;gap:0;margin-bottom:12px;border-bottom:2px solid #eee;">' +
           '<button id="sp-cfg-tab-area" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid #D94040;color:#D94040;">Área de trabajo</button>' +
-          (currentUserRole === "usuario" || currentUserRole === "admin" ? '<button id="sp-cfg-tab-monday" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:none;background:transparent;cursor:pointer;color:#888;">Monday.com</button>' : '') +
+          (canMigrateMonday ? '<button id="sp-cfg-tab-monday" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:none;background:transparent;cursor:pointer;color:#888;">Monday.com</button>' : '') +
         '</div>' +
         '<div id="sp-cfg-panel-area">' +
           '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Área de trabajo</label>' +
