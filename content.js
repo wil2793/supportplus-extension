@@ -537,20 +537,64 @@
       });
     }, 60000);
 
-    // Refresh open collapsibles on focus or after actions
+    // Refresh open collapsibles on focus or after actions (smooth, no flash)
     function refreshOpenCollapsibles() {
       panel.querySelectorAll(".sp-mgr-body").forEach(function(body) {
         if (body.style.display !== "none" && body.dataset.loaded) {
           var section = body.parentElement;
           var groupId = section.id.replace("sp-mgr-section-", "");
-          var columns = body.querySelector(".sp-mgr-columns");
-          if (columns) {
-            columns.innerHTML = "";
-            loadManagerGroupDetail(parseInt(groupId), columns, spToken, canDrag);
-          }
+          // Re-fetch tickets for each profile column without clearing
+          body.querySelectorAll(".sp-mgr-ptickets").forEach(function(listEl) {
+            var profileId = listEl.dataset.profileId;
+            var gId = listEl.dataset.groupId || groupId;
+            if (profileId === "unassigned") {
+              // Refresh unassigned
+              fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + gId + "&ticketStatusName=En%20espera&page=0&size=100", {
+                headers: { accept: "application/json", authorization: "Bearer " + spToken }
+              }).then(function(r) { return r.json(); }).then(function(json) {
+                var tickets = (json.data || json).content || [];
+                updateTicketList(listEl, tickets, true);
+              }).catch(function() {});
+            } else {
+              // Refresh assigned per profile
+              Promise.all([
+                fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + profileId + "&ticketStatusName=Asignado", {
+                  headers: { accept: "application/json", authorization: "Bearer " + spToken }
+                }).then(function(r) { return r.json(); }),
+                fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + profileId + "&ticketStatusName=En%20atenci%C3%B3n", {
+                  headers: { accept: "application/json", authorization: "Bearer " + spToken }
+                }).then(function(r) { return r.json(); })
+              ]).then(function(results) {
+                var tickets = ((results[0].data || results[0]).content || []).concat((results[1].data || results[1]).content || []);
+                updateTicketList(listEl, tickets, false);
+              }).catch(function() {});
+            }
+          });
         }
       });
     }
+
+    // Update ticket list without clearing (smooth diff)
+    function updateTicketList(listEl, tickets, isUnassigned) {
+      var countEl = listEl.previousElementSibling ? listEl.previousElementSibling.querySelector(".sp-mgr-pcount") : null;
+      if (countEl) countEl.textContent = "(" + tickets.length + ")";
+      if (!tickets.length) {
+        listEl.innerHTML = '<div style="text-align:center;padding:6px;color:#aaa;font-size:10px;">Sin tickets</div>';
+        return;
+      }
+      // Build new HTML and only replace if different
+      var html = "";
+      tickets.forEach(function(t) {
+        var statusColor = t.ticketStatusName === "En espera" ? "#FF8F00" : t.ticketStatusName === "Asignado" ? "#1976D2" : "#4CAF50";
+        html += '<div ' + (canDrag ? 'draggable="true" ' : '') + 'data-ticket-id="' + t.id + '" class="sp-mgr-ticket" style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:9px;line-height:1.3;' + (canDrag ? 'cursor:grab;' : '') + '">';
+        html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
+        html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 25) + '</div>';
+        html += '<div style="display:flex;justify-content:space-between;"><span style="color:' + statusColor + ';font-weight:600;font-size:8px;">' + (t.ticketStatusName || "") + '</span><span style="color:#888;font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60px;" title="' + (isUnassigned ? (t.requesterName || "") : (t.requesterName || "")) + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
+        html += '</div>';
+      });
+      if (listEl.innerHTML !== html) listEl.innerHTML = html;
+    }
+
     document.addEventListener("visibilitychange", function() {
       if (document.visibilityState === "visible") refreshOpenCollapsibles();
     });
