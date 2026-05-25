@@ -905,17 +905,9 @@
   }
 
   function getToken() { return localStorage.getItem("token"); }
+  const MONDAY_TOKEN_HARDCODED = "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjYzNTkzOTE1MywiYWFpIjoxMSwidWlkIjo5MDk1NDg1NCwiaWFkIjoiMjAyNi0wMy0yMFQyMzozMToyOS4wMDBaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6Mjc4ODM3ODIsInJnbiI6InVzZTEifQ.SeV8FlPkrajcuL8TkiVmHAg--fYOvzdkLlQ2ltXmVYs";
   function getMondayToken() {
-    return new Promise((r, reject) => {
-      try {
-        chrome.storage.local.get("mondayToken", ({ mondayToken }) => r(mondayToken));
-      } catch (e) {
-        if (e.message?.includes("Extension context invalidated")) {
-          alert("⚠️ La extensión se actualizó. Recarga la página (F5) para continuar.");
-        }
-        reject(e);
-      }
-    });
+    return Promise.resolve(MONDAY_TOKEN_HARDCODED);
   }
 
   function getMondayBoardId() {
@@ -1960,10 +1952,10 @@
   var teamPanelLoading = false;
   var hasMondayConfig = false;
 
-  // Check if Monday is configured
+  // Check if Monday board is configured (token is hardcoded)
   try {
-    chrome.storage.local.get(["mondayToken", "mondayBoardId"], function(r) {
-      hasMondayConfig = !!(r.mondayToken && r.mondayBoardId);
+    chrome.storage.local.get(["mondayBoardId"], function(r) {
+      hasMondayConfig = !!r.mondayBoardId;
     });
   } catch(e) {}
 
@@ -3566,8 +3558,6 @@
           '<select id="sp-cfg-myprofile" style="width:100%;padding:8px;font-size:13px;border:1px solid #ddd;border-radius:6px;margin-bottom:12px;"><option value="">-- Selecciona tu perfil --</option></select>' +
         '</div>' +
         '<div id="sp-cfg-panel-monday" style="display:none;">' +
-          '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">API Token</label>' +
-          '<input id="sp-cfg-token" type="password" value="' + currentToken + '" placeholder="Pega tu token de Monday" style="width:100%;padding:8px;font-size:12px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;margin-bottom:8px;">' +
           '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Board</label>' +
           '<div style="position:relative;margin-bottom:4px;">' +
             '<input id="sp-cfg-board-search" type="text" value="' + currentBoardName.replace(/"/g, '&quot;') + '" placeholder="Buscar board..." style="width:100%;padding:8px;font-size:12px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;">' +
@@ -3652,8 +3642,7 @@
       // Load boards
       var allBoards = [];
       document.getElementById("sp-cfg-load-boards").addEventListener("click", async function() {
-        var token = document.getElementById("sp-cfg-token").value.trim();
-        if (!token) { document.getElementById("sp-cfg-board-status").textContent = "⚠️ Ingresa un token primero"; return; }
+        var token = MONDAY_TOKEN_HARDCODED;
         document.getElementById("sp-cfg-board-status").textContent = "Cargando...";
         try {
           var res = await fetch("https://api.monday.com/v2", {
@@ -3695,7 +3684,7 @@
 
       // Save
       document.getElementById("sp-cfg-save").addEventListener("click", function() {
-        var token = document.getElementById("sp-cfg-token").value.trim();
+        var token = MONDAY_TOKEN_HARDCODED;
         var boardId = document.getElementById("sp-cfg-board-id").value;
         var boardName = document.getElementById("sp-cfg-board-search").value.trim();
         var area = document.getElementById("sp-cfg-area").value;
