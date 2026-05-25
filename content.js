@@ -3964,9 +3964,24 @@
         var p = page.properties;
         var cumpleDate = p["Cumpleaños"]?.date?.start || "";
         var cumpleDisplay = "";
+        var cumpleColor = "";
         if (cumpleDate) {
           var parts = cumpleDate.split("-");
-          cumpleDisplay = parts[2] + "/" + parts[1]; // DD/MM
+          var day = parseInt(parts[2]);
+          var month = parseInt(parts[1]) - 1; // 0-indexed
+          var meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+          cumpleDisplay = day + " de " + meses[month];
+          // Check if already passed this year or upcoming
+          var now = new Date();
+          var thisYearBday = new Date(now.getFullYear(), month, day);
+          var diffDays = Math.floor((thisYearBday - now) / (1000*60*60*24));
+          if (diffDays < 0) {
+            cumpleColor = "#D32F2F"; // red - already passed
+          } else if (diffDays <= 30) {
+            cumpleColor = "#F9A825"; // yellow - less than a month
+          } else {
+            cumpleColor = "#2E7D32"; // green - more than a month
+          }
         }
         return {
           nombre: p.Nombre?.rich_text?.[0]?.plain_text || "",
@@ -3975,7 +3990,8 @@
           g2: p["Garrafón 2"]?.checkbox || false,
           g3: p["Garrafón 3"]?.checkbox || false,
           chesco: p.Chesco?.checkbox || false,
-          cumple: cumpleDisplay
+          cumple: cumpleDisplay,
+          cumpleColor: cumpleColor
         };
       });
       var overlay = document.createElement("div");
@@ -3989,7 +4005,7 @@
           '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.g2 ? '✅' : '❌') + '</td>' +
           '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.g3 ? '✅' : '❌') + '</td>' +
           '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.chesco ? '✅' : '❌') + '</td>' +
-          '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.cumple || '-') + '</td>' +
+          '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;color:' + (r.cumpleColor || '#333') + ';font-weight:600;">' + (r.cumple || '-') + '</td>' +
         '</tr>';
       }).join("");
       overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:600px;width:95%;font-family:system-ui;">' +
