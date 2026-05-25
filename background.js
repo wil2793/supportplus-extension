@@ -4,6 +4,7 @@ const NOTION_API = "https://api.notion.com/v1";
 const NOTION_USERS_DB = "36620e0684b98051a190e51d38d97288";
 const NOTION_ROLES_DB = "36720e0684b9807aba20c1c3d0536c09";
 const NOTION_GROUPS_DB = "36620e0684b9800e9a57df46019a03e0";
+const NOTION_COMMENTS_DB = "36920e0684b980a19fdbd27302a65feb";
 const NOTION_HEADERS = {
   "Authorization": "Bearer " + NOTION_TOKEN,
   "Notion-Version": "2022-06-28",
@@ -109,9 +110,22 @@ async function syncNotionData() {
       }
     }
 
+    // 4. Get suggested comments
+    const commentsRaw = await notionQueryAll(NOTION_COMMENTS_DB);
+    const suggestedComments = {}; // groupId -> [{id, text, name}]
+    for (const c of commentsRaw) {
+      const text = c.properties.Comentario?.rich_text?.[0]?.plain_text || "";
+      const name = c.properties.Nombre?.title?.[0]?.plain_text || "";
+      const commentGroups = (c.properties.MSP_cat_Grupos?.relation || []).map(rel => groupsMap[rel.id]).filter(Boolean);
+      for (const gId of commentGroups) {
+        if (!suggestedComments[gId]) suggestedComments[gId] = [];
+        suggestedComments[gId].push({ id: c.id, text, name });
+      }
+    }
+
     // Save to storage
-    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, notionSyncTime: Date.now() });
-    console.log("[SP Background] Notion synced:", Object.keys(usersMap).length, "users,", rolesList.length, "roles");
+    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, suggestedComments, notionSyncTime: Date.now() });
+    console.log("[SP Background] Notion synced:", Object.keys(usersMap).length, "users,", rolesList.length, "roles,", commentsRaw.length, "comments");
   } catch (e) {
     console.error("[SP Background] Notion sync error:", e);
   }
@@ -154,6 +168,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       method: "PATCH",
       headers: NOTION_HEADERS,
       body: JSON.stringify(message.body)
+    }).then(r => r.json()).then(data => sendResponse({ success: true, data })).catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (message.type === "notion-delete") {
+    fetch(NOTION_API + "/pages/" + message.pageId, {
+      method: "PATCH",
+      headers: NOTION_HEADERS,
+      body: JSON.stringify({ archived: true })
     }).then(r => r.json()).then(data => sendResponse({ success: true, data })).catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }

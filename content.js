@@ -4037,6 +4037,130 @@
     });
   }
 
+  // --- Suggested Comments Button ---
+  const SUGGESTED_BTN_ID = "sp-suggested-btn";
+  function injectSuggestedCommentsButton() {
+    if (document.getElementById(SUGGESTED_BTN_ID)) return;
+    var dashBtn = document.getElementById(DASHBOARD_BTN_ID);
+    if (!dashBtn) return;
+    var btn = document.createElement("button");
+    btn.id = SUGGESTED_BTN_ID;
+    btn.textContent = "💬 Comentarios";
+    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#7B1FA2;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+    btn.addEventListener("click", showSuggestedCommentsModal);
+    dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
+  }
+
+  function showSuggestedCommentsModal() {
+    var existing = document.getElementById("sp-suggested-modal");
+    if (existing) { existing.remove(); return; }
+    var overlay = document.createElement("div");
+    overlay.id = "sp-suggested-modal";
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99998;display:flex;align-items:center;justify-content:center;";
+    overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:600px;width:95%;max-height:80vh;display:flex;flex-direction:column;font-family:system-ui;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+        '<h3 style="margin:0;font-size:16px;">💬 Comentarios sugeridos</h3>' +
+        '<button id="sp-sug-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;margin-bottom:12px;">' +
+        '<input id="sp-sug-new-input" type="text" placeholder="Nuevo comentario sugerido..." style="flex:1;padding:6px 10px;font-size:12px;border:1px solid #ddd;border-radius:6px;">' +
+        '<button id="sp-sug-add" style="padding:6px 12px;border:none;border-radius:6px;background:#7B1FA2;color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">+ Agregar</button>' +
+      '</div>' +
+      '<div id="sp-sug-list" style="flex:1;overflow:auto;"></div>' +
+    '</div>';
+    document.body.appendChild(overlay);
+
+    document.getElementById("sp-sug-close").addEventListener("click", function() { overlay.remove(); });
+    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+    var groupId = getTeamConfig().resolutionGroupId;
+    var groupPageId = null;
+    // Get group page ID for creating new comments
+    chrome.storage.local.get("notionUsers", function() {
+      chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b9800e9a57df46019a03e0", body: {} }, function(resp) {
+        if (resp && resp.success && resp.data.results) {
+          var found = resp.data.results.find(function(p) {
+            var idSP = p.properties.IdSupportPlus?.rich_text?.[0]?.plain_text || p.properties.IdSupportPlus?.title?.[0]?.plain_text;
+            return idSP === String(groupId);
+          });
+          if (found) groupPageId = found.id;
+        }
+      });
+    });
+
+    function loadList() {
+      var listDiv = document.getElementById("sp-sug-list");
+      if (!listDiv) return;
+      chrome.storage.local.get("suggestedComments", function(r) {
+        var comments = r.suggestedComments || {};
+        var items = comments[groupId] || [];
+        if (!items.length) { listDiv.innerHTML = '<div style="text-align:center;color:#888;padding:20px;font-size:12px;">No hay comentarios sugeridos para este grupo</div>'; return; }
+        listDiv.innerHTML = items.map(function(c) {
+          return '<div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid #eee;" data-id="' + c.id + '">' +
+            '<span style="flex:1;font-size:12px;">' + c.text + '</span>' +
+            '<button class="sp-sug-edit" data-id="' + c.id + '" data-text="' + c.text.replace(/"/g, '&quot;') + '" style="padding:3px 8px;border:1px solid #1976D2;border-radius:4px;background:#fff;color:#1976D2;cursor:pointer;font-size:10px;">✏️</button>' +
+            '<button class="sp-sug-del" data-id="' + c.id + '" style="padding:3px 8px;border:1px solid #D32F2F;border-radius:4px;background:#fff;color:#D32F2F;cursor:pointer;font-size:10px;">🗑️</button>' +
+          '</div>';
+        }).join("");
+
+        // Edit handlers
+        listDiv.querySelectorAll(".sp-sug-edit").forEach(function(btn) {
+          btn.addEventListener("click", function() {
+            var newText = prompt("Editar comentario:", btn.dataset.text);
+            if (!newText || newText === btn.dataset.text) return;
+            btn.textContent = "...";
+            chrome.runtime.sendMessage({ type: "notion-update", pageId: btn.dataset.id, body: { properties: { "Comentario": { rich_text: [{ text: { content: newText } }] } } } }, function() {
+              chrome.runtime.sendMessage({ type: "sync-notion" }, function() {
+                setTimeout(loadList, 1500);
+              });
+            });
+          });
+        });
+
+        // Delete handlers
+        listDiv.querySelectorAll(".sp-sug-del").forEach(function(btn) {
+          btn.addEventListener("click", function() {
+            if (!confirm("¿Eliminar este comentario sugerido?")) return;
+            btn.textContent = "...";
+            chrome.runtime.sendMessage({ type: "notion-delete", pageId: btn.dataset.id }, function() {
+              chrome.runtime.sendMessage({ type: "sync-notion" }, function() {
+                setTimeout(loadList, 1500);
+              });
+            });
+          });
+        });
+      });
+    }
+
+    loadList();
+
+    // Add new comment
+    document.getElementById("sp-sug-add").addEventListener("click", function() {
+      var input = document.getElementById("sp-sug-new-input");
+      var text = input.value.trim();
+      if (!text) return;
+      if (!groupPageId) { showErrorToast("No se pudo determinar el grupo"); return; }
+      var addBtn = document.getElementById("sp-sug-add");
+      addBtn.disabled = true;
+      addBtn.textContent = "...";
+      chrome.runtime.sendMessage({ type: "notion-create", body: {
+        parent: { database_id: "36920e0684b980a19fdbd27302a65feb" },
+        properties: {
+          "Nombre": { title: [{ text: { content: "" } }] },
+          "Comentario": { rich_text: [{ text: { content: text } }] },
+          "MSP_cat_Grupos": { relation: [{ id: groupPageId }] }
+        }
+      }}, function() {
+        input.value = "";
+        addBtn.disabled = false;
+        addBtn.textContent = "+ Agregar";
+        chrome.runtime.sendMessage({ type: "sync-notion" }, function() {
+          setTimeout(loadList, 1500);
+        });
+      });
+    });
+  }
+
   // --- Report Excel ---
   const REPORT_BTN_ID = "sp-report-btn";
   var reportGenerating = false;
@@ -4812,7 +4936,8 @@
               '<label style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-attach-input" type="file" multiple style="display:none;"></label>' +
               '<button id="sp-qd-comment-send" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">Enviar</button>' +
             '</div>' +
-            '<div id="sp-qd-attach-list" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;"></div>'
+            '<div id="sp-qd-attach-list" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;"></div>' +
+            '<div id="sp-qd-suggested" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;"></div>'
             ) : '') +
           '</div>' +
         '</div></div>';
@@ -4958,6 +5083,26 @@
         commentInputEl.addEventListener("keydown", function(e) {
           if (e.key === "Enter") document.getElementById("sp-qd-comment-send").click();
         });
+        // Load suggested comments
+        var suggestedDiv = document.getElementById("sp-qd-suggested");
+        if (suggestedDiv) {
+          chrome.storage.local.get("suggestedComments", function(r) {
+            var comments = r.suggestedComments || {};
+            var groupId = getTeamConfig().resolutionGroupId;
+            var groupComments = comments[groupId] || [];
+            groupComments.forEach(function(c) {
+              var chip = document.createElement("button");
+              chip.textContent = c.text.substring(0, 40) + (c.text.length > 40 ? "..." : "");
+              chip.title = c.text;
+              chip.style.cssText = "padding:3px 8px;font-size:10px;border:1px solid #90CAF9;border-radius:12px;background:#E3F2FD;color:#1565C0;cursor:pointer;white-space:nowrap;";
+              chip.addEventListener("click", function() {
+                commentInputEl.value = c.text;
+                commentInputEl.focus();
+              });
+              suggestedDiv.appendChild(chip);
+            });
+          });
+        }
       }
 
       // Add attachment to existing comment
@@ -5450,6 +5595,7 @@
     injectSearchButton();
     injectDashboardButton();
     injectWaterButton();
+    injectSuggestedCommentsButton();
     injectReportButton();
     injectMondayStatsButton();
     injectQuickSearch();
