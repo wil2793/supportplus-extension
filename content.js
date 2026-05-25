@@ -3944,7 +3944,7 @@
         if (document.getElementById(WATER_BTN_ID)) return;
         var btn = document.createElement("button");
         btn.id = WATER_BTN_ID;
-        btn.textContent = "💧 Agua";
+        btn.textContent = "🏠 DBA Info";
         btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#0288D1;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
         btn.addEventListener("click", showWaterModal);
         dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
@@ -3993,7 +3993,7 @@
       }).join("");
       overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:600px;width:95%;font-family:system-ui;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-          '<h3 style="margin:0;font-size:16px;">💧 Rol de Agua</h3>' +
+          '<h3 style="margin:0;font-size:16px;">🏠 DBA Info</h3>' +
           '<button id="sp-water-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
         '</div>' +
         '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
