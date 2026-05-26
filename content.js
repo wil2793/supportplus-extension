@@ -4931,7 +4931,10 @@
     return btn;
   }
 
+  var _qdCommentsInterval = null;
   async function showQuickDetailModal(ticketId) {
+    // Clear any previous interval from a prior modal
+    if (_qdCommentsInterval) { clearInterval(_qdCommentsInterval); _qdCommentsInterval = null; }
     var existing = document.getElementById("sp-quick-detail-modal");
     if (existing) existing.remove();
     // Refresh panel when modal reloads (after actions)
@@ -5136,12 +5139,12 @@
         '</div></div>';
       document.body.appendChild(overlay);
 
-      document.getElementById("sp-qd-close").addEventListener("click", function() { clearInterval(commentsRefreshInterval); overlay.remove(); });
-      overlay.addEventListener("click", function(e) { if (e.target === overlay) { clearInterval(commentsRefreshInterval); overlay.remove(); } });
+      document.getElementById("sp-qd-close").addEventListener("click", function() { if (_qdCommentsInterval) { clearInterval(_qdCommentsInterval); _qdCommentsInterval = null; } overlay.remove(); });
+      overlay.addEventListener("click", function(e) { if (e.target === overlay) { if (_qdCommentsInterval) { clearInterval(_qdCommentsInterval); _qdCommentsInterval = null; } overlay.remove(); } });
 
       // Auto-refresh comments every 30s
-      var commentsRefreshInterval = setInterval(function() {
-        if (!document.getElementById("sp-quick-detail-modal")) { clearInterval(commentsRefreshInterval); return; }
+      _qdCommentsInterval = setInterval(function() {
+        if (!document.getElementById("sp-quick-detail-modal")) { clearInterval(_qdCommentsInterval); _qdCommentsInterval = null; return; }
         fetch(SP_API + "/" + ticketId, { headers: { accept: "application/json", authorization: "Bearer " + spToken } })
           .then(function(r) { return r.json(); })
           .then(function(json) {
