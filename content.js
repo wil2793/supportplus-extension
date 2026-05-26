@@ -4299,7 +4299,7 @@
             if (userPageId) updateProps["UsuarioModificación"] = { relation: [{ id: userPageId }] };
             chrome.runtime.sendMessage({ type: "notion-update", pageId: btn.dataset.id, body: { properties: updateProps } }, function() {
               btn.textContent = "✅";
-              chrome.runtime.sendMessage({ type: "sync-notion" }, function() { setTimeout(loadList, 1000); });
+              chrome.runtime.sendMessage({ type: "sync-notion" }, function() { loadList(); });
             });
           });
         });
@@ -4312,17 +4312,17 @@
             var deleteProps = { "Activo": { checkbox: false }, "FechaEliminacion": { date: { start: today } } };
             if (userPageId) deleteProps["UsuarioEliminacion"] = { relation: [{ id: userPageId }] };
             chrome.runtime.sendMessage({ type: "notion-update", pageId: btn.dataset.id, body: { properties: deleteProps } }, function() {
-              // Remove from UI immediately
               var row = btn.closest("[data-id]");
               if (row) row.remove();
-              chrome.runtime.sendMessage({ type: "sync-notion" }, function() { setTimeout(loadList, 1000); });
+              chrome.runtime.sendMessage({ type: "sync-notion" }, function() { loadList(); });
             });
           });
         });
       });
     }
 
-    loadList();
+    // Sync first, then load list
+    chrome.runtime.sendMessage({ type: "sync-notion" }, function() { loadList(); });
 
     // Add new comment
     document.getElementById("sp-sug-add").addEventListener("click", function() {
@@ -4349,7 +4349,7 @@
         addBtn.disabled = false;
         addBtn.textContent = "+ Agregar";
         showSuccessToast("Comentario agregado");
-        chrome.runtime.sendMessage({ type: "sync-notion" }, function() { setTimeout(loadList, 1000); });
+        chrome.runtime.sendMessage({ type: "sync-notion" }, function() { loadList(); });
       });
     });
   }
