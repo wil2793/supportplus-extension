@@ -4047,7 +4047,7 @@
     var btn = document.createElement("button");
     btn.id = SUGGESTED_BTN_ID;
     btn.textContent = "💬 Comentarios";
-    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#7B1FA2;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#00897B;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
     btn.addEventListener("click", showSuggestedCommentsModal);
     dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
   }
@@ -4313,7 +4313,7 @@
         var btn = document.createElement("button");
         btn.id = MONDAY_STATS_BTN_ID;
         btn.textContent = "📈 Monday Stats";
-        btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#6A1B9A;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+        btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#1565C0;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
         btn.addEventListener("click", handleMondayStats);
         reportBtn.parentElement.insertBefore(btn, reportBtn.nextSibling);
       });
@@ -4388,7 +4388,7 @@
     }
 
     btn.textContent = "📈 Monday Stats";
-    btn.style.background = "#6A1B9A";
+    btn.style.background = "#1565C0";
     btn.disabled = false;
   }
 
