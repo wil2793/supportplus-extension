@@ -3933,28 +3933,36 @@
 
   // --- Water Role Button ---
   const WATER_BTN_ID = "sp-water-btn";
+  const SUBGRUPO_DB = "36c20e0684b9800db6afe60707a87df7";
   function injectWaterButton() {
     if (document.getElementById(WATER_BTN_ID)) return;
     var dashBtn = document.getElementById(DASHBOARD_BTN_ID);
     if (!dashBtn) return;
-    // Only show if user's email is in the water table
+    // Only show if user is in at least one sub-group from MSP_SubGrupo
     chrome.storage.local.get("userEmail", function(r) {
       var email = (r.userEmail || "").toLowerCase();
       if (!email) return;
-      chrome.runtime.sendMessage({ type: "notion-query", dbId: "36420e0684b98054a2e6e6e84809a233", body: {} }, function(response) {
-        if (!response || !response.success || !response.data.results) return;
-        var found = response.data.results.some(function(page) {
-          var correo = (page.properties.Correo?.title?.[0]?.plain_text || page.properties.Correo?.rich_text?.[0]?.plain_text || "").toLowerCase();
-          return correo === email;
+      // Get sub-groups and check if user's pageId is in any of them
+      chrome.runtime.sendMessage({ type: "notion-query", dbId: SUBGRUPO_DB, body: {} }, function(sgResp) {
+        if (!sgResp || !sgResp.success || !sgResp.data.results) return;
+        // Get user's pageId from MSP_Usuarios
+        chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b98051a190e51d38d97288", body: { filter: { property: "Correo", rich_text: { equals: email } } } }, function(uResp) {
+          if (!uResp || !uResp.success || !uResp.data.results || !uResp.data.results[0]) return;
+          var userPageId = uResp.data.results[0].id;
+          // Check if user is in any sub-group
+          var isInAny = sgResp.data.results.some(function(sg) {
+            var members = sg.properties.MSP_Usuarios?.relation || [];
+            return members.some(function(m) { return m.id === userPageId; });
+          });
+          if (!isInAny) return;
+          if (document.getElementById(WATER_BTN_ID)) return;
+          var btn = document.createElement("button");
+          btn.id = WATER_BTN_ID;
+          btn.textContent = "🏠 DBA Info";
+          btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#0288D1;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+          btn.addEventListener("click", showWaterModal);
+          dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
         });
-        if (!found) return;
-        if (document.getElementById(WATER_BTN_ID)) return;
-        var btn = document.createElement("button");
-        btn.id = WATER_BTN_ID;
-        btn.textContent = "🏠 DBA Info";
-        btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#0288D1;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-        btn.addEventListener("click", showWaterModal);
-        dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
       });
     });
   }
@@ -3970,17 +3978,17 @@
     var today = new Date();
     var todayStr = today.getFullYear() + "-" + String(today.getMonth()+1).padStart(2,"0") + "-" + String(today.getDate()).padStart(2,"0");
 
-    // Get products, today's log, and users in parallel
-    var products = [], todayLog = [], users = [];
-    var pending = 3;
+    var products = [], todayLog = [], subGroups = [], allUserPages = {};
+    var pending = 4;
 
     function onReady() {
       pending--;
       if (pending > 0) return;
       var lt = document.getElementById("sp-loading-toast"); if (lt) lt.remove();
-      renderDBAInfoModal(products, todayLog, users, todayStr, PRODUCTS_DB, LOG_DB, USERS_DB);
+      renderDBAInfoModal(products, todayLog, subGroups, allUserPages, todayStr, PRODUCTS_DB, LOG_DB);
     }
 
+    // 1. Get products
     chrome.runtime.sendMessage({ type: "notion-query", dbId: PRODUCTS_DB, body: {} }, function(resp) {
       if (resp && resp.success && resp.data.results) {
         products = resp.data.results.map(function(p) {
@@ -3990,6 +3998,7 @@
       onReady();
     });
 
+    // 2. Get today's log
     chrome.runtime.sendMessage({ type: "notion-query", dbId: LOG_DB, body: { filter: { property: "FechaCreacion", date: { equals: todayStr } } } }, function(resp) {
       if (resp && resp.success && resp.data.results) {
         todayLog = resp.data.results.map(function(p) {
@@ -4004,10 +4013,24 @@
       onReady();
     });
 
-    // Get users from the agua/DBA table (for names and cumpleaños)
-    chrome.runtime.sendMessage({ type: "notion-query", dbId: "36420e0684b98054a2e6e6e84809a233", body: { sorts: [{ property: "Orden", direction: "ascending" }] } }, function(resp) {
+    // 3. Get sub-groups from MSP_SubGrupo
+    chrome.runtime.sendMessage({ type: "notion-query", dbId: SUBGRUPO_DB, body: {} }, function(resp) {
       if (resp && resp.success && resp.data.results) {
-        users = resp.data.results.map(function(page) {
+        subGroups = resp.data.results.map(function(sg) {
+          return {
+            id: sg.id,
+            name: sg.properties.Nombre?.title?.[0]?.plain_text || "",
+            members: (sg.properties.MSP_Usuarios?.relation || []).map(function(m) { return m.id; })
+          };
+        });
+      }
+      onReady();
+    });
+
+    // 4. Get all users that are in any sub-group (we'll fetch all and filter)
+    chrome.runtime.sendMessage({ type: "notion-query", dbId: USERS_DB, body: {} }, function(resp) {
+      if (resp && resp.success && resp.data.results) {
+        resp.data.results.forEach(function(page) {
           var p = page.properties;
           var cumpleDate = p["Cumpleaños"]?.date?.start || "";
           var cumpleDisplay = "", cumpleColor = "";
@@ -4024,11 +4047,10 @@
             else if (diffDays <= 30) cumpleColor = "#F9A825";
             else cumpleColor = "#2E7D32";
           }
-          return {
+          allUserPages[page.id] = {
             id: page.id,
-            nombre: p.Nombre?.rich_text?.[0]?.plain_text || "",
-            correo: (p.Correo?.title?.[0]?.plain_text || "").toLowerCase(),
-            orden: p.Orden?.number || 0,
+            nombre: p.Nombre?.title?.[0]?.plain_text || "",
+            correo: (p.Correo?.rich_text?.[0]?.plain_text || p.Correo?.title?.[0]?.plain_text || "").toLowerCase(),
             cumple: cumpleDisplay,
             cumpleColor: cumpleColor
           };
@@ -4038,106 +4060,133 @@
     });
   }
 
-  function renderDBAInfoModal(products, todayLog, users, todayStr, PRODUCTS_DB, LOG_DB, USERS_DB) {
-    // Get current user's Notion page ID
-    var currentEmail = "";
-    var currentUserNotionId = "";
-    try { currentEmail = sessionUserName ? "" : ""; } catch(e) {}
+  function renderDBAInfoModal(products, todayLog, subGroups, allUserPages, todayStr, PRODUCTS_DB, LOG_DB) {
     chrome.storage.local.get("userEmail", function(stored) {
-      currentEmail = (stored.userEmail || "").toLowerCase();
-      var currentUser = users.find(function(u) { return u.correo === currentEmail; });
-      if (currentUser) currentUserNotionId = currentUser.id;
+      var currentEmail = (stored.userEmail || "").toLowerCase();
 
-      // Find user's Notion ID from MSP_Usuarios
-      chrome.runtime.sendMessage({ type: "notion-query", dbId: USERS_DB, body: { filter: { property: "Correo", rich_text: { equals: currentEmail } } } }, function(resp) {
-        var userPageId = "";
-        if (resp && resp.success && resp.data.results && resp.data.results[0]) {
-          userPageId = resp.data.results[0].id;
-        }
+      // Find current user's pageId
+      var userPageId = "";
+      Object.keys(allUserPages).forEach(function(pid) {
+        if (allUserPages[pid].correo === currentEmail) userPageId = pid;
+      });
 
-        // Build table
-        var overlay = document.createElement("div");
-        overlay.id = "sp-water-modal";
-        overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+      // Determine which sub-groups the current user belongs to
+      var sgAgua = subGroups.find(function(sg) { return sg.name.toLowerCase().includes("agua"); });
+      var sgChesco = subGroups.find(function(sg) { return sg.name.toLowerCase().includes("chesco"); });
+      var sgCumple = subGroups.find(function(sg) { return sg.name.toLowerCase().includes("cumple"); });
 
-        // Sort products: Garrafón 1, 2, 3, then others
-        products.sort(function(a, b) {
-          var order = ["Garrafón 1", "Garrafón 2", "Garrafón 3", "Chesco"];
-          var ia = order.indexOf(a.name); if (ia === -1) ia = 99;
-          var ib = order.indexOf(b.name); if (ib === -1) ib = 99;
-          return ia - ib;
-        });
+      var userInAgua = sgAgua && sgAgua.members.includes(userPageId);
+      var userInChesco = sgChesco && sgChesco.members.includes(userPageId);
+      var userInCumple = sgCumple && sgCumple.members.includes(userPageId);
 
-        var productHeaders = products.map(function(p) { return '<th style="padding:6px 10px;text-align:center;">' + p.name + '</th>'; }).join("");
+      // Determine visible columns based on user's sub-groups
+      var showGarrafones = userInAgua;
+      var showChesco = userInChesco;
+      var showCumple = userInCumple;
 
-        var tableRows = users.map(function(u) {
-          var cells = products.map(function(prod) {
-            // Check if this user+product has a log entry today
-            var hasLog = todayLog.some(function(l) { return l.productId === prod.id && l.name.includes(u.nombre.split(" ")[0]); });
-            var isMe = u.correo === currentEmail;
-            if (isMe && !hasLog) {
-              return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;"><input type="checkbox" class="sp-dba-check" data-product-id="' + prod.id + '" data-product-name="' + prod.name + '" data-user-name="' + u.nombre + '" style="cursor:pointer;width:16px;height:16px;"></td>';
-            } else {
-              return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (hasLog ? '✅' : '—') + '</td>';
-            }
-          }).join("");
-          return '<tr>' +
-            '<td style="padding:6px 10px;border-bottom:1px solid #eee;">' + u.orden + '</td>' +
-            '<td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:600;">' + u.nombre + '</td>' +
-            cells +
-            '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;color:' + (u.cumpleColor || '#333') + ';font-weight:600;">' + (u.cumple || '-') + '</td>' +
-          '</tr>';
+      // Filter products based on visible columns
+      var visibleProducts = [];
+      products.sort(function(a, b) {
+        var order = ["Garrafón 1", "Garrafón 2", "Garrafón 3", "Chesco"];
+        var ia = order.indexOf(a.name); if (ia === -1) ia = 99;
+        var ib = order.indexOf(b.name); if (ib === -1) ib = 99;
+        return ia - ib;
+      });
+      products.forEach(function(p) {
+        var pLower = p.name.toLowerCase();
+        if (pLower.includes("garraf") && showGarrafones) visibleProducts.push(p);
+        else if (pLower.includes("chesco") && showChesco) visibleProducts.push(p);
+      });
+
+      // Get all unique members from all sub-groups the user can see
+      var memberIds = {};
+      if (sgAgua && userInAgua) sgAgua.members.forEach(function(id) { memberIds[id] = true; });
+      if (sgChesco && userInChesco) sgChesco.members.forEach(function(id) { memberIds[id] = true; });
+      if (sgCumple && userInCumple) sgCumple.members.forEach(function(id) { memberIds[id] = true; });
+
+      // Build user list from members
+      var users = Object.keys(memberIds).map(function(id) { return allUserPages[id]; }).filter(Boolean);
+      // Sort alphabetically by name
+      users.sort(function(a, b) { return a.nombre.localeCompare(b.nombre); });
+
+      // Build table
+      var overlay = document.createElement("div");
+      overlay.id = "sp-water-modal";
+      overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+
+      var productHeaders = visibleProducts.map(function(p) { return '<th style="padding:6px 10px;text-align:center;">' + p.name + '</th>'; }).join("");
+
+      var tableRows = users.map(function(u, idx) {
+        var cells = visibleProducts.map(function(prod) {
+          var hasLog = todayLog.some(function(l) { return l.productId === prod.id && l.userId === u.id; });
+          var isMe = u.id === userPageId;
+          if (isMe && !hasLog) {
+            return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;"><input type="checkbox" class="sp-dba-check" data-product-id="' + prod.id + '" data-product-name="' + prod.name + '" data-user-name="' + u.nombre + '" style="cursor:pointer;width:16px;height:16px;"></td>';
+          } else {
+            return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (hasLog ? '✅' : '—') + '</td>';
+          }
         }).join("");
 
-        overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:700px;width:95%;max-height:90vh;overflow:auto;font-family:system-ui;">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-            '<h3 style="margin:0;font-size:16px;">🏠 DBA Info <span style="font-size:11px;color:#888;font-weight:400;">(' + todayStr + ')</span></h3>' +
-            '<button id="sp-water-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
-          '</div>' +
-          '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
-            '<thead><tr style="background:#f5f5f5;">' +
-              '<th style="padding:6px 10px;text-align:left;">#</th>' +
-              '<th style="padding:6px 10px;text-align:left;">Nombre</th>' +
-              productHeaders +
-              '<th style="padding:6px 10px;text-align:center;">🎂</th>' +
-            '</tr></thead>' +
-            '<tbody>' + tableRows + '</tbody>' +
-          '</table>' +
-        '</div>';
-        document.body.appendChild(overlay);
-        document.getElementById("sp-water-close").addEventListener("click", function() { overlay.remove(); });
-        overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+        var cumpleCell = showCumple ? '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;color:' + (u.cumpleColor || '#333') + ';font-weight:600;">' + (u.cumple || '-') + '</td>' : '';
 
-        // Handle check clicks
-        overlay.querySelectorAll(".sp-dba-check").forEach(function(cb) {
-          if (cb.checked) return; // Already logged
-          cb.addEventListener("change", function() {
-            if (!cb.checked) return;
-            cb.disabled = true;
-            var productId = cb.dataset.productId;
-            var productName = cb.dataset.productName;
-            var userName = cb.dataset.userName;
-            var nombreConcat = productName + "-" + userName.split(" ")[0] + "_" + todayStr.replace(/-/g, "");
+        return '<tr>' +
+          '<td style="padding:6px 10px;border-bottom:1px solid #eee;">' + (idx + 1) + '</td>' +
+          '<td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:600;">' + u.nombre + '</td>' +
+          cells +
+          cumpleCell +
+        '</tr>';
+      }).join("");
 
-            var createProps = {
-              "Nombre": { title: [{ text: { content: nombreConcat } }] },
-              "DBA_cat_Productos": { relation: [{ id: productId }] },
-              "FechaCreacion": { date: { start: todayStr } }
-            };
-            if (userPageId) createProps["MSP_Usuarios"] = { relation: [{ id: userPageId }] };
+      var cumpleHeader = showCumple ? '<th style="padding:6px 10px;text-align:center;">🎂</th>' : '';
 
-            chrome.runtime.sendMessage({ type: "notion-create", body: {
-              parent: { database_id: LOG_DB },
-              properties: createProps
-            }}, function(resp) {
-              if (resp && resp.success) {
-                showSuccessToast("✅ " + productName + " registrado");
-              } else {
-                showErrorToast("Error al registrar");
-                cb.checked = false;
-                cb.disabled = false;
-              }
-            });
+      overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:700px;width:95%;max-height:90vh;overflow:auto;font-family:system-ui;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+          '<h3 style="margin:0;font-size:16px;">🏠 DBA Info <span style="font-size:11px;color:#888;font-weight:400;">(' + todayStr + ')</span></h3>' +
+          '<button id="sp-water-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
+        '</div>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+          '<thead><tr style="background:#f5f5f5;">' +
+            '<th style="padding:6px 10px;text-align:left;">#</th>' +
+            '<th style="padding:6px 10px;text-align:left;">Nombre</th>' +
+            productHeaders +
+            cumpleHeader +
+          '</tr></thead>' +
+          '<tbody>' + tableRows + '</tbody>' +
+        '</table>' +
+      '</div>';
+      document.body.appendChild(overlay);
+      document.getElementById("sp-water-close").addEventListener("click", function() { overlay.remove(); });
+      overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+      // Handle check clicks
+      overlay.querySelectorAll(".sp-dba-check").forEach(function(cb) {
+        cb.addEventListener("change", function() {
+          if (!cb.checked) return;
+          cb.disabled = true;
+          var productId = cb.dataset.productId;
+          var productName = cb.dataset.productName;
+          var userName = cb.dataset.userName;
+          var nombreConcat = productName + "-" + userName.split(" ")[0] + "_" + todayStr.replace(/-/g, "");
+
+          var createProps = {
+            "Nombre": { title: [{ text: { content: nombreConcat } }] },
+            "DBA_cat_Productos": { relation: [{ id: productId }] },
+            "FechaCreacion": { date: { start: todayStr } }
+          };
+          if (userPageId) createProps["MSP_Usuarios"] = { relation: [{ id: userPageId }] };
+
+          chrome.runtime.sendMessage({ type: "notion-create", body: {
+            parent: { database_id: LOG_DB },
+            properties: createProps
+          }}, function(resp) {
+            if (resp && resp.success) {
+              cb.parentElement.innerHTML = '✅';
+              showSuccessToast("✅ " + productName + " registrado");
+            } else {
+              showErrorToast("Error al registrar");
+              cb.checked = false;
+              cb.disabled = false;
+            }
           });
         });
       });
