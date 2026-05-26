@@ -915,11 +915,11 @@
   }
 
   function getToken() { return localStorage.getItem("token"); }
-  const MONDAY_TOKEN_HARDCODED = atob("ZXlKaGJHY2lPaUpJVXpJMU5pSjkuZXlKMGFXUWlPall6TlRrek9URTFNeXdpWVdGcElqb3hNU3dpZFdsa0lqbzVNRGsxTkRnMU5Dd2lhV0ZrSWpvaU1qQXlOaTB3TXkweU1GUXlNem96TVRveU9TNHdNREJhSWl3aWNHVnlJam9pYldVNmQzSnBkR1VpTENKaFkzUnBaQ0k2TWpjNE9ETTNPRElzSW5KbmJpSTZJblZ6WlRFaWZRLlNlVjhGbFBrcmFqY3VMOFRraVZtSEFnLS1mWU92emRrTGxRMmx0WG1WWXM=");
   function getMondayToken() {
-    return Promise.resolve(MONDAY_TOKEN_HARDCODED);
+    return new Promise(function(resolve) {
+      chrome.storage.local.get("mondayToken", function(r) { resolve(r.mondayToken || ""); });
+    });
   }
-
   function getMondayBoardId() {
     return new Promise((r) => {
       chrome.storage.local.get("mondayBoardId", ({ mondayBoardId }) => r(mondayBoardId));
@@ -3659,7 +3659,8 @@
       // Load boards
       var allBoards = [];
       document.getElementById("sp-cfg-load-boards").addEventListener("click", async function() {
-        var token = MONDAY_TOKEN_HARDCODED;
+        var token = await getMondayToken();
+        if (!token) { document.getElementById("sp-cfg-board-status").textContent = "⚠️ Token de Monday no configurado en Notion"; return; }
         document.getElementById("sp-cfg-board-status").textContent = "Cargando...";
         try {
           var res = await fetch("https://api.monday.com/v2", {
@@ -3700,8 +3701,8 @@
       });
 
       // Save
-      document.getElementById("sp-cfg-save").addEventListener("click", function() {
-        var token = MONDAY_TOKEN_HARDCODED;
+      document.getElementById("sp-cfg-save").addEventListener("click", async function() {
+        var token = await getMondayToken();
         var boardId = document.getElementById("sp-cfg-board-id").value;
         var boardName = document.getElementById("sp-cfg-board-search").value.trim();
         var area = document.getElementById("sp-cfg-area").value;
