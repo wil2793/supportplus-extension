@@ -5064,8 +5064,43 @@
         '</div></div>';
       document.body.appendChild(overlay);
 
-      document.getElementById("sp-qd-close").addEventListener("click", function() { overlay.remove(); });
-      overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+      document.getElementById("sp-qd-close").addEventListener("click", function() { clearInterval(commentsRefreshInterval); overlay.remove(); });
+      overlay.addEventListener("click", function(e) { if (e.target === overlay) { clearInterval(commentsRefreshInterval); overlay.remove(); } });
+
+      // Auto-refresh comments every 30s
+      var commentsRefreshInterval = setInterval(function() {
+        if (!document.getElementById("sp-quick-detail-modal")) { clearInterval(commentsRefreshInterval); return; }
+        fetch(SP_API + "/" + ticketId, { headers: { accept: "application/json", authorization: "Bearer " + spToken } })
+          .then(function(r) { return r.json(); })
+          .then(function(json) {
+            var ticket = json.data || json;
+            var newComments = ticket.ticketComments || [];
+            var list = document.getElementById("sp-qd-comments-list");
+            if (!list) return;
+            var currentCount = list.querySelectorAll("[style*='border-left']").length;
+            if (newComments.length === currentCount) return; // No changes
+            // Re-render comments
+            var html = newComments.map(function(c) {
+              var cDate = c.createdAt ? c.createdAt.replace("T", " ").substring(0, 16) : "";
+              var cContent = (c.content || "").replace(/<script[^>]*>.*?<\/script>/gi, "");
+              var myName = getLoggedUserName();
+              var isMyComment = c.fullName === myName;
+              var cAttachHTML = "";
+              if (c.attachments && c.attachments.length) {
+                cAttachHTML = '<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;">';
+                c.attachments.forEach(function(a) {
+                  cAttachHTML += '<button class="sp-qd-download" data-file-id="' + a.id + '" data-file-name="' + (a.name || "archivo").replace(/"/g, '&quot;') + '" style="padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:3px;font-size:10px;cursor:pointer;color:#1976D2;">📎 ' + (a.name || "archivo") + '</button>';
+                });
+                cAttachHTML += '</div>';
+              }
+              var addAttachBtn = isMyComment ? ' <label class="sp-qd-add-attach" data-comment-id="' + c.id + '" style="cursor:pointer;font-size:12px;opacity:0.6;margin-left:4px;" title="Adjuntar evidencia">📎<input type="file" multiple style="display:none;"></label>' : '';
+              return '<div style="padding:5px 8px;background:#f9f9f9;border-left:3px solid #1976D2;border-radius:4px;font-size:11px;margin-bottom:4px;">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;"><b>' + (c.fullName || "") + '</b><span style="color:#888;font-size:10px;">' + cDate + addAttachBtn + '</span></div>' +
+                '<div style="color:#555;margin-top:2px;">' + cContent + '</div>' + cAttachHTML + '</div>';
+            }).join("");
+            list.innerHTML = html || '<div style="color:#aaa;font-size:11px;padding:4px;">Sin comentarios</div>';
+          }).catch(function() {});
+      }, 30000);
 
       // Move action buttons to header
       var actionsContainer = document.getElementById("sp-qd-actions");
