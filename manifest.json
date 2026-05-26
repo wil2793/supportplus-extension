@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SupportPlus Ticket Exporter",
-  "version": "4.3.4",
+  "version": "4.3.5",
   "description": "SupportPlus → Monday.com: Migra tickets con un click",
   "permissions": ["activeTab", "scripting", "storage"],
   "background": {
