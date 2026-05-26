@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "SupportPlus Ticket Exporter",
-  "version": "4.3.7",
-  "description": "SupportPlus → Monday.com: Migra tickets con un click",
+  "version": "4.3.8",
+  "description": "SupportPlus → Monday.com: Migra tickets con un click. Desarrollado por el equipo de Base de Datos (DBA).",
   "permissions": ["activeTab", "scripting", "storage"],
   "background": {
     "service_worker": "background.js"
