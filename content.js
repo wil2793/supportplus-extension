@@ -5324,6 +5324,24 @@
         commentInputEl.addEventListener("keydown", function(e) {
           if (e.key === "Enter") document.getElementById("sp-qd-comment-send").click();
         });
+        // Paste image from clipboard
+        commentInputEl.addEventListener("paste", function(e) {
+          var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+          for (var i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf("image") !== -1) {
+              var file = items[i].getAsFile();
+              if (file) {
+                var timestamp = new Date().getTime();
+                var namedFile = new File([file], "clipboard_" + timestamp + ".png", { type: file.type });
+                pendingFiles.push(namedFile);
+                renderPendingFiles();
+                showSuccessToast("📋 Imagen pegada desde portapapeles");
+              }
+              e.preventDefault();
+              break;
+            }
+          }
+        });
         // Load suggested comments
         var suggestedDiv = document.getElementById("sp-qd-suggested");
         if (suggestedDiv) {
