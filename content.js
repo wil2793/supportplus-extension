@@ -3938,23 +3938,28 @@
     if (document.getElementById(WATER_BTN_ID)) return;
     var dashBtn = document.getElementById(DASHBOARD_BTN_ID);
     if (!dashBtn) return;
-    // Only show if user is in at least one sub-group from MSP_SubGrupo
+    // Only show if user is in at least one sub-group
     chrome.storage.local.get("userEmail", function(r) {
       var email = (r.userEmail || "").toLowerCase();
       if (!email) return;
-      // Get sub-groups and check if user's pageId is in any of them
+      // Get sub-groups
       chrome.runtime.sendMessage({ type: "notion-query", dbId: SUBGRUPO_DB, body: {} }, function(sgResp) {
         if (!sgResp || !sgResp.success || !sgResp.data.results) return;
-        // Get user's pageId from MSP_Usuarios
-        chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b98051a190e51d38d97288", body: { filter: { property: "Correo", rich_text: { equals: email } } } }, function(uResp) {
-          if (!uResp || !uResp.success || !uResp.data.results || !uResp.data.results[0]) return;
-          var userPageId = uResp.data.results[0].id;
-          // Check if user is in any sub-group
-          var isInAny = sgResp.data.results.some(function(sg) {
-            var members = sg.properties.MSP_Usuarios?.relation || [];
-            return members.some(function(m) { return m.id === userPageId; });
+        // Collect all unique member IDs
+        var allMemberIds = {};
+        sgResp.data.results.forEach(function(sg) {
+          (sg.properties.MSP_Usuarios?.relation || []).forEach(function(m) { allMemberIds[m.id] = true; });
+        });
+        var uniqueIds = Object.keys(allMemberIds);
+        if (uniqueIds.length === 0) return;
+        // Fetch all members to check email
+        chrome.runtime.sendMessage({ type: "notion-pages-batch", pageIds: uniqueIds }, function(resp) {
+          if (!resp || !resp.success) return;
+          var found = resp.data.some(function(page) {
+            var correo = (page.properties.Correo?.rich_text?.[0]?.plain_text || page.properties.Correo?.title?.[0]?.plain_text || "").toLowerCase();
+            return correo === email;
           });
-          if (!isInAny) return;
+          if (!found) return;
           if (document.getElementById(WATER_BTN_ID)) return;
           var btn = document.createElement("button");
           btn.id = WATER_BTN_ID;
@@ -3974,18 +3979,61 @@
 
     var PRODUCTS_DB = "36c20e0684b980b7984bc6c5751a1057";
     var LOG_DB = "36c20e0684b98030b292c088101e8184";
-    var USERS_DB = "36620e0684b98051a190e51d38d97288";
     var today = new Date();
     var todayStr = today.getFullYear() + "-" + String(today.getMonth()+1).padStart(2,"0") + "-" + String(today.getDate()).padStart(2,"0");
 
-    var products = [], todayLog = [], subGroups = [], allUserPages = {};
-    var pending = 4;
+    var products = [], todayLog = [], subGroups = [];
+    var pending = 3;
 
     function onReady() {
       pending--;
       if (pending > 0) return;
-      var lt = document.getElementById("sp-loading-toast"); if (lt) lt.remove();
-      renderDBAInfoModal(products, todayLog, subGroups, allUserPages, todayStr, PRODUCTS_DB, LOG_DB);
+
+      // Collect all unique member pageIds from sub-groups
+      var memberIds = {};
+      subGroups.forEach(function(sg) { sg.members.forEach(function(id) { memberIds[id] = true; }); });
+      var uniqueIds = Object.keys(memberIds);
+
+      if (uniqueIds.length === 0) {
+        var lt = document.getElementById("sp-loading-toast"); if (lt) lt.remove();
+        showErrorToast("No hay miembros en los sub-grupos");
+        return;
+      }
+
+      // Fetch member details in batch
+      chrome.runtime.sendMessage({ type: "notion-pages-batch", pageIds: uniqueIds }, function(resp) {
+        var lt = document.getElementById("sp-loading-toast"); if (lt) lt.remove();
+        if (!resp || !resp.success) { showErrorToast("Error al cargar miembros"); return; }
+
+        var allUserPages = {};
+        resp.data.forEach(function(page) {
+          var p = page.properties;
+          var cumpleDate = p["Cumpleaños"]?.date?.start || "";
+          var cumpleDisplay = "", cumpleColor = "";
+          if (cumpleDate) {
+            var parts = cumpleDate.split("-");
+            var day = parseInt(parts[2]);
+            var month = parseInt(parts[1]) - 1;
+            var meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+            cumpleDisplay = day + " de " + meses[month];
+            var now = new Date();
+            var thisYearBday = new Date(now.getFullYear(), month, day);
+            var diffDays = Math.floor((thisYearBday - now) / (1000*60*60*24));
+            if (diffDays < 0) cumpleColor = "#D32F2F";
+            else if (diffDays <= 30) cumpleColor = "#F9A825";
+            else cumpleColor = "#2E7D32";
+          }
+          allUserPages[page.id] = {
+            id: page.id,
+            nombre: p.Nombre?.title?.[0]?.plain_text || "",
+            correo: (p.Correo?.rich_text?.[0]?.plain_text || p.Correo?.title?.[0]?.plain_text || "").toLowerCase(),
+            cumple: cumpleDisplay,
+            cumpleColor: cumpleColor
+          };
+        });
+
+        renderDBAInfoModal(products, todayLog, subGroups, allUserPages, todayStr, PRODUCTS_DB, LOG_DB);
+      });
     }
 
     // 1. Get products
@@ -4013,7 +4061,7 @@
       onReady();
     });
 
-    // 3. Get sub-groups from MSP_SubGrupo
+    // 3. Get sub-groups
     chrome.runtime.sendMessage({ type: "notion-query", dbId: SUBGRUPO_DB, body: {} }, function(resp) {
       if (resp && resp.success && resp.data.results) {
         subGroups = resp.data.results.map(function(sg) {
@@ -4026,45 +4074,13 @@
       }
       onReady();
     });
-
-    // 4. Get all users that are in any sub-group (we'll fetch all and filter)
-    chrome.runtime.sendMessage({ type: "notion-query", dbId: USERS_DB, body: {} }, function(resp) {
-      if (resp && resp.success && resp.data.results) {
-        resp.data.results.forEach(function(page) {
-          var p = page.properties;
-          var cumpleDate = p["Cumpleaños"]?.date?.start || "";
-          var cumpleDisplay = "", cumpleColor = "";
-          if (cumpleDate) {
-            var parts = cumpleDate.split("-");
-            var day = parseInt(parts[2]);
-            var month = parseInt(parts[1]) - 1;
-            var meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
-            cumpleDisplay = day + " de " + meses[month];
-            var now = new Date();
-            var thisYearBday = new Date(now.getFullYear(), month, day);
-            var diffDays = Math.floor((thisYearBday - now) / (1000*60*60*24));
-            if (diffDays < 0) cumpleColor = "#D32F2F";
-            else if (diffDays <= 30) cumpleColor = "#F9A825";
-            else cumpleColor = "#2E7D32";
-          }
-          allUserPages[page.id] = {
-            id: page.id,
-            nombre: p.Nombre?.title?.[0]?.plain_text || "",
-            correo: (p.Correo?.rich_text?.[0]?.plain_text || p.Correo?.title?.[0]?.plain_text || "").toLowerCase(),
-            cumple: cumpleDisplay,
-            cumpleColor: cumpleColor
-          };
-        });
-      }
-      onReady();
-    });
   }
 
   function renderDBAInfoModal(products, todayLog, subGroups, allUserPages, todayStr, PRODUCTS_DB, LOG_DB) {
     chrome.storage.local.get("userEmail", function(stored) {
       var currentEmail = (stored.userEmail || "").toLowerCase();
 
-      // Find current user's pageId
+      // Find current user's pageId from the batch data
       var userPageId = "";
       Object.keys(allUserPages).forEach(function(pid) {
         if (allUserPages[pid].correo === currentEmail) userPageId = pid;
@@ -4106,7 +4122,6 @@
 
       // Build user list from members
       var users = Object.keys(memberIds).map(function(id) { return allUserPages[id]; }).filter(Boolean);
-      // Sort alphabetically by name
       users.sort(function(a, b) { return a.nombre.localeCompare(b.nombre); });
 
       // Build table

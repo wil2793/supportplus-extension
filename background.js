@@ -193,4 +193,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }).then(r => r.json()).then(data => sendResponse({ success: true, data })).catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }
+
+  if (message.type === "notion-page") {
+    fetch(NOTION_API + "/pages/" + message.pageId, {
+      method: "GET",
+      headers: NOTION_HEADERS
+    }).then(r => r.json()).then(data => sendResponse({ success: true, data })).catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (message.type === "notion-pages-batch") {
+    // Fetch multiple pages in parallel
+    Promise.all((message.pageIds || []).map(id =>
+      fetch(NOTION_API + "/pages/" + id, { method: "GET", headers: NOTION_HEADERS }).then(r => r.json())
+    )).then(pages => sendResponse({ success: true, data: pages })).catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
 });
