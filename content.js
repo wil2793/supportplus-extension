@@ -6278,7 +6278,29 @@
   // Re-sync Notion on page focus (detect changes without reload)
   document.addEventListener("visibilitychange", function() {
     if (document.visibilityState === "visible") {
-      try { chrome.runtime.sendMessage({ type: "sync-notion" }); } catch(e) {}
+      try { chrome.runtime.sendMessage({ type: "sync-notion" }, function() {
+        // Refresh suggested comments chips if modal is open
+        var suggestedDiv = document.getElementById("sp-qd-suggested");
+        if (suggestedDiv) {
+          chrome.storage.local.get("suggestedComments", function(r) {
+            var comments = r.suggestedComments || {};
+            var groupId = getTeamConfig().resolutionGroupId;
+            var groupComments = comments[groupId] || [];
+            suggestedDiv.innerHTML = "";
+            var commentInputEl = document.getElementById("sp-qd-comment-input");
+            groupComments.forEach(function(c) {
+              var chip = document.createElement("button");
+              chip.textContent = c.text.substring(0, 40) + (c.text.length > 40 ? "..." : "");
+              chip.title = c.text;
+              chip.style.cssText = "padding:3px 8px;font-size:10px;border:1px solid #90CAF9;border-radius:12px;background:#E3F2FD;color:#1565C0;cursor:pointer;white-space:nowrap;";
+              chip.addEventListener("click", function() {
+                if (commentInputEl) { commentInputEl.value = c.text; commentInputEl.focus(); }
+              });
+              suggestedDiv.appendChild(chip);
+            });
+          });
+        }
+      }); } catch(e) {}
     }
   });
 
