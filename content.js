@@ -4923,7 +4923,7 @@
                   cAttachHTML += '</div>';
                 }
                 var myName = getLoggedUserName();
-                var isMyComment = c.fullName === myName || c.email === (t.ticketInfo?.email || "___");
+                var isMyComment = c.fullName === myName;
                 var addAttachBtn = isMyComment ? ' <label class="sp-qd-add-attach" data-comment-id="' + c.id + '" style="cursor:pointer;font-size:12px;opacity:0.6;margin-left:4px;" title="Adjuntar evidencia">📎<input type="file" multiple style="display:none;"></label>' : '';
                 return '<div style="padding:5px 8px;background:#f9f9f9;border-left:3px solid #1976D2;border-radius:4px;font-size:11px;margin-bottom:4px;">' +
                   '<div style="display:flex;justify-content:space-between;align-items:center;"><b>' + (c.fullName || "") + '</b><span style="color:#888;font-size:10px;">' + cDate + addAttachBtn + '</span></div>' +
