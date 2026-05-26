@@ -5058,14 +5058,14 @@
             '</div>' +
             '<div id="sp-qd-take-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:11px;">' +
               '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario al tomar</label>' +
-              '<input id="sp-qd-take-comment" type="text" value="se revisa" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;">' +
+              '<textarea id="sp-qd-take-comment" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;">se revisa</textarea>' +
               '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;"><input type="checkbox" id="sp-qd-take-done"> <b>Ticket realizado</b></label>' +
               '<div id="sp-qd-take-extra" style="display:none;margin-top:6px;">' +
                 '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label>' +
-                '<input id="sp-qd-take-close-comment" type="text" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;">' +
+                '<textarea id="sp-qd-take-close-comment" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea>' +
                 (hasMondayConfig ? '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Migrar a Monday</label><select id="sp-qd-take-group" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;"><option value="">-- Selecciona destino --</option></select>' : '') +
               '</div>' +
-              '<button id="sp-qd-take-confirm" style="margin-top:8px;padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:11px;font-weight:600;">Confirmar</button>' +
+              '<div style="display:flex;gap:6px;margin-top:8px;"><button id="sp-qd-take-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:11px;font-weight:600;">Confirmar</button><button id="sp-qd-take-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:11px;font-weight:600;">Cancelar</button></div>' +
             '</div>' +
           '</div>' : '') +
           // Action row - only if not closed and not waiting
@@ -5079,9 +5079,9 @@
               '</div>' +
               '<div id="sp-qd-close-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:11px;">' +
                 '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label>' +
-                '<input id="sp-qd-close-comment" type="text" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;">' +
+                '<textarea id="sp-qd-close-comment" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea>' +
                 (showMondayOption ? '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Migrar a Monday</label><select id="sp-qd-close-group" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;margin-bottom:6px;"><option value="">-- Selecciona destino --</option></select>' : '') +
-                '<button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:' + (showMondayOption ? '#D94040' : '#616161') + ';color:#fff;cursor:pointer;font-size:11px;font-weight:600;">Confirmar</button>' +
+                '<div style="display:flex;gap:6px;"><button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:' + (showMondayOption ? '#D94040' : '#616161') + ';color:#fff;cursor:pointer;font-size:11px;font-weight:600;">Confirmar</button><button id="sp-qd-close-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:11px;font-weight:600;">Cancelar</button></div>' +
               '</div>' +
             '</div>';
             return closeHTML;
@@ -5137,13 +5137,15 @@
             '</div>' +
             // Add comment form (hide if closed, unless DBA)
             (statusName !== "Cerrado" || getTeamConfig().resolutionGroupId === 19 ? (
+            '<div id="sp-qd-comment-section">' +
             '<div style="display:flex;gap:6px;margin-top:8px;align-items:center;">' +
-              '<input id="sp-qd-comment-input" type="text" placeholder="Escribe un comentario..." style="flex:1;padding:6px 10px;font-size:12px;border:1px solid #ddd;border-radius:6px;outline:none;">' +
+              '<textarea id="sp-qd-comment-input" placeholder="Escribe un comentario..." style="flex:1;padding:6px 10px;font-size:12px;border:1px solid #ddd;border-radius:6px;outline:none;min-height:36px;resize:vertical;font-family:system-ui;"></textarea>' +
               '<label style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-attach-input" type="file" multiple style="display:none;"></label>' +
               '<button id="sp-qd-comment-send" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">Enviar</button>' +
             '</div>' +
             '<div id="sp-qd-attach-list" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;"></div>' +
-            '<div id="sp-qd-suggested" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;"></div>'
+            '<div id="sp-qd-suggested" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;"></div>' +
+            '</div>'
             ) : '') +
           '</div>' +
         '</div></div>';
@@ -5355,8 +5357,24 @@
               chip.title = c.text;
               chip.style.cssText = "padding:3px 8px;font-size:10px;border:1px solid #90CAF9;border-radius:12px;background:#E3F2FD;color:#1565C0;cursor:pointer;white-space:nowrap;";
               chip.addEventListener("click", function() {
-                commentInputEl.value = c.text;
-                commentInputEl.focus();
+                // Insert in the visible comment field
+                var bottomSection = document.getElementById("sp-qd-comment-section");
+                var takeComment = document.getElementById("sp-qd-take-comment");
+                var takeCloseComment = document.getElementById("sp-qd-take-close-comment");
+                var closeComment = document.getElementById("sp-qd-close-comment");
+                if (takeCloseComment && takeCloseComment.offsetParent !== null) {
+                  takeCloseComment.value = c.text;
+                  takeCloseComment.focus();
+                } else if (takeComment && takeComment.offsetParent !== null) {
+                  takeComment.value = c.text;
+                  takeComment.focus();
+                } else if (closeComment && closeComment.offsetParent !== null) {
+                  closeComment.value = c.text;
+                  closeComment.focus();
+                } else if (bottomSection && bottomSection.style.display !== "none") {
+                  commentInputEl.value = c.text;
+                  commentInputEl.focus();
+                }
               });
               suggestedDiv.appendChild(chip);
             });
@@ -5511,20 +5529,30 @@
           if (takeForm) takeForm.style.display = "block";
           // Hide assign select
           if (assignSelect) assignSelect.style.display = "none";
-          // Hide bottom comment input row
-          var allInputs = overlay.querySelectorAll("input[placeholder*='comentario']");
-          allInputs.forEach(function(inp) {
-            // Only hide the bottom one (not the one inside take form)
-            if (!inp.closest("#sp-qd-take-form")) {
-              var row = inp.parentElement;
-              if (row) row.style.display = "none";
-            }
-          });
+          // Hide bottom comment section
+          var bottomComment = document.getElementById("sp-qd-comment-section");
+          if (bottomComment) bottomComment.style.display = "none";
           // Change button appearance
           takeBtn.textContent = "🤚 Tomar";
           takeBtn.style.background = "#0D47A1";
           takeBtn.disabled = true;
         });
+
+        // Cancel button - restore original state
+        var takeCancelBtn = document.getElementById("sp-qd-take-cancel");
+        if (takeCancelBtn) {
+          takeCancelBtn.addEventListener("click", function() {
+            takeFormShown = false;
+            var takeForm = document.getElementById("sp-qd-take-form");
+            if (takeForm) takeForm.style.display = "none";
+            if (assignSelect) assignSelect.style.display = "";
+            var bottomComment = document.getElementById("sp-qd-comment-section");
+            if (bottomComment) bottomComment.style.display = "";
+            takeBtn.textContent = "🤚 Tomar";
+            takeBtn.style.background = "#1976D2";
+            takeBtn.disabled = false;
+          });
+        }
 
         // Confirm button - executes the take action
         var takeConfirmBtn = document.getElementById("sp-qd-take-confirm");
@@ -5633,17 +5661,24 @@
 
         closeActionBtn.addEventListener("click", function() {
           closeForm.style.display = closeForm.style.display === "none" ? "block" : "none";
-          // Hide bottom comment input when close form is shown
+          // Hide bottom comment section when close form is shown
+          var bottomComment = document.getElementById("sp-qd-comment-section");
           if (closeForm.style.display === "block") {
-            var allInputs = overlay.querySelectorAll("input[placeholder*='comentario']");
-            allInputs.forEach(function(inp) {
-              if (!inp.closest("#sp-qd-close-form")) {
-                var row = inp.parentElement;
-                if (row) row.style.display = "none";
-              }
-            });
+            if (bottomComment) bottomComment.style.display = "none";
+          } else {
+            if (bottomComment) bottomComment.style.display = "";
           }
         });
+
+        // Cancel button for close form
+        var closeCancelBtn = document.getElementById("sp-qd-close-cancel");
+        if (closeCancelBtn) {
+          closeCancelBtn.addEventListener("click", function() {
+            closeForm.style.display = "none";
+            var bottomComment = document.getElementById("sp-qd-comment-section");
+            if (bottomComment) bottomComment.style.display = "";
+          });
+        }
 
         var closeConfirmBtn = document.getElementById("sp-qd-close-confirm");
         if (closeConfirmBtn) {
