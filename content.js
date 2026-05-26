@@ -3962,79 +3962,177 @@
   function showWaterModal() {
     var existing = document.getElementById("sp-water-modal");
     if (existing) { existing.remove(); return; }
-    showLoadingToast("Cargando rol de agua...");
-    chrome.runtime.sendMessage({ type: "notion-query", dbId: "36420e0684b98054a2e6e6e84809a233", body: { sorts: [{ property: "Orden", direction: "ascending" }] } }, function(response) {
+    showLoadingToast("Cargando DBA Info...");
+
+    var PRODUCTS_DB = "36c20e0684b980b7984bc6c5751a1057";
+    var LOG_DB = "36c20e0684b98030b292c088101e8184";
+    var USERS_DB = "36620e0684b98051a190e51d38d97288";
+    var today = new Date();
+    var todayStr = today.getFullYear() + "-" + String(today.getMonth()+1).padStart(2,"0") + "-" + String(today.getDate()).padStart(2,"0");
+
+    // Get products, today's log, and users in parallel
+    var products = [], todayLog = [], users = [];
+    var pending = 3;
+
+    function onReady() {
+      pending--;
+      if (pending > 0) return;
       var lt = document.getElementById("sp-loading-toast"); if (lt) lt.remove();
-      if (!response || !response.success || !response.data.results) { showErrorToast("Error al cargar datos de agua"); return; }
-      var rows = response.data.results.map(function(page) {
-        var p = page.properties;
-        var cumpleDate = p["Cumpleaños"]?.date?.start || "";
-        var cumpleDisplay = "";
-        var cumpleColor = "";
-        if (cumpleDate) {
-          var parts = cumpleDate.split("-");
-          var day = parseInt(parts[2]);
-          var month = parseInt(parts[1]) - 1; // 0-indexed
-          var meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
-          cumpleDisplay = day + " de " + meses[month];
-          // Check if already passed this year or upcoming
-          var now = new Date();
-          var thisYearBday = new Date(now.getFullYear(), month, day);
-          var diffDays = Math.floor((thisYearBday - now) / (1000*60*60*24));
-          if (diffDays < 0) {
-            cumpleColor = "#D32F2F"; // red - already passed
-          } else if (diffDays <= 30) {
-            cumpleColor = "#F9A825"; // yellow - less than a month
-          } else {
-            cumpleColor = "#2E7D32"; // green - more than a month
+      renderDBAInfoModal(products, todayLog, users, todayStr, PRODUCTS_DB, LOG_DB, USERS_DB);
+    }
+
+    chrome.runtime.sendMessage({ type: "notion-query", dbId: PRODUCTS_DB, body: {} }, function(resp) {
+      if (resp && resp.success && resp.data.results) {
+        products = resp.data.results.map(function(p) {
+          return { id: p.id, name: p.properties.Nombre?.title?.[0]?.plain_text || "" };
+        });
+      }
+      onReady();
+    });
+
+    chrome.runtime.sendMessage({ type: "notion-query", dbId: LOG_DB, body: { filter: { property: "FechaCreacion", date: { equals: todayStr } } } }, function(resp) {
+      if (resp && resp.success && resp.data.results) {
+        todayLog = resp.data.results.map(function(p) {
+          return {
+            id: p.id,
+            productId: p.properties.DBA_cat_Productos?.relation?.[0]?.id || "",
+            userId: p.properties.MSP_Usuarios?.relation?.[0]?.id || "",
+            name: p.properties.Nombre?.title?.[0]?.plain_text || ""
+          };
+        });
+      }
+      onReady();
+    });
+
+    // Get users from the agua/DBA table (for names and cumpleaños)
+    chrome.runtime.sendMessage({ type: "notion-query", dbId: "36420e0684b98054a2e6e6e84809a233", body: { sorts: [{ property: "Orden", direction: "ascending" }] } }, function(resp) {
+      if (resp && resp.success && resp.data.results) {
+        users = resp.data.results.map(function(page) {
+          var p = page.properties;
+          var cumpleDate = p["Cumpleaños"]?.date?.start || "";
+          var cumpleDisplay = "", cumpleColor = "";
+          if (cumpleDate) {
+            var parts = cumpleDate.split("-");
+            var day = parseInt(parts[2]);
+            var month = parseInt(parts[1]) - 1;
+            var meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+            cumpleDisplay = day + " de " + meses[month];
+            var now = new Date();
+            var thisYearBday = new Date(now.getFullYear(), month, day);
+            var diffDays = Math.floor((thisYearBday - now) / (1000*60*60*24));
+            if (diffDays < 0) cumpleColor = "#D32F2F";
+            else if (diffDays <= 30) cumpleColor = "#F9A825";
+            else cumpleColor = "#2E7D32";
           }
+          return {
+            id: page.id,
+            nombre: p.Nombre?.rich_text?.[0]?.plain_text || "",
+            correo: (p.Correo?.title?.[0]?.plain_text || "").toLowerCase(),
+            orden: p.Orden?.number || 0,
+            cumple: cumpleDisplay,
+            cumpleColor: cumpleColor
+          };
+        });
+      }
+      onReady();
+    });
+  }
+
+  function renderDBAInfoModal(products, todayLog, users, todayStr, PRODUCTS_DB, LOG_DB, USERS_DB) {
+    // Get current user's Notion page ID
+    var currentEmail = "";
+    var currentUserNotionId = "";
+    try { currentEmail = sessionUserName ? "" : ""; } catch(e) {}
+    chrome.storage.local.get("userEmail", function(stored) {
+      currentEmail = (stored.userEmail || "").toLowerCase();
+      var currentUser = users.find(function(u) { return u.correo === currentEmail; });
+      if (currentUser) currentUserNotionId = currentUser.id;
+
+      // Find user's Notion ID from MSP_Usuarios
+      chrome.runtime.sendMessage({ type: "notion-query", dbId: USERS_DB, body: { filter: { property: "Correo", rich_text: { equals: currentEmail } } } }, function(resp) {
+        var userPageId = "";
+        if (resp && resp.success && resp.data.results && resp.data.results[0]) {
+          userPageId = resp.data.results[0].id;
         }
-        return {
-          nombre: p.Nombre?.rich_text?.[0]?.plain_text || "",
-          orden: p.Orden?.number || 0,
-          g1: p["Garrafón 1"]?.checkbox || false,
-          g2: p["Garrafón 2"]?.checkbox || false,
-          g3: p["Garrafón 3"]?.checkbox || false,
-          chesco: p.Chesco?.checkbox || false,
-          cumple: cumpleDisplay,
-          cumpleColor: cumpleColor
-        };
+
+        // Build table
+        var overlay = document.createElement("div");
+        overlay.id = "sp-water-modal";
+        overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+
+        var productHeaders = products.map(function(p) { return '<th style="padding:6px 10px;text-align:center;">' + p.name + '</th>'; }).join("");
+
+        var tableRows = users.map(function(u) {
+          var cells = products.map(function(prod) {
+            // Check if this user+product has a log entry today
+            var hasLog = todayLog.some(function(l) { return l.productId === prod.id && l.name.includes(u.nombre.split(" ")[0]); });
+            var isMe = u.correo === currentEmail;
+            if (isMe) {
+              return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;"><input type="checkbox" class="sp-dba-check" data-product-id="' + prod.id + '" data-product-name="' + prod.name + '" data-user-name="' + u.nombre + '" ' + (hasLog ? 'checked disabled' : '') + ' style="cursor:' + (hasLog ? 'default' : 'pointer') + ';width:16px;height:16px;"></td>';
+            } else {
+              return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (hasLog ? '✅' : '—') + '</td>';
+            }
+          }).join("");
+          return '<tr>' +
+            '<td style="padding:6px 10px;border-bottom:1px solid #eee;">' + u.orden + '</td>' +
+            '<td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:600;">' + u.nombre + '</td>' +
+            cells +
+            '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;color:' + (u.cumpleColor || '#333') + ';font-weight:600;">' + (u.cumple || '-') + '</td>' +
+          '</tr>';
+        }).join("");
+
+        overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:700px;width:95%;max-height:90vh;overflow:auto;font-family:system-ui;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+            '<h3 style="margin:0;font-size:16px;">🏠 DBA Info <span style="font-size:11px;color:#888;font-weight:400;">(' + todayStr + ')</span></h3>' +
+            '<button id="sp-water-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
+          '</div>' +
+          '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+            '<thead><tr style="background:#f5f5f5;">' +
+              '<th style="padding:6px 10px;text-align:left;">#</th>' +
+              '<th style="padding:6px 10px;text-align:left;">Nombre</th>' +
+              productHeaders +
+              '<th style="padding:6px 10px;text-align:center;">🎂</th>' +
+            '</tr></thead>' +
+            '<tbody>' + tableRows + '</tbody>' +
+          '</table>' +
+        '</div>';
+        document.body.appendChild(overlay);
+        document.getElementById("sp-water-close").addEventListener("click", function() { overlay.remove(); });
+        overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+        // Handle check clicks
+        overlay.querySelectorAll(".sp-dba-check").forEach(function(cb) {
+          if (cb.checked) return; // Already logged
+          cb.addEventListener("change", function() {
+            if (!cb.checked) return;
+            cb.disabled = true;
+            var productId = cb.dataset.productId;
+            var productName = cb.dataset.productName;
+            var userName = cb.dataset.userName;
+            var nombreConcat = productName + "-" + userName.split(" ")[0] + "_" + todayStr.replace(/-/g, "");
+
+            var createProps = {
+              "Nombre": { title: [{ text: { content: nombreConcat } }] },
+              "DBA_cat_Productos": { relation: [{ id: productId }] },
+              "FechaCreacion": { date: { start: todayStr } }
+            };
+            if (userPageId) createProps["MSP_Usuarios"] = { relation: [{ id: userPageId }] };
+
+            chrome.runtime.sendMessage({ type: "notion-create", body: {
+              parent: { database_id: LOG_DB },
+              properties: createProps
+            }}, function(resp) {
+              if (resp && resp.success) {
+                showSuccessToast("✅ " + productName + " registrado");
+              } else {
+                showErrorToast("Error al registrar");
+                cb.checked = false;
+                cb.disabled = false;
+              }
+            });
+          });
+        });
       });
-      var overlay = document.createElement("div");
-      overlay.id = "sp-water-modal";
-      overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-      var tableRows = rows.map(function(r) {
-        return '<tr>' +
-          '<td style="padding:6px 10px;border-bottom:1px solid #eee;">' + r.orden + '</td>' +
-          '<td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:600;">' + r.nombre + '</td>' +
-          '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.g1 ? '✅' : '❌') + '</td>' +
-          '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.g2 ? '✅' : '❌') + '</td>' +
-          '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.g3 ? '✅' : '❌') + '</td>' +
-          '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (r.chesco ? '✅' : '❌') + '</td>' +
-          '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;color:' + (r.cumpleColor || '#333') + ';font-weight:600;">' + (r.cumple || '-') + '</td>' +
-        '</tr>';
-      }).join("");
-      overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:600px;width:95%;font-family:system-ui;">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-          '<h3 style="margin:0;font-size:16px;">🏠 DBA Info</h3>' +
-          '<button id="sp-water-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
-        '</div>' +
-        '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
-          '<thead><tr style="background:#f5f5f5;">' +
-            '<th style="padding:6px 10px;text-align:left;">#</th>' +
-            '<th style="padding:6px 10px;text-align:left;">Nombre</th>' +
-            '<th style="padding:6px 10px;text-align:center;">G1</th>' +
-            '<th style="padding:6px 10px;text-align:center;">G2</th>' +
-            '<th style="padding:6px 10px;text-align:center;">G3</th>' +
-            '<th style="padding:6px 10px;text-align:center;">Chesco</th>' +
-            '<th style="padding:6px 10px;text-align:center;">🎂</th>' +
-          '</tr></thead>' +
-          '<tbody>' + tableRows + '</tbody>' +
-        '</table>' +
-      '</div>';
-      document.body.appendChild(overlay);
-      document.getElementById("sp-water-close").addEventListener("click", function() { overlay.remove(); });
-      overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
     });
   }
 
