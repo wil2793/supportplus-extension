@@ -4076,8 +4076,23 @@
 
     var groupId = getTeamConfig().resolutionGroupId;
     var groupPageId = null;
-    // Get group page ID for creating new comments
-    chrome.storage.local.get("notionUsers", function() {
+    var userPageId = null;
+    var today = new Date().toISOString().slice(0, 10);
+
+    // Get group page ID and user page ID
+    chrome.storage.local.get(["notionUsers", "userEmail"], function(stored) {
+      var email = (stored.userEmail || "").toLowerCase();
+      var users = stored.notionUsers || {};
+      // Find user pageId by searching Notion users DB
+      chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b98051a190e51d38d97288", body: {} }, function(resp) {
+        if (resp && resp.success && resp.data.results) {
+          var foundUser = resp.data.results.find(function(p) {
+            var correo = (p.properties.Correo?.rich_text?.[0]?.plain_text || "").toLowerCase();
+            return correo === email;
+          });
+          if (foundUser) userPageId = foundUser.id;
+        }
+      });
       chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b9800e9a57df46019a03e0", body: {} }, function(resp) {
         if (resp && resp.success && resp.data.results) {
           var found = resp.data.results.find(function(p) {
@@ -4109,24 +4124,28 @@
           btn.addEventListener("click", function() {
             var newText = prompt("Editar comentario:", btn.dataset.text);
             if (!newText || newText === btn.dataset.text) return;
-            btn.textContent = "...";
-            chrome.runtime.sendMessage({ type: "notion-update", pageId: btn.dataset.id, body: { properties: { "Comentario": { rich_text: [{ text: { content: newText } }] } } } }, function() {
-              chrome.runtime.sendMessage({ type: "sync-notion" }, function() {
-                setTimeout(loadList, 1500);
-              });
+            btn.textContent = "⏳";
+            var updateProps = { "Comentario": { rich_text: [{ text: { content: newText } }] }, "FechaModificacion": { date: { start: today } } };
+            if (userPageId) updateProps["UsuarioModificación"] = { relation: [{ id: userPageId }] };
+            chrome.runtime.sendMessage({ type: "notion-update", pageId: btn.dataset.id, body: { properties: updateProps } }, function() {
+              btn.textContent = "✅";
+              chrome.runtime.sendMessage({ type: "sync-notion" }, function() { setTimeout(loadList, 1000); });
             });
           });
         });
 
-        // Delete handlers
+        // Delete handlers (logical delete)
         listDiv.querySelectorAll(".sp-sug-del").forEach(function(btn) {
           btn.addEventListener("click", function() {
             if (!confirm("¿Eliminar este comentario sugerido?")) return;
-            btn.textContent = "...";
-            chrome.runtime.sendMessage({ type: "notion-delete", pageId: btn.dataset.id }, function() {
-              chrome.runtime.sendMessage({ type: "sync-notion" }, function() {
-                setTimeout(loadList, 1500);
-              });
+            btn.textContent = "⏳";
+            var deleteProps = { "Activo": { checkbox: false }, "FechaEliminacion": { date: { start: today } } };
+            if (userPageId) deleteProps["UsuarioEliminacion"] = { relation: [{ id: userPageId }] };
+            chrome.runtime.sendMessage({ type: "notion-update", pageId: btn.dataset.id, body: { properties: deleteProps } }, function() {
+              // Remove from UI immediately
+              var row = btn.closest("[data-id]");
+              if (row) row.remove();
+              chrome.runtime.sendMessage({ type: "sync-notion" }, function() { setTimeout(loadList, 1000); });
             });
           });
         });
@@ -4143,21 +4162,24 @@
       if (!groupPageId) { showErrorToast("No se pudo determinar el grupo"); return; }
       var addBtn = document.getElementById("sp-sug-add");
       addBtn.disabled = true;
-      addBtn.textContent = "...";
+      addBtn.textContent = "⏳";
+      var createProps = {
+        "Nombre": { title: [{ text: { content: "" } }] },
+        "Comentario": { rich_text: [{ text: { content: text } }] },
+        "MSP_cat_Grupos": { relation: [{ id: groupPageId }] },
+        "Activo": { checkbox: true },
+        "FechaCreacion": { date: { start: today } }
+      };
+      if (userPageId) createProps["UsuarioAlta"] = { relation: [{ id: userPageId }] };
       chrome.runtime.sendMessage({ type: "notion-create", body: {
         parent: { database_id: "36920e0684b980a19fdbd27302a65feb" },
-        properties: {
-          "Nombre": { title: [{ text: { content: "" } }] },
-          "Comentario": { rich_text: [{ text: { content: text } }] },
-          "MSP_cat_Grupos": { relation: [{ id: groupPageId }] }
-        }
+        properties: createProps
       }}, function() {
         input.value = "";
         addBtn.disabled = false;
         addBtn.textContent = "+ Agregar";
-        chrome.runtime.sendMessage({ type: "sync-notion" }, function() {
-          setTimeout(loadList, 1500);
-        });
+        showSuccessToast("Comentario agregado");
+        chrome.runtime.sendMessage({ type: "sync-notion" }, function() { setTimeout(loadList, 1000); });
       });
     });
   }

@@ -111,10 +111,12 @@ async function syncNotionData() {
       }
     }
 
-    // 4. Get suggested comments
+    // 4. Get suggested comments (only active ones)
     const commentsRaw = await notionQueryAll(NOTION_COMMENTS_DB);
     const suggestedComments = {}; // groupId -> [{id, text, name}]
     for (const c of commentsRaw) {
+      const active = c.properties.Activo?.checkbox;
+      if (!active) continue; // Skip inactive (logically deleted)
       const text = c.properties.Comentario?.rich_text?.[0]?.plain_text || "";
       const name = c.properties.Nombre?.title?.[0]?.plain_text || "";
       const commentGroups = (c.properties.MSP_cat_Grupos?.relation || []).map(rel => groupsMap[rel.id]).filter(Boolean);
