@@ -4060,6 +4060,14 @@
         overlay.id = "sp-water-modal";
         overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
 
+        // Sort products: Garrafón 1, 2, 3, then others
+        products.sort(function(a, b) {
+          var order = ["Garrafón 1", "Garrafón 2", "Garrafón 3", "Chesco"];
+          var ia = order.indexOf(a.name); if (ia === -1) ia = 99;
+          var ib = order.indexOf(b.name); if (ib === -1) ib = 99;
+          return ia - ib;
+        });
+
         var productHeaders = products.map(function(p) { return '<th style="padding:6px 10px;text-align:center;">' + p.name + '</th>'; }).join("");
 
         var tableRows = users.map(function(u) {
@@ -4067,8 +4075,8 @@
             // Check if this user+product has a log entry today
             var hasLog = todayLog.some(function(l) { return l.productId === prod.id && l.name.includes(u.nombre.split(" ")[0]); });
             var isMe = u.correo === currentEmail;
-            if (isMe) {
-              return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;"><input type="checkbox" class="sp-dba-check" data-product-id="' + prod.id + '" data-product-name="' + prod.name + '" data-user-name="' + u.nombre + '" ' + (hasLog ? 'checked disabled' : '') + ' style="cursor:' + (hasLog ? 'default' : 'pointer') + ';width:16px;height:16px;"></td>';
+            if (isMe && !hasLog) {
+              return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;"><input type="checkbox" class="sp-dba-check" data-product-id="' + prod.id + '" data-product-name="' + prod.name + '" data-user-name="' + u.nombre + '" style="cursor:pointer;width:16px;height:16px;"></td>';
             } else {
               return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (hasLog ? '✅' : '—') + '</td>';
             }
