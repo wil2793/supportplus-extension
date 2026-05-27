@@ -4167,13 +4167,22 @@
       var tableRows = users.map(function(u, idx) {
         var cells = columns.map(function(col) {
           var userCount = logCountMap[u.id + "_" + col.productId] || 0;
+          var producto = visibleProducts.find(function(p) { return p.id === col.productId; });
+          var cantidad = producto ? producto.cantidad : 1;
           var isMarked = userCount > col.colIndex;
           var isMe = u.id === userPageId;
-          // User can mark the next column (colIndex === userCount means it's the next one to mark)
+          // How many times this column has been marked (for adelantos)
+          var timesMarked = isMarked ? Math.floor((userCount - col.colIndex - 1) / cantidad) + 1 : 0;
+          // User can mark the next column (colIndex === userCount % cantidad means it's the next one to mark)
+          var nextColIndex = userCount % cantidad;
           if (isMe && !isMarked && col.colIndex === userCount) {
             return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;"><input type="checkbox" class="sp-dba-check" data-product-id="' + col.productId + '" data-product-name="' + col.colName + '" data-user-name="' + u.nombre + '" style="cursor:pointer;width:16px;height:16px;"></td>';
+          } else if (isMe && isMarked && userCount >= cantidad && col.colIndex === nextColIndex) {
+            // Already completed full cycle, show checkbox for next round
+            return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">\u2705' + (timesMarked > 1 ? ' <span style="font-size:9px;color:#888;">(x' + timesMarked + ')</span>' : '') + '</td>';
           } else {
-            return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (isMarked ? '\u2705' : '\u2014') + '</td>';
+            var display = isMarked ? '\u2705' + (timesMarked > 1 ? ' <span style="font-size:9px;color:#888;">(x' + timesMarked + ')</span>' : '') : '\u2014';
+            return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + display + '</td>';
           }
         }).join("");
 
