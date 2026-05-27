@@ -4056,15 +4056,16 @@
       onReady();
     });
 
-    // 2. Get ALL log entries (not just today - we need full history for rotation)
-    chrome.runtime.sendMessage({ type: "notion-query", dbId: LOG_DB, body: { sorts: [{ property: "FechaCreacion", direction: "descending" }] } }, function(resp) {
+    // 2. Get ALL active log entries (Activo = true)
+    chrome.runtime.sendMessage({ type: "notion-query", dbId: LOG_DB, body: { filter: { property: "Activo", checkbox: { equals: true } }, sorts: [{ property: "FechaCreacion", direction: "ascending" }] } }, function(resp) {
       if (resp && resp.success && resp.data.results) {
         todayLog = resp.data.results.map(function(p) {
           return {
             id: p.id,
             productId: p.properties.DBA_cat_Productos?.relation?.[0]?.id || "",
             userId: p.properties.MSP_Usuarios?.relation?.[0]?.id || "",
-            name: p.properties.Nombre?.title?.[0]?.plain_text || ""
+            name: p.properties.Nombre?.title?.[0]?.plain_text || "",
+            date: p.properties.FechaCreacion?.date?.start || ""
           };
         });
       }
@@ -4186,6 +4187,16 @@
       if (allAguaDone) resetBtnsHTML += '<button id="sp-dba-reset-agua" style="padding:6px 14px;border:none;border-radius:6px;background:#1565C0;color:#fff;cursor:pointer;font-size:12px;font-weight:600;margin-right:8px;">🔄 Reiniciar conteo de agua</button>';
       if (allChescoDone) resetBtnsHTML += '<button id="sp-dba-reset-chesco" style="padding:6px 14px;border:none;border-radius:6px;background:#6A1B9A;color:#fff;cursor:pointer;font-size:12px;font-weight:600;">🔄 Reiniciar conteo de chesco</button>';
 
+      // Adelantó section
+      var adelantoHTML = '<div style="margin-top:12px;padding:8px;border:1px solid #e0e0e0;border-radius:6px;">' +
+        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+          '<span style="font-size:12px;font-weight:600;">⏩ Adelantó:</span>' +
+          '<select id="sp-dba-adelanto-user" style="padding:4px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;"><option value="">-- Persona --</option>' + users.map(function(u) { return '<option value="' + u.id + '">' + u.nombre.split(" ")[0] + '</option>'; }).join("") + '</select>' +
+          '<select id="sp-dba-adelanto-product" style="padding:4px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;" disabled><option value="">-- Producto --</option></select>' +
+          '<button id="sp-dba-adelanto-btn" style="padding:4px 12px;border:none;border-radius:4px;background:#FF8F00;color:#fff;cursor:pointer;font-size:11px;font-weight:600;" disabled>Registrar</button>' +
+        '</div>' +
+      '</div>';
+
       overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:700px;width:95%;max-height:90vh;overflow:auto;font-family:system-ui;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
           '<h3 style="margin:0;font-size:16px;">🏠 DBA Info</h3>' +
@@ -4201,6 +4212,7 @@
           '<tbody>' + tableRows + '</tbody>' +
         '</table>' +
         (resetBtnsHTML ? '<div style="margin-top:12px;text-align:center;">' + resetBtnsHTML + '</div>' : '') +
+        adelantoHTML +
       '</div>';
       document.body.appendChild(overlay);
       document.getElementById("sp-water-close").addEventListener("click", function() { overlay.remove(); });
@@ -4219,7 +4231,8 @@
           var createProps = {
             "Nombre": { title: [{ text: { content: nombreConcat } }] },
             "DBA_cat_Productos": { relation: [{ id: productId }] },
-            "FechaCreacion": { date: { start: todayStr } }
+            "FechaCreacion": { date: { start: todayStr } },
+            "Activo": { checkbox: true }
           };
           if (userPageId) createProps["MSP_Usuarios"] = { relation: [{ id: userPageId }] };
 
@@ -4243,17 +4256,24 @@
       var resetAguaBtn = document.getElementById("sp-dba-reset-agua");
       if (resetAguaBtn) {
         resetAguaBtn.addEventListener("click", function() {
-          if (!confirm("¿Reiniciar el conteo de agua? Se borrarán todos los registros de garrafones.")) return;
+          if (!confirm("¿Reiniciar el conteo de agua? Se desactivará el registro más antiguo de cada persona.")) return;
           resetAguaBtn.disabled = true;
           resetAguaBtn.textContent = "⏳ Reiniciando...";
-          var aguaLogIds = todayLog.filter(function(l) {
-            return aguaProducts.some(function(p) { return p.id === l.productId; });
-          }).map(function(l) { return l.id; });
-          var deleted = 0;
-          aguaLogIds.forEach(function(id) {
-            chrome.runtime.sendMessage({ type: "notion-delete", pageId: id }, function() {
-              deleted++;
-              if (deleted >= aguaLogIds.length) {
+          // For each user+aguaProduct, deactivate the OLDEST active log entry
+          var toDeactivate = [];
+          users.forEach(function(u) {
+            aguaProducts.forEach(function(p) {
+              // todayLog is sorted ascending by date, so first match is oldest
+              var oldest = todayLog.find(function(l) { return l.userId === u.id && l.productId === p.id; });
+              if (oldest) toDeactivate.push(oldest.id);
+            });
+          });
+          var done = 0;
+          if (toDeactivate.length === 0) { overlay.remove(); showWaterModal(); return; }
+          toDeactivate.forEach(function(pageId) {
+            chrome.runtime.sendMessage({ type: "notion-update", pageId: pageId, body: { properties: { "Activo": { checkbox: false } } } }, function() {
+              done++;
+              if (done >= toDeactivate.length) {
                 showSuccessToast("✅ Conteo de agua reiniciado");
                 overlay.remove();
                 showWaterModal();
@@ -4266,22 +4286,106 @@
       var resetChescoBtn = document.getElementById("sp-dba-reset-chesco");
       if (resetChescoBtn) {
         resetChescoBtn.addEventListener("click", function() {
-          if (!confirm("¿Reiniciar el conteo de chesco? Se borrarán todos los registros de chesco.")) return;
+          if (!confirm("¿Reiniciar el conteo de chesco? Se desactivará el registro más antiguo de cada persona.")) return;
           resetChescoBtn.disabled = true;
           resetChescoBtn.textContent = "⏳ Reiniciando...";
-          var chescoLogIds = todayLog.filter(function(l) {
-            return chescoProducts.some(function(p) { return p.id === l.productId; });
-          }).map(function(l) { return l.id; });
-          var deleted = 0;
-          chescoLogIds.forEach(function(id) {
-            chrome.runtime.sendMessage({ type: "notion-delete", pageId: id }, function() {
-              deleted++;
-              if (deleted >= chescoLogIds.length) {
+          var toDeactivate = [];
+          users.forEach(function(u) {
+            chescoProducts.forEach(function(p) {
+              var oldest = todayLog.find(function(l) { return l.userId === u.id && l.productId === p.id; });
+              if (oldest) toDeactivate.push(oldest.id);
+            });
+          });
+          var done = 0;
+          if (toDeactivate.length === 0) { overlay.remove(); showWaterModal(); return; }
+          toDeactivate.forEach(function(pageId) {
+            chrome.runtime.sendMessage({ type: "notion-update", pageId: pageId, body: { properties: { "Activo": { checkbox: false } } } }, function() {
+              done++;
+              if (done >= toDeactivate.length) {
                 showSuccessToast("✅ Conteo de chesco reiniciado");
                 overlay.remove();
                 showWaterModal();
               }
             });
+          });
+        });
+      }
+
+      // Adelantó logic
+      var adelantoUserSelect = document.getElementById("sp-dba-adelanto-user");
+      var adelantoProductSelect = document.getElementById("sp-dba-adelanto-product");
+      var adelantoBtn = document.getElementById("sp-dba-adelanto-btn");
+
+      if (adelantoUserSelect) {
+        adelantoUserSelect.addEventListener("change", function() {
+          var selectedUserId = adelantoUserSelect.value;
+          adelantoProductSelect.innerHTML = '<option value="">-- Producto --</option>';
+          adelantoProductSelect.disabled = true;
+          adelantoBtn.disabled = true;
+          if (!selectedUserId) return;
+
+          // Determine which products this user can "adelantar"
+          // For garrafones: rotate through 1, 2, 3 based on what they already have
+          var userActiveGarrafones = todayLog.filter(function(l) {
+            return l.userId === selectedUserId && aguaProducts.some(function(p) { return p.id === l.productId; });
+          });
+          // Count how many active logs per garrafon product
+          var garrafonCounts = {};
+          aguaProducts.forEach(function(p) { garrafonCounts[p.id] = 0; });
+          userActiveGarrafones.forEach(function(l) { if (garrafonCounts[l.productId] !== undefined) garrafonCounts[l.productId]++; });
+
+          // Next garrafon to adelantar: the one with the least count (round-robin)
+          var minCount = Math.min.apply(null, aguaProducts.map(function(p) { return garrafonCounts[p.id]; }));
+          var availableGarrafones = aguaProducts.filter(function(p) { return garrafonCounts[p.id] === minCount; });
+
+          // For chesco: always available
+          var availableProducts = availableGarrafones.concat(chescoProducts);
+
+          availableProducts.forEach(function(p) {
+            var opt = document.createElement("option");
+            opt.value = p.id;
+            opt.textContent = p.name;
+            adelantoProductSelect.appendChild(opt);
+          });
+          adelantoProductSelect.disabled = false;
+        });
+
+        adelantoProductSelect.addEventListener("change", function() {
+          adelantoBtn.disabled = !adelantoProductSelect.value;
+        });
+
+        adelantoBtn.addEventListener("click", function() {
+          var selectedUserId = adelantoUserSelect.value;
+          var selectedProductId = adelantoProductSelect.value;
+          if (!selectedUserId || !selectedProductId) return;
+          adelantoBtn.disabled = true;
+          adelantoBtn.textContent = "⏳...";
+
+          var selectedUser = allUserPages[selectedUserId];
+          var selectedProduct = visibleProducts.find(function(p) { return p.id === selectedProductId; }) || { name: "Producto" };
+          var nombreConcat = selectedProduct.name + "-" + (selectedUser ? selectedUser.nombre.split(" ")[0] : "User") + "_" + todayStr.replace(/-/g, "");
+
+          var createProps = {
+            "Nombre": { title: [{ text: { content: nombreConcat } }] },
+            "DBA_cat_Productos": { relation: [{ id: selectedProductId }] },
+            "MSP_Usuarios": { relation: [{ id: selectedUserId }] },
+            "FechaCreacion": { date: { start: todayStr } },
+            "Activo": { checkbox: true }
+          };
+
+          chrome.runtime.sendMessage({ type: "notion-create", body: {
+            parent: { database_id: LOG_DB },
+            properties: createProps
+          }}, function(resp) {
+            if (resp && resp.success) {
+              showSuccessToast("✅ Adelanto registrado: " + selectedProduct.name);
+              overlay.remove();
+              showWaterModal();
+            } else {
+              showErrorToast("Error al registrar adelanto");
+              adelantoBtn.disabled = false;
+              adelantoBtn.textContent = "Registrar";
+            }
           });
         });
       }
