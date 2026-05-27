@@ -4056,8 +4056,8 @@
       onReady();
     });
 
-    // 2. Get today's log
-    chrome.runtime.sendMessage({ type: "notion-query", dbId: LOG_DB, body: { filter: { property: "FechaCreacion", date: { equals: todayStr } } } }, function(resp) {
+    // 2. Get ALL log entries (not just today - we need full history for rotation)
+    chrome.runtime.sendMessage({ type: "notion-query", dbId: LOG_DB, body: { sorts: [{ property: "FechaCreacion", direction: "descending" }] } }, function(resp) {
       if (resp && resp.success && resp.data.results) {
         todayLog = resp.data.results.map(function(p) {
           return {
@@ -4141,9 +4141,26 @@
 
       var productHeaders = visibleProducts.map(function(p) { return '<th style="padding:6px 10px;text-align:center;">' + p.name + '</th>'; }).join("");
 
+      // Build a map: userId+productId -> true (has at least 1 log entry)
+      var logMap = {};
+      todayLog.forEach(function(l) {
+        var key = l.userId + "_" + l.productId;
+        if (!logMap[key]) logMap[key] = true;
+      });
+
+      // Check if all users completed all products of a type
+      var aguaProducts = visibleProducts.filter(function(p) { return p.name.toLowerCase().includes("garraf"); });
+      var chescoProducts = visibleProducts.filter(function(p) { return p.name.toLowerCase().includes("chesco"); });
+      var allAguaDone = aguaProducts.length > 0 && users.every(function(u) {
+        return aguaProducts.every(function(p) { return logMap[u.id + "_" + p.id]; });
+      });
+      var allChescoDone = chescoProducts.length > 0 && users.every(function(u) {
+        return chescoProducts.every(function(p) { return logMap[u.id + "_" + p.id]; });
+      });
+
       var tableRows = users.map(function(u, idx) {
         var cells = visibleProducts.map(function(prod) {
-          var hasLog = todayLog.some(function(l) { return l.productId === prod.id && l.userId === u.id; });
+          var hasLog = logMap[u.id + "_" + prod.id] || false;
           var isMe = u.id === userPageId;
           if (isMe && !hasLog) {
             return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;"><input type="checkbox" class="sp-dba-check" data-product-id="' + prod.id + '" data-product-name="' + prod.name + '" data-user-name="' + u.nombre + '" style="cursor:pointer;width:16px;height:16px;"></td>';
@@ -4164,9 +4181,14 @@
 
       var cumpleHeader = showCumple ? '<th style="padding:6px 10px;text-align:center;">🎂</th>' : '';
 
+      // Reset buttons HTML
+      var resetBtnsHTML = '';
+      if (allAguaDone) resetBtnsHTML += '<button id="sp-dba-reset-agua" style="padding:6px 14px;border:none;border-radius:6px;background:#1565C0;color:#fff;cursor:pointer;font-size:12px;font-weight:600;margin-right:8px;">🔄 Reiniciar conteo de agua</button>';
+      if (allChescoDone) resetBtnsHTML += '<button id="sp-dba-reset-chesco" style="padding:6px 14px;border:none;border-radius:6px;background:#6A1B9A;color:#fff;cursor:pointer;font-size:12px;font-weight:600;">🔄 Reiniciar conteo de chesco</button>';
+
       overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:700px;width:95%;max-height:90vh;overflow:auto;font-family:system-ui;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-          '<h3 style="margin:0;font-size:16px;">🏠 DBA Info <span style="font-size:11px;color:#888;font-weight:400;">(' + todayStr + ')</span></h3>' +
+          '<h3 style="margin:0;font-size:16px;">🏠 DBA Info</h3>' +
           '<button id="sp-water-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
         '</div>' +
         '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
@@ -4178,6 +4200,7 @@
           '</tr></thead>' +
           '<tbody>' + tableRows + '</tbody>' +
         '</table>' +
+        (resetBtnsHTML ? '<div style="margin-top:12px;text-align:center;">' + resetBtnsHTML + '</div>' : '') +
       '</div>';
       document.body.appendChild(overlay);
       document.getElementById("sp-water-close").addEventListener("click", function() { overlay.remove(); });
@@ -4215,6 +4238,53 @@
           });
         });
       });
+
+      // Reset buttons
+      var resetAguaBtn = document.getElementById("sp-dba-reset-agua");
+      if (resetAguaBtn) {
+        resetAguaBtn.addEventListener("click", function() {
+          if (!confirm("¿Reiniciar el conteo de agua? Se borrarán todos los registros de garrafones.")) return;
+          resetAguaBtn.disabled = true;
+          resetAguaBtn.textContent = "⏳ Reiniciando...";
+          var aguaLogIds = todayLog.filter(function(l) {
+            return aguaProducts.some(function(p) { return p.id === l.productId; });
+          }).map(function(l) { return l.id; });
+          var deleted = 0;
+          aguaLogIds.forEach(function(id) {
+            chrome.runtime.sendMessage({ type: "notion-delete", pageId: id }, function() {
+              deleted++;
+              if (deleted >= aguaLogIds.length) {
+                showSuccessToast("✅ Conteo de agua reiniciado");
+                overlay.remove();
+                showWaterModal();
+              }
+            });
+          });
+        });
+      }
+
+      var resetChescoBtn = document.getElementById("sp-dba-reset-chesco");
+      if (resetChescoBtn) {
+        resetChescoBtn.addEventListener("click", function() {
+          if (!confirm("¿Reiniciar el conteo de chesco? Se borrarán todos los registros de chesco.")) return;
+          resetChescoBtn.disabled = true;
+          resetChescoBtn.textContent = "⏳ Reiniciando...";
+          var chescoLogIds = todayLog.filter(function(l) {
+            return chescoProducts.some(function(p) { return p.id === l.productId; });
+          }).map(function(l) { return l.id; });
+          var deleted = 0;
+          chescoLogIds.forEach(function(id) {
+            chrome.runtime.sendMessage({ type: "notion-delete", pageId: id }, function() {
+              deleted++;
+              if (deleted >= chescoLogIds.length) {
+                showSuccessToast("✅ Conteo de chesco reiniciado");
+                overlay.remove();
+                showWaterModal();
+              }
+            });
+          });
+        });
+      }
     });
   }
 
