@@ -4041,7 +4041,12 @@
     chrome.runtime.sendMessage({ type: "notion-query", dbId: PRODUCTS_DB, body: {} }, function(resp) {
       if (resp && resp.success && resp.data.results) {
         products = resp.data.results.map(function(p) {
-          return { id: p.id, name: p.properties.Nombre?.title?.[0]?.plain_text || "" };
+          return {
+            id: p.id,
+            name: p.properties.Nombre?.title?.[0]?.plain_text || "",
+            producto: p.properties.Producto?.rich_text?.[0]?.plain_text || "",
+            cantidad: p.properties.Cantidad?.number || 1
+          };
         });
       }
       onReady();
@@ -4102,18 +4107,31 @@
       var showChesco = userInChesco;
       var showCumple = userInCumple;
 
-      // Filter products based on visible columns
-      var visibleProducts = [];
+      // Build columns from products dynamically using Cantidad
       products.sort(function(a, b) {
-        var order = ["Garrafón 1", "Garrafón 2", "Garrafón 3", "Chesco"];
-        var ia = order.indexOf(a.name); if (ia === -1) ia = 99;
-        var ib = order.indexOf(b.name); if (ib === -1) ib = 99;
+        var order = ["garraf", "chesco"];
+        var ia = order.findIndex(function(o) { return a.name.toLowerCase().includes(o); }); if (ia === -1) ia = 99;
+        var ib = order.findIndex(function(o) { return b.name.toLowerCase().includes(o); }); if (ib === -1) ib = 99;
         return ia - ib;
       });
-      products.forEach(function(p) {
-        var pLower = p.name.toLowerCase();
-        if (pLower.includes("garraf") && showGarrafones) visibleProducts.push(p);
-        else if (pLower.includes("chesco") && showChesco) visibleProducts.push(p);
+
+      var visibleProducts = products.filter(function(p) {
+        if (p.name.toLowerCase().includes("garraf") && showGarrafones) return true;
+        if (p.name.toLowerCase().includes("chesco") && showChesco) return true;
+        return false;
+      });
+
+      // Generate columns: each product has N columns based on Cantidad
+      var columns = [];
+      visibleProducts.forEach(function(p) {
+        for (var i = 0; i < p.cantidad; i++) {
+          columns.push({
+            productId: p.id,
+            productName: p.name,
+            colName: p.cantidad > 1 ? p.name + " " + (i + 1) : p.producto,
+            colIndex: i
+          });
+        }
       });
 
       // Get all unique members from all sub-groups the user can see
@@ -4131,33 +4149,31 @@
       overlay.id = "sp-water-modal";
       overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
 
-      var productHeaders = visibleProducts.map(function(p) { return '<th style="padding:6px 10px;text-align:center;">' + p.name + '</th>'; }).join("");
-
-      // Build a map: userId+productId -> true (has at least 1 log entry)
-      var logMap = {};
+      // Build a map: userId+productId -> count of active logs
+      var logCountMap = {};
       todayLog.forEach(function(l) {
         var key = l.userId + "_" + l.productId;
-        if (!logMap[key]) logMap[key] = true;
+        logCountMap[key] = (logCountMap[key] || 0) + 1;
       });
 
-      // Check if all users completed all products of a type
-      var aguaProducts = visibleProducts.filter(function(p) { return p.name.toLowerCase().includes("garraf"); });
-      var chescoProducts = visibleProducts.filter(function(p) { return p.name.toLowerCase().includes("chesco"); });
-      var allAguaDone = aguaProducts.length > 0 && users.every(function(u) {
-        return aguaProducts.every(function(p) { return logMap[u.id + "_" + p.id]; });
-      });
-      var allChescoDone = chescoProducts.length > 0 && users.every(function(u) {
-        return chescoProducts.every(function(p) { return logMap[u.id + "_" + p.id]; });
-      });
+      var productHeaders = columns.map(function(col) { return '<th style="padding:6px 10px;text-align:center;">' + col.colName + '</th>'; }).join("");
+
+      // Check if all users completed all columns of a product type
+      var aguaProduct = visibleProducts.find(function(p) { return p.name.toLowerCase().includes("garraf"); });
+      var chescoProduct = visibleProducts.find(function(p) { return p.name.toLowerCase().includes("chesco"); });
+      var allAguaDone = aguaProduct && users.every(function(u) { return (logCountMap[u.id + "_" + aguaProduct.id] || 0) >= aguaProduct.cantidad; });
+      var allChescoDone = chescoProduct && users.every(function(u) { return (logCountMap[u.id + "_" + chescoProduct.id] || 0) >= chescoProduct.cantidad; });
 
       var tableRows = users.map(function(u, idx) {
-        var cells = visibleProducts.map(function(prod) {
-          var hasLog = logMap[u.id + "_" + prod.id] || false;
+        var cells = columns.map(function(col) {
+          var userCount = logCountMap[u.id + "_" + col.productId] || 0;
+          var isMarked = userCount > col.colIndex;
           var isMe = u.id === userPageId;
-          if (isMe && !hasLog) {
-            return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;"><input type="checkbox" class="sp-dba-check" data-product-id="' + prod.id + '" data-product-name="' + prod.name + '" data-user-name="' + u.nombre + '" style="cursor:pointer;width:16px;height:16px;"></td>';
+          // User can mark the next column (colIndex === userCount means it's the next one to mark)
+          if (isMe && !isMarked && col.colIndex === userCount) {
+            return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;"><input type="checkbox" class="sp-dba-check" data-product-id="' + col.productId + '" data-product-name="' + col.colName + '" data-user-name="' + u.nombre + '" style="cursor:pointer;width:16px;height:16px;"></td>';
           } else {
-            return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (hasLog ? '✅' : '—') + '</td>';
+            return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + (isMarked ? '\u2705' : '\u2014') + '</td>';
           }
         }).join("");
 
@@ -4253,11 +4269,8 @@
           // For each user+aguaProduct, deactivate the OLDEST active log entry
           var toDeactivate = [];
           users.forEach(function(u) {
-            aguaProducts.forEach(function(p) {
-              // todayLog is sorted ascending by date, so first match is oldest
-              var oldest = todayLog.find(function(l) { return l.userId === u.id && l.productId === p.id; });
+              var oldest = todayLog.find(function(l) { return l.userId === u.id && l.productId === aguaProduct.id; });
               if (oldest) toDeactivate.push(oldest.id);
-            });
           });
           var done = 0;
           if (toDeactivate.length === 0) { overlay.remove(); showWaterModal(); return; }
@@ -4282,10 +4295,8 @@
           resetChescoBtn.textContent = "⏳ Reiniciando...";
           var toDeactivate = [];
           users.forEach(function(u) {
-            chescoProducts.forEach(function(p) {
-              var oldest = todayLog.find(function(l) { return l.userId === u.id && l.productId === p.id; });
+              var oldest = todayLog.find(function(l) { return l.userId === u.id && l.productId === chescoProduct.id; });
               if (oldest) toDeactivate.push(oldest.id);
-            });
           });
           var done = 0;
           if (toDeactivate.length === 0) { overlay.remove(); showWaterModal(); return; }
@@ -4330,25 +4341,21 @@
           // Determine next product for this user
           var availableProducts = [];
 
-          // Check garrafones: they cycle G1 -> G2 -> G3 -> G1...
-          var userGarrafonLogs = todayLog.filter(function(l) {
-            return l.userId === selectedUserId && aguaProducts.some(function(p) { return p.id === l.productId; });
-          });
-          if (userGarrafonLogs.length > 0) {
-            // Find the last garrafon they marked (most recent = last in ascending sorted list)
-            var lastGarrafon = userGarrafonLogs[userGarrafonLogs.length - 1];
-            var lastIdx = aguaProducts.findIndex(function(p) { return p.id === lastGarrafon.productId; });
-            // Next in cycle
-            var nextIdx = (lastIdx + 1) % aguaProducts.length;
-            availableProducts.push(aguaProducts[nextIdx]);
+          // Check garrafones: they cycle based on count
+          var userGarrafonCount = todayLog.filter(function(l) {
+            return l.userId === selectedUserId && aguaProduct && l.productId === aguaProduct.id;
+          }).length;
+          if (aguaProduct && userGarrafonCount > 0) {
+            // Can adelantar garrafon (next in cycle)
+            availableProducts.push({ id: aguaProduct.id, name: aguaProduct.name + " " + ((userGarrafonCount % aguaProduct.cantidad) + 1) });
           }
 
           // Check chesco: if they already have chesco, they can adelantar chesco again
-          var userChescoLogs = todayLog.filter(function(l) {
-            return l.userId === selectedUserId && chescoProducts.some(function(p) { return p.id === l.productId; });
-          });
-          if (userChescoLogs.length > 0) {
-            chescoProducts.forEach(function(p) { availableProducts.push(p); });
+          var userChescoCount = todayLog.filter(function(l) {
+            return l.userId === selectedUserId && chescoProduct && l.productId === chescoProduct.id;
+          }).length;
+          if (chescoProduct && userChescoCount > 0) {
+            availableProducts.push({ id: chescoProduct.id, name: chescoProduct.producto });
           }
 
           if (availableProducts.length === 0) {
