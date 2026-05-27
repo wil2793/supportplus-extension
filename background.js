@@ -95,6 +95,20 @@ async function syncNotionData() {
       usersMap[email] = { name: nombre, role: mappedRole, groups: finalGroups, profileId, active, canMigrate };
     }
 
+    // Check sub-groups for permissions (Drag And Drop)
+    const SUBGRUPO_DB = "36c20e0684b9800db6afe60707a87df7";
+    const subGroups = await notionQueryAll(SUBGRUPO_DB);
+    const dragDropGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("drag"));
+    const dragDropMembers = dragDropGroup ? (dragDropGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
+
+    // Mark users who can drag and drop
+    for (const u of users) {
+      const email = (u.properties.Correo?.rich_text?.[0]?.plain_text || u.properties.Correo?.title?.[0]?.plain_text || "").toLowerCase();
+      if (email && usersMap[email]) {
+        usersMap[email].canDragDrop = dragDropMembers.includes(u.id);
+      }
+    }
+
     // Build roles list for the view switcher (exclude admin)
     const rolesList = [];
     const rolesGroupsMap = {}; // roleName -> groups[]

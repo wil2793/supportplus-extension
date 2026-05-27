@@ -73,6 +73,7 @@
   var currentViewMode = null; // null = use own role's view
   var currentUserGroups = []; // Groups from Notion
   var canMigrateMonday = false; // Permission from Notion role
+  var canDragDrop = false; // Permission from sub-group "Drag And Drop"
 
   function getActiveViewMode() {
     return currentViewMode || currentUserRole;
@@ -137,6 +138,9 @@
 
       // Set Monday migration permission
       canMigrateMonday = !!userData.canMigrate;
+
+      // Set drag and drop permission from sub-group
+      canDragDrop = !!userData.canDragDrop;
 
       return userData.role;
     } catch(e) { return "usuario"; }
@@ -301,7 +305,7 @@
     } else {
       groups = [19]; // fallback
     }
-    var canDrag = (currentUserRole === "admin" || currentUserGroups.length > 1);
+    var canDrag = canDragDrop;
     var mgrLoading = false;
 
     function tryInject() {
