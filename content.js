@@ -4326,7 +4326,7 @@
           if (hasAnyLog) {
             var opt = document.createElement("option");
             opt.value = u.id;
-            opt.textContent = u.nombre.split(" ")[0];
+            opt.textContent = u.nombre;
             adelantoUserSelect.appendChild(opt);
           }
         });
