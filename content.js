@@ -4210,11 +4210,16 @@
         '</div>' +
       '</div>';
 
-      overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:700px;width:95%;max-height:90vh;overflow:auto;font-family:system-ui;">' +
+      overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:900px;width:95%;max-height:90vh;overflow:auto;font-family:system-ui;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
           '<h3 style="margin:0;font-size:16px;">🏠 DBA Info</h3>' +
           '<button id="sp-water-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
         '</div>' +
+        '<div style="display:flex;gap:0;margin-bottom:12px;border-bottom:2px solid #e0e0e0;">' +
+          '<button id="sp-dba-tab-current" style="padding:8px 16px;border:none;border-bottom:2px solid #1976D2;background:transparent;color:#1976D2;font-weight:600;font-size:12px;cursor:pointer;margin-bottom:-2px;">Actual</button>' +
+          '<button id="sp-dba-tab-history" style="padding:8px 16px;border:none;border-bottom:2px solid transparent;background:transparent;color:#888;font-weight:600;font-size:12px;cursor:pointer;margin-bottom:-2px;">Histórico</button>' +
+        '</div>' +
+        '<div id="sp-dba-tab-content-current">' +
         '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
           '<thead><tr style="background:#f5f5f5;">' +
             '<th style="padding:6px 10px;text-align:left;">#</th>' +
@@ -4226,10 +4231,95 @@
         '</table>' +
         (resetBtnsHTML ? '<div style="margin-top:12px;text-align:center;">' + resetBtnsHTML + '</div>' : '') +
         adelantoHTML +
+        '</div>' +
+        '<div id="sp-dba-tab-content-history" style="display:none;">' +
+          '<div id="sp-dba-history-content" style="text-align:center;color:#888;padding:20px;">Cargando...</div>' +
+          '<div id="sp-dba-history-nav" style="display:flex;justify-content:center;gap:12px;margin-top:12px;align-items:center;"></div>' +
+        '</div>' +
       '</div>';
       document.body.appendChild(overlay);
       document.getElementById("sp-water-close").addEventListener("click", function() { overlay.remove(); });
       overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+
+      // Tab switching
+      var tabCurrent = document.getElementById("sp-dba-tab-current");
+      var tabHistory = document.getElementById("sp-dba-tab-history");
+      var contentCurrent = document.getElementById("sp-dba-tab-content-current");
+      var contentHistory = document.getElementById("sp-dba-tab-content-history");
+
+      tabCurrent.addEventListener("click", function() {
+        tabCurrent.style.borderBottomColor = "#1976D2"; tabCurrent.style.color = "#1976D2";
+        tabHistory.style.borderBottomColor = "transparent"; tabHistory.style.color = "#888";
+        contentCurrent.style.display = ""; contentHistory.style.display = "none";
+      });
+
+      tabHistory.addEventListener("click", function() {
+        tabHistory.style.borderBottomColor = "#1976D2"; tabHistory.style.color = "#1976D2";
+        tabCurrent.style.borderBottomColor = "transparent"; tabCurrent.style.color = "#888";
+        contentHistory.style.display = ""; contentCurrent.style.display = "none";
+        loadHistory(0);
+      });
+
+      var historyMonthOffset = 0;
+      function loadHistory(offset) {
+        historyMonthOffset = offset;
+        var histContent = document.getElementById("sp-dba-history-content");
+        var histNav = document.getElementById("sp-dba-history-nav");
+        histContent.innerHTML = '<div style="color:#888;padding:20px;text-align:center;">Cargando...</div>';
+
+        var now = new Date();
+        var targetDate = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+        var startDate = targetDate.getFullYear() + "-" + String(targetDate.getMonth() + 1).padStart(2, "0") + "-01";
+        var endMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
+        var endDate = endMonth.getFullYear() + "-" + String(endMonth.getMonth() + 1).padStart(2, "0") + "-" + String(endMonth.getDate()).padStart(2, "0");
+
+        var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+        var monthLabel = meses[targetDate.getMonth()] + " " + targetDate.getFullYear();
+
+        chrome.runtime.sendMessage({ type: "notion-query", dbId: LOG_DB, body: {
+          filter: { and: [
+            { property: "FechaCreacion", date: { on_or_after: startDate } },
+            { property: "FechaCreacion", date: { on_or_before: endDate } }
+          ]},
+          sorts: [{ property: "FechaCreacion", direction: "descending" }]
+        }}, function(resp) {
+          var logs = [];
+          if (resp && resp.success && resp.data.results) {
+            logs = resp.data.results.map(function(p) {
+              return {
+                name: p.properties.Nombre?.title?.[0]?.plain_text || "",
+                date: p.properties.FechaCreacion?.date?.start || "",
+                active: p.properties.Activo?.checkbox
+              };
+            });
+          }
+
+          if (logs.length === 0) {
+            histContent.innerHTML = '<div style="color:#888;padding:20px;text-align:center;">Sin registros en ' + monthLabel + '</div>';
+          } else {
+            var rows = logs.map(function(l) {
+              var statusIcon = l.active ? '\u2705' : '\u274C';
+              return '<tr><td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;">' + l.date + '</td><td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;">' + l.name + '</td><td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;font-size:11px;">' + statusIcon + '</td></tr>';
+            }).join("");
+            histContent.innerHTML = '<div style="text-align:center;font-weight:600;margin-bottom:8px;font-size:13px;">' + monthLabel + '</div>' +
+              '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f5f5f5;"><th style="padding:4px 8px;text-align:left;font-size:11px;">Fecha</th><th style="padding:4px 8px;text-align:left;font-size:11px;">Registro</th><th style="padding:4px 8px;text-align:center;font-size:11px;">Activo</th></tr></thead><tbody>' + rows + '</tbody></table>';
+          }
+
+          // Navigation
+          // Check if there are records in previous month
+          var prevStart = new Date(targetDate.getFullYear(), targetDate.getMonth() - 1, 1);
+          var prevStartStr = prevStart.getFullYear() + "-" + String(prevStart.getMonth() + 1).padStart(2, "0") + "-01";
+          var canGoForward = offset < 0;
+
+          histNav.innerHTML = '<button id="sp-dba-hist-prev" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">← Anterior</button>' +
+            '<span style="font-size:12px;color:#555;">' + monthLabel + '</span>' +
+            '<button id="sp-dba-hist-next" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;"' + (!canGoForward ? ' disabled style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;color:#ccc;cursor:not-allowed;font-size:11px;"' : '') + '>Siguiente →</button>';
+
+          document.getElementById("sp-dba-hist-prev").addEventListener("click", function() { loadHistory(offset - 1); });
+          var nextBtn = document.getElementById("sp-dba-hist-next");
+          if (canGoForward) nextBtn.addEventListener("click", function() { loadHistory(offset + 1); });
+        });
+      }
 
       // Handle check clicks
       overlay.querySelectorAll(".sp-dba-check").forEach(function(cb) {
