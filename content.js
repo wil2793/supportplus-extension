@@ -4103,23 +4103,17 @@
       var userInCumple = sgCumple && sgCumple.members.includes(userPageId);
 
       // Determine visible columns based on user's sub-groups
-      var showGarrafones = userInAgua;
-      var showChesco = userInChesco;
       var showCumple = userInCumple;
 
-      // Build columns from products dynamically using Cantidad
-      products.sort(function(a, b) {
-        var order = ["garraf", "chesco"];
-        var ia = order.findIndex(function(o) { return a.name.toLowerCase().includes(o); }); if (ia === -1) ia = 99;
-        var ib = order.findIndex(function(o) { return b.name.toLowerCase().includes(o); }); if (ib === -1) ib = 99;
-        return ia - ib;
+      // Show ALL products if user is in any sub-group (except cumpleaños-only)
+      var userInAnyProductGroup = subGroups.some(function(sg) {
+        return !sg.name.toLowerCase().includes("cumple") && sg.members.includes(userPageId);
       });
 
-      var visibleProducts = products.filter(function(p) {
-        if (p.name.toLowerCase().includes("garraf") && showGarrafones) return true;
-        if (p.name.toLowerCase().includes("chesco") && showChesco) return true;
-        return false;
-      });
+      // Build columns from products dynamically using Cantidad
+      products.sort(function(a, b) { return a.name.localeCompare(b.name); });
+
+      var visibleProducts = userInAnyProductGroup ? products : [];
 
       // Generate columns: each product has N columns based on Cantidad
       var columns = [];
@@ -4158,11 +4152,11 @@
 
       var productHeaders = columns.map(function(col) { return '<th style="padding:6px 10px;text-align:center;">' + col.colName + '</th>'; }).join("");
 
-      // Check if all users completed all columns of a product type
-      var aguaProduct = visibleProducts.find(function(p) { return p.name.toLowerCase().includes("garraf"); });
-      var chescoProduct = visibleProducts.find(function(p) { return p.name.toLowerCase().includes("chesco"); });
-      var allAguaDone = aguaProduct && users.every(function(u) { return (logCountMap[u.id + "_" + aguaProduct.id] || 0) >= aguaProduct.cantidad; });
-      var allChescoDone = chescoProduct && users.every(function(u) { return (logCountMap[u.id + "_" + chescoProduct.id] || 0) >= chescoProduct.cantidad; });
+      // Check if all users completed all columns of each product
+      var productCompletionMap = {};
+      visibleProducts.forEach(function(p) {
+        productCompletionMap[p.id] = users.every(function(u) { return (logCountMap[u.id + "_" + p.id] || 0) >= p.cantidad; });
+      });
 
       var tableRows = users.map(function(u, idx) {
         var cells = columns.map(function(col) {
@@ -4198,10 +4192,13 @@
 
       var cumpleHeader = showCumple ? '<th style="padding:6px 10px;text-align:center;">🎂</th>' : '';
 
-      // Reset buttons HTML
+      // Reset buttons HTML - one per completed product
       var resetBtnsHTML = '';
-      if (allAguaDone) resetBtnsHTML += '<button id="sp-dba-reset-agua" style="padding:6px 14px;border:none;border-radius:6px;background:#1565C0;color:#fff;cursor:pointer;font-size:12px;font-weight:600;margin-right:8px;">🔄 Reiniciar conteo de agua</button>';
-      if (allChescoDone) resetBtnsHTML += '<button id="sp-dba-reset-chesco" style="padding:6px 14px;border:none;border-radius:6px;background:#6A1B9A;color:#fff;cursor:pointer;font-size:12px;font-weight:600;">🔄 Reiniciar conteo de chesco</button>';
+      visibleProducts.forEach(function(p) {
+        if (productCompletionMap[p.id]) {
+          resetBtnsHTML += '<button class="sp-dba-reset-btn" data-product-id="' + p.id + '" data-product-name="' + p.name + '" style="padding:6px 14px;border:none;border-radius:6px;background:#1565C0;color:#fff;cursor:pointer;font-size:12px;font-weight:600;margin-right:8px;margin-bottom:4px;">\uD83D\uDD04 Reiniciar ' + p.name + '</button>';
+        }
+      });
 
       // Adelantó section
       var adelantoHTML = '<div style="margin-top:12px;padding:8px;border:1px solid #e0e0e0;border-radius:6px;">' +
@@ -4268,18 +4265,18 @@
         });
       });
 
-      // Reset buttons
-      var resetAguaBtn = document.getElementById("sp-dba-reset-agua");
-      if (resetAguaBtn) {
-        resetAguaBtn.addEventListener("click", function() {
-          if (!confirm("¿Reiniciar el conteo de agua? Se desactivará el registro más antiguo de cada persona.")) return;
-          resetAguaBtn.disabled = true;
-          resetAguaBtn.textContent = "⏳ Reiniciando...";
-          // For each user+aguaProduct, deactivate the OLDEST active log entry
+      // Reset buttons - dynamic per product
+      overlay.querySelectorAll(".sp-dba-reset-btn").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          var productId = btn.dataset.productId;
+          var productName = btn.dataset.productName;
+          if (!confirm("¿Reiniciar el conteo de " + productName + "? Se desactivará el registro más antiguo de cada persona.")) return;
+          btn.disabled = true;
+          btn.textContent = "⏳ Reiniciando...";
           var toDeactivate = [];
           users.forEach(function(u) {
-              var oldest = todayLog.find(function(l) { return l.userId === u.id && l.productId === aguaProduct.id; });
-              if (oldest) toDeactivate.push(oldest.id);
+            var oldest = todayLog.find(function(l) { return l.userId === u.id && l.productId === productId; });
+            if (oldest) toDeactivate.push(oldest.id);
           });
           var done = 0;
           if (toDeactivate.length === 0) { overlay.remove(); showWaterModal(); return; }
@@ -4287,40 +4284,14 @@
             chrome.runtime.sendMessage({ type: "notion-update", pageId: pageId, body: { properties: { "Activo": { checkbox: false } } } }, function() {
               done++;
               if (done >= toDeactivate.length) {
-                showSuccessToast("✅ Conteo de agua reiniciado");
+                showSuccessToast("✅ Conteo de " + productName + " reiniciado");
                 overlay.remove();
                 showWaterModal();
               }
             });
           });
         });
-      }
-
-      var resetChescoBtn = document.getElementById("sp-dba-reset-chesco");
-      if (resetChescoBtn) {
-        resetChescoBtn.addEventListener("click", function() {
-          if (!confirm("¿Reiniciar el conteo de chesco? Se desactivará el registro más antiguo de cada persona.")) return;
-          resetChescoBtn.disabled = true;
-          resetChescoBtn.textContent = "⏳ Reiniciando...";
-          var toDeactivate = [];
-          users.forEach(function(u) {
-              var oldest = todayLog.find(function(l) { return l.userId === u.id && l.productId === chescoProduct.id; });
-              if (oldest) toDeactivate.push(oldest.id);
-          });
-          var done = 0;
-          if (toDeactivate.length === 0) { overlay.remove(); showWaterModal(); return; }
-          toDeactivate.forEach(function(pageId) {
-            chrome.runtime.sendMessage({ type: "notion-update", pageId: pageId, body: { properties: { "Activo": { checkbox: false } } } }, function() {
-              done++;
-              if (done >= toDeactivate.length) {
-                showSuccessToast("✅ Conteo de chesco reiniciado");
-                overlay.remove();
-                showWaterModal();
-              }
-            });
-          });
-        });
-      }
+      });
 
       // Adelantó logic
       var adelantoUserSelect = document.getElementById("sp-dba-adelanto-user");
@@ -4347,25 +4318,18 @@
           adelantoBtn.disabled = true;
           if (!selectedUserId) return;
 
-          // Determine next product for this user
+          // Determine next product for this user - check all products
           var availableProducts = [];
-
-          // Check garrafones: they cycle based on count
-          var userGarrafonCount = todayLog.filter(function(l) {
-            return l.userId === selectedUserId && aguaProduct && l.productId === aguaProduct.id;
-          }).length;
-          if (aguaProduct && userGarrafonCount > 0) {
-            // Can adelantar garrafon (next in cycle)
-            availableProducts.push({ id: aguaProduct.id, name: aguaProduct.name + " " + ((userGarrafonCount % aguaProduct.cantidad) + 1) });
-          }
-
-          // Check chesco: if they already have chesco, they can adelantar chesco again
-          var userChescoCount = todayLog.filter(function(l) {
-            return l.userId === selectedUserId && chescoProduct && l.productId === chescoProduct.id;
-          }).length;
-          if (chescoProduct && userChescoCount > 0) {
-            availableProducts.push({ id: chescoProduct.id, name: chescoProduct.producto });
-          }
+          visibleProducts.forEach(function(p) {
+            var userCount = todayLog.filter(function(l) {
+              return l.userId === selectedUserId && l.productId === p.id;
+            }).length;
+            if (userCount > 0) {
+              // Can adelantar: show next column name
+              var nextColName = p.cantidad > 1 ? p.name + " " + ((userCount % p.cantidad) + 1) : p.producto;
+              availableProducts.push({ id: p.id, name: nextColName });
+            }
+          });
 
           if (availableProducts.length === 0) {
             adelantoProductSelect.innerHTML = '<option value="">Sin productos disponibles</option>';
