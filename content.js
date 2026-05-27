@@ -5028,7 +5028,7 @@
       var overlay = document.createElement("div");
       overlay.id = "sp-quick-detail-modal";
       overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-      overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:800px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
+      overlay.innerHTML = '<div style="background:#fff;padding:clamp(12px, 2vw, 24px);border-radius:12px;width:clamp(400px, 85vw, 900px);max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;font-size:clamp(11px, 1.1vw, 14px);">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
           '<h3 style="margin:0;font-size:15px;">📋 ' + (t.uniqueCode || ticketId) + ' <span class="sp-qd-copy-folio" data-copy="' + (t.uniqueCode || ticketId) + '" style="cursor:pointer;font-size:12px;opacity:0.6;" title="Copiar folio">📋</span> <span style="font-weight:400;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-size:12px;">(' + statusName + ')</span></h3>' +
           '<div style="display:flex;gap:6px;align-items:center;">' +
