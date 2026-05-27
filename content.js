@@ -4182,7 +4182,7 @@
       var adelantoHTML = '<div style="margin-top:12px;padding:8px;border:1px solid #e0e0e0;border-radius:6px;">' +
         '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
           '<span style="font-size:12px;font-weight:600;">⏩ Adelantó:</span>' +
-          '<select id="sp-dba-adelanto-user" style="padding:4px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;"><option value="">-- Persona --</option>' + users.map(function(u) { return '<option value="' + u.id + '">' + u.nombre.split(" ")[0] + '</option>'; }).join("") + '</select>' +
+          '<select id="sp-dba-adelanto-user" style="padding:4px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;"><option value="">-- Persona --</option></select>' +
           '<select id="sp-dba-adelanto-product" style="padding:4px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;" disabled><option value="">-- Producto --</option></select>' +
           '<button id="sp-dba-adelanto-btn" style="padding:4px 12px;border:none;border-radius:4px;background:#FF8F00;color:#fff;cursor:pointer;font-size:11px;font-weight:600;" disabled>Registrar</button>' +
         '</div>' +
@@ -4308,6 +4308,18 @@
       var adelantoBtn = document.getElementById("sp-dba-adelanto-btn");
 
       if (adelantoUserSelect) {
+        // Only show users that have at least 1 active log entry
+        adelantoUserSelect.innerHTML = '<option value="">-- Persona --</option>';
+        users.forEach(function(u) {
+          var hasAnyLog = todayLog.some(function(l) { return l.userId === u.id; });
+          if (hasAnyLog) {
+            var opt = document.createElement("option");
+            opt.value = u.id;
+            opt.textContent = u.nombre.split(" ")[0];
+            adelantoUserSelect.appendChild(opt);
+          }
+        });
+
         adelantoUserSelect.addEventListener("change", function() {
           var selectedUserId = adelantoUserSelect.value;
           adelantoProductSelect.innerHTML = '<option value="">-- Producto --</option>';
@@ -4315,22 +4327,34 @@
           adelantoBtn.disabled = true;
           if (!selectedUserId) return;
 
-          // Determine which products this user can "adelantar"
-          // For garrafones: rotate through 1, 2, 3 based on what they already have
-          var userActiveGarrafones = todayLog.filter(function(l) {
+          // Determine next product for this user
+          var availableProducts = [];
+
+          // Check garrafones: they cycle G1 -> G2 -> G3 -> G1...
+          var userGarrafonLogs = todayLog.filter(function(l) {
             return l.userId === selectedUserId && aguaProducts.some(function(p) { return p.id === l.productId; });
           });
-          // Count how many active logs per garrafon product
-          var garrafonCounts = {};
-          aguaProducts.forEach(function(p) { garrafonCounts[p.id] = 0; });
-          userActiveGarrafones.forEach(function(l) { if (garrafonCounts[l.productId] !== undefined) garrafonCounts[l.productId]++; });
+          if (userGarrafonLogs.length > 0) {
+            // Find the last garrafon they marked (most recent = last in ascending sorted list)
+            var lastGarrafon = userGarrafonLogs[userGarrafonLogs.length - 1];
+            var lastIdx = aguaProducts.findIndex(function(p) { return p.id === lastGarrafon.productId; });
+            // Next in cycle
+            var nextIdx = (lastIdx + 1) % aguaProducts.length;
+            availableProducts.push(aguaProducts[nextIdx]);
+          }
 
-          // Next garrafon to adelantar: the one with the least count (round-robin)
-          var minCount = Math.min.apply(null, aguaProducts.map(function(p) { return garrafonCounts[p.id]; }));
-          var availableGarrafones = aguaProducts.filter(function(p) { return garrafonCounts[p.id] === minCount; });
+          // Check chesco: if they already have chesco, they can adelantar chesco again
+          var userChescoLogs = todayLog.filter(function(l) {
+            return l.userId === selectedUserId && chescoProducts.some(function(p) { return p.id === l.productId; });
+          });
+          if (userChescoLogs.length > 0) {
+            chescoProducts.forEach(function(p) { availableProducts.push(p); });
+          }
 
-          // For chesco: always available
-          var availableProducts = availableGarrafones.concat(chescoProducts);
+          if (availableProducts.length === 0) {
+            adelantoProductSelect.innerHTML = '<option value="">Sin productos disponibles</option>';
+            return;
+          }
 
           availableProducts.forEach(function(p) {
             var opt = document.createElement("option");
