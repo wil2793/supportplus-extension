@@ -145,7 +145,24 @@ async function syncNotionData() {
 }
 
 // Sync on install/update
-chrome.runtime.onInstalled.addListener(() => { syncNotionData(); });
+chrome.runtime.onInstalled.addListener((details) => {
+  syncNotionData();
+  // Notify open tabs about the update
+  if (details.reason === "update") {
+    chrome.tabs.query({ url: "https://macropay.supportplus.mx/*" }, (tabs) => {
+      tabs.forEach((tab) => {
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (version) => {
+            alert("⚠️ SupportPlus Tools se actualizó a v" + version + ". La página se recargará para aplicar los cambios.");
+            window.location.reload();
+          },
+          args: [chrome.runtime.getManifest().version]
+        }).catch(() => {});
+      });
+    });
+  }
+});
 
 // Sync on startup
 chrome.runtime.onStartup.addListener(() => { syncNotionData(); });
