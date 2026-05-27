@@ -301,7 +301,7 @@
     } else {
       groups = [19]; // fallback
     }
-    var canDrag = (viewMode === "gerente" || viewMode === "admin" || viewMode === "director");
+    var canDrag = (currentUserRole === "admin" || currentUserGroups.length > 1);
     var mgrLoading = false;
 
     function tryInject() {
