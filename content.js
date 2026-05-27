@@ -4284,11 +4284,23 @@
           sorts: [{ property: "FechaCreacion", direction: "descending" }]
         }}, function(resp) {
           var logs = [];
+          var mesesFecha = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
           if (resp && resp.success && resp.data.results) {
             logs = resp.data.results.map(function(p) {
+              var producto = p.properties.DBA_cat_Productos?.relation?.[0]?.id || "";
+              var usuario = p.properties.MSP_Usuarios?.relation?.[0]?.id || "";
+              var prodName = visibleProducts.find(function(vp) { return vp.id === producto; });
+              var userName = allUserPages[usuario];
+              var displayName = (prodName ? prodName.producto : "Producto") + " - " + (userName ? userName.nombre.split(" ")[0] : "Usuario");
+              var rawDate = p.properties.FechaCreacion?.date?.start || "";
+              var formattedDate = "";
+              if (rawDate) {
+                var parts = rawDate.split("-");
+                formattedDate = parseInt(parts[2]) + " de " + mesesFecha[parseInt(parts[1]) - 1] + " del " + parts[0];
+              }
               return {
-                name: p.properties.Nombre?.title?.[0]?.plain_text || "",
-                date: p.properties.FechaCreacion?.date?.start || "",
+                display: displayName,
+                date: formattedDate,
                 active: p.properties.Activo?.checkbox
               };
             });
@@ -4299,10 +4311,10 @@
           } else {
             var rows = logs.map(function(l) {
               var statusIcon = l.active ? '\u2705' : '\u274C';
-              return '<tr><td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;">' + l.date + '</td><td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;">' + l.name + '</td><td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;font-size:11px;">' + statusIcon + '</td></tr>';
+              return '<tr><td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:center;">' + l.date + '</td><td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:center;">' + l.display + '</td><td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;font-size:11px;">' + statusIcon + '</td></tr>';
             }).join("");
             histContent.innerHTML = '<div style="text-align:center;font-weight:600;margin-bottom:8px;font-size:13px;">' + monthLabel + '</div>' +
-              '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f5f5f5;"><th style="padding:4px 8px;text-align:left;font-size:11px;">Fecha</th><th style="padding:4px 8px;text-align:left;font-size:11px;">Registro</th><th style="padding:4px 8px;text-align:center;font-size:11px;">Activo</th></tr></thead><tbody>' + rows + '</tbody></table>';
+              '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f5f5f5;"><th style="padding:4px 8px;text-align:center;font-size:11px;">Fecha</th><th style="padding:4px 8px;text-align:center;font-size:11px;">Registro</th><th style="padding:4px 8px;text-align:center;font-size:11px;">Activo</th></tr></thead><tbody>' + rows + '</tbody></table>';
           }
 
           // Navigation
