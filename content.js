@@ -4101,10 +4101,12 @@
       var sgAgua = subGroups.find(function(sg) { return sg.name.toLowerCase().includes("agua"); });
       var sgChesco = subGroups.find(function(sg) { return sg.name.toLowerCase().includes("chesco"); });
       var sgCumple = subGroups.find(function(sg) { return sg.name.toLowerCase().includes("cumple"); });
+      var sgGuardias = subGroups.find(function(sg) { return sg.name.toLowerCase().includes("guardias"); });
 
       var userInAgua = sgAgua && sgAgua.members.includes(userPageId);
       var userInChesco = sgChesco && sgChesco.members.includes(userPageId);
       var userInCumple = sgCumple && sgCumple.members.includes(userPageId);
+      var userInGuardias = sgGuardias && sgGuardias.members.includes(userPageId);
 
       // Determine visible columns based on user's sub-groups
       var showCumple = userInCumple;
@@ -4222,6 +4224,7 @@
         '<div style="display:flex;gap:0;margin-bottom:12px;border-bottom:2px solid #e0e0e0;">' +
           '<button id="sp-dba-tab-current" style="padding:8px 16px;border:none;border-bottom:2px solid #1976D2;background:transparent;color:#1976D2;font-weight:600;font-size:12px;cursor:pointer;margin-bottom:-2px;">Actual</button>' +
           '<button id="sp-dba-tab-history" style="padding:8px 16px;border:none;border-bottom:2px solid transparent;background:transparent;color:#888;font-weight:600;font-size:12px;cursor:pointer;margin-bottom:-2px;">Histórico</button>' +
+          (userInGuardias ? '<button id="sp-dba-tab-guardias" style="padding:8px 16px;border:none;border-bottom:2px solid transparent;background:transparent;color:#888;font-weight:600;font-size:12px;cursor:pointer;margin-bottom:-2px;">📅 Guardias</button>' : '') +
         '</div>' +
         '<div id="sp-dba-tab-content-current">' +
         '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
@@ -4240,6 +4243,13 @@
           '<div id="sp-dba-history-content" style="text-align:center;color:#888;padding:20px;">Cargando...</div>' +
           '<div id="sp-dba-history-nav" style="display:flex;justify-content:center;gap:12px;margin-top:12px;align-items:center;"></div>' +
         '</div>' +
+        (userInGuardias ? '<div id="sp-dba-tab-content-guardias" style="display:none;">' +
+          '<div id="sp-dba-guardias-content" style="min-height:200px;text-align:center;color:#888;padding:20px;">Cargando...</div>' +
+          '<div style="display:flex;justify-content:center;gap:12px;margin-top:12px;align-items:center;">' +
+            '<button id="sp-dba-guardias-prev" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">← Anterior</button>' +
+            '<button id="sp-dba-guardias-next" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">Siguiente →</button>' +
+          '</div>' +
+        '</div>' : '') +
       '</div>';
       document.body.appendChild(overlay);
       document.getElementById("sp-water-close").addEventListener("click", function() { overlay.remove(); });
@@ -4248,21 +4258,31 @@
       // Tab switching
       var tabCurrent = document.getElementById("sp-dba-tab-current");
       var tabHistory = document.getElementById("sp-dba-tab-history");
+      var tabGuardias = document.getElementById("sp-dba-tab-guardias");
       var contentCurrent = document.getElementById("sp-dba-tab-content-current");
       var contentHistory = document.getElementById("sp-dba-tab-content-history");
+      var contentGuardias = document.getElementById("sp-dba-tab-content-guardias");
 
-      tabCurrent.addEventListener("click", function() {
-        tabCurrent.style.borderBottomColor = "#1976D2"; tabCurrent.style.color = "#1976D2";
-        tabHistory.style.borderBottomColor = "transparent"; tabHistory.style.color = "#888";
-        contentCurrent.style.display = ""; contentHistory.style.display = "none";
-      });
+      function switchTab(active) {
+        [tabCurrent, tabHistory, tabGuardias].forEach(function(t) { if (t) { t.style.borderBottomColor = "transparent"; t.style.color = "#888"; } });
+        [contentCurrent, contentHistory, contentGuardias].forEach(function(c) { if (c) c.style.display = "none"; });
+        active.tab.style.borderBottomColor = "#1976D2"; active.tab.style.color = "#1976D2";
+        active.content.style.display = "";
+      }
+
+      tabCurrent.addEventListener("click", function() { switchTab({ tab: tabCurrent, content: contentCurrent }); });
 
       tabHistory.addEventListener("click", function() {
-        tabHistory.style.borderBottomColor = "#1976D2"; tabHistory.style.color = "#1976D2";
-        tabCurrent.style.borderBottomColor = "transparent"; tabCurrent.style.color = "#888";
-        contentHistory.style.display = ""; contentCurrent.style.display = "none";
+        switchTab({ tab: tabHistory, content: contentHistory });
         loadHistory(0);
       });
+
+      if (tabGuardias && contentGuardias) {
+        tabGuardias.addEventListener("click", function() {
+          switchTab({ tab: tabGuardias, content: contentGuardias });
+          loadGuardias(0);
+        });
+      }
 
       var historyMonthOffset = 0;
       function loadHistory(offset) {
@@ -4334,6 +4354,68 @@
           document.getElementById("sp-dba-hist-prev").addEventListener("click", function() { loadHistory(offset - 1); });
           var nextBtn = document.getElementById("sp-dba-hist-next");
           if (canGoForward) nextBtn.addEventListener("click", function() { loadHistory(offset + 1); });
+        });
+      }
+
+      // Guardias tab logic
+      var guardiasWeekOffset = 0;
+      function loadGuardias(offset) {
+        guardiasWeekOffset = offset;
+        var gContent = document.getElementById("sp-dba-guardias-content");
+        if (!gContent) return;
+        gContent.innerHTML = '<div style="text-align:center;color:#888;padding:20px;">Cargando...</div>';
+
+        var today = new Date();
+        var dayOfWeek = today.getDay();
+        var monday = new Date(today);
+        monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+        var targetMonday = new Date(monday);
+        targetMonday.setDate(monday.getDate() + (offset * 7));
+        var targetFriday = new Date(targetMonday);
+        targetFriday.setDate(targetMonday.getDate() + 4);
+
+        var startStr = targetMonday.getFullYear() + "-" + String(targetMonday.getMonth() + 1).padStart(2, "0") + "-" + String(targetMonday.getDate()).padStart(2, "0");
+        var endStr = targetFriday.getFullYear() + "-" + String(targetFriday.getMonth() + 1).padStart(2, "0") + "-" + String(targetFriday.getDate()).padStart(2, "0");
+
+        chrome.runtime.sendMessage({ type: "notion-query", dbId: GUARDIAS_DB, body: {
+          filter: { and: [
+            { property: "Fecha", date: { on_or_after: startStr } },
+            { property: "Fecha", date: { on_or_before: endStr } }
+          ]},
+          sorts: [{ property: "Fecha", direction: "ascending" }]
+        }}, function(resp) {
+          var entries = [];
+          if (resp && resp.success && resp.data.results) {
+            entries = resp.data.results.map(function(p) {
+              return { name: p.properties.Nombre?.title?.[0]?.plain_text || "", date: p.properties.Fecha?.date?.start || "" };
+            });
+          }
+          var dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
+          var meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+          var todayStr = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
+
+          var rows = "";
+          for (var i = 0; i < 5; i++) {
+            var d = new Date(targetMonday);
+            d.setDate(targetMonday.getDate() + i);
+            var dStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+            var entry = entries.find(function(e) { return e.date === dStr; });
+            var isToday = dStr === todayStr;
+            var dateDisplay = d.getDate() + " de " + meses[d.getMonth()];
+            rows += '<tr style="' + (isToday ? 'background:#E3F2FD;font-weight:600;' : '') + '">' +
+              '<td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:12px;">' + dias[i] + '</td>' +
+              '<td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:12px;color:#888;">' + dateDisplay + '</td>' +
+              '<td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:12px;font-weight:600;">' + (entry ? entry.name : '—') + '</td>' +
+            '</tr>';
+          }
+          var weekLabel = "Lun " + targetMonday.getDate() + " - Vie " + targetFriday.getDate() + " de " + meses[targetFriday.getMonth()] + " " + targetFriday.getFullYear();
+          gContent.innerHTML = '<div style="text-align:center;font-weight:600;margin-bottom:8px;font-size:13px;">' + weekLabel + '</div>' +
+            '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f5f5f5;"><th style="padding:6px 12px;text-align:left;font-size:11px;">Día</th><th style="padding:6px 12px;text-align:left;font-size:11px;">Fecha</th><th style="padding:6px 12px;text-align:left;font-size:11px;">Guardia</th></tr></thead><tbody>' + rows + '</tbody></table>';
+
+          var prevBtn = document.getElementById("sp-dba-guardias-prev");
+          var nextBtn = document.getElementById("sp-dba-guardias-next");
+          if (prevBtn) { prevBtn.onclick = function() { loadGuardias(guardiasWeekOffset - 1); }; }
+          if (nextBtn) { nextBtn.onclick = function() { loadGuardias(guardiasWeekOffset + 1); }; }
         });
       }
 
@@ -4493,143 +4575,8 @@
     });
   }
 
-  // --- Guardias Button ---
-  const GUARDIAS_BTN_ID = "sp-guardias-btn";
+  // --- Guardias DB constant ---
   const GUARDIAS_DB = "36d20e0684b98004b687c452ab2367a2";
-  function injectGuardiasButton() {
-    if (document.getElementById(GUARDIAS_BTN_ID)) return;
-    var dashBtn = document.getElementById(DASHBOARD_BTN_ID);
-    if (!dashBtn) return;
-    // Only show if user is in sub-group "Guardias DBA"
-    chrome.storage.local.get("userEmail", function(r) {
-      var email = (r.userEmail || "").toLowerCase();
-      if (!email) return;
-      chrome.runtime.sendMessage({ type: "notion-query", dbId: SUBGRUPO_DB, body: {} }, function(sgResp) {
-        if (!sgResp || !sgResp.success || !sgResp.data.results) return;
-        var guardiasGroup = sgResp.data.results.find(function(sg) { return (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("guardias"); });
-        if (!guardiasGroup) return;
-        var memberIds = (guardiasGroup.properties.MSP_Usuarios?.relation || []).map(function(m) { return m.id; });
-        if (memberIds.length === 0) return;
-        chrome.runtime.sendMessage({ type: "notion-pages-batch", pageIds: memberIds }, function(resp) {
-          if (!resp || !resp.success) return;
-          var found = resp.data.some(function(page) {
-            var correo = (page.properties.Correo?.rich_text?.[0]?.plain_text || page.properties.Correo?.title?.[0]?.plain_text || "").toLowerCase();
-            return correo === email;
-          });
-          if (!found) return;
-          if (document.getElementById(GUARDIAS_BTN_ID)) return;
-          var btn = document.createElement("button");
-          btn.id = GUARDIAS_BTN_ID;
-          btn.textContent = "📅 Guardias";
-          btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#E65100;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-          btn.addEventListener("click", showGuardiasModal);
-          dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
-        });
-      });
-    });
-  }
-
-  function showGuardiasModal() {
-    var existing = document.getElementById("sp-guardias-modal");
-    if (existing) { existing.remove(); return; }
-    showLoadingToast("Cargando guardias...");
-
-    // Get current week's Monday
-    var today = new Date();
-    var dayOfWeek = today.getDay();
-    var monday = new Date(today);
-    monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-
-    var weekOffset = 0;
-
-    function loadWeek(offset) {
-      weekOffset = offset;
-      var targetMonday = new Date(monday);
-      targetMonday.setDate(monday.getDate() + (offset * 7));
-      var targetFriday = new Date(targetMonday);
-      targetFriday.setDate(targetMonday.getDate() + 4);
-
-      var startStr = targetMonday.getFullYear() + "-" + String(targetMonday.getMonth() + 1).padStart(2, "0") + "-" + String(targetMonday.getDate()).padStart(2, "0");
-      var endStr = targetFriday.getFullYear() + "-" + String(targetFriday.getMonth() + 1).padStart(2, "0") + "-" + String(targetFriday.getDate()).padStart(2, "0");
-
-      var content = document.getElementById("sp-guardias-content");
-      if (content) content.innerHTML = '<div style="text-align:center;color:#888;padding:20px;">Cargando...</div>';
-
-      chrome.runtime.sendMessage({ type: "notion-query", dbId: GUARDIAS_DB, body: {
-        filter: { and: [
-          { property: "Fecha", date: { on_or_after: startStr } },
-          { property: "Fecha", date: { on_or_before: endStr } }
-        ]},
-        sorts: [{ property: "Fecha", direction: "ascending" }]
-      }}, function(resp) {
-        var lt = document.getElementById("sp-loading-toast"); if (lt) lt.remove();
-        var entries = [];
-        if (resp && resp.success && resp.data.results) {
-          entries = resp.data.results.map(function(p) {
-            return {
-              name: p.properties.Nombre?.title?.[0]?.plain_text || "",
-              date: p.properties.Fecha?.date?.start || ""
-            };
-          });
-        }
-
-        var dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
-        var meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
-
-        var rows = "";
-        for (var i = 0; i < 5; i++) {
-          var d = new Date(targetMonday);
-          d.setDate(targetMonday.getDate() + i);
-          var dStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-          var entry = entries.find(function(e) { return e.date === dStr; });
-          var isToday = dStr === (today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0"));
-          var dateDisplay = d.getDate() + " de " + meses[d.getMonth()];
-          rows += '<tr style="' + (isToday ? 'background:#E3F2FD;font-weight:600;' : '') + '">' +
-            '<td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:12px;">' + dias[i] + '</td>' +
-            '<td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:12px;color:#888;">' + dateDisplay + '</td>' +
-            '<td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:12px;font-weight:600;">' + (entry ? entry.name : '—') + '</td>' +
-          '</tr>';
-        }
-
-        var weekLabel = dias[0].substring(0, 3) + " " + targetMonday.getDate() + " - " + dias[4].substring(0, 3) + " " + targetFriday.getDate() + " de " + meses[targetFriday.getMonth()] + " " + targetFriday.getFullYear();
-
-        if (!content) return;
-        content.innerHTML = '<div style="text-align:center;font-weight:600;margin-bottom:8px;font-size:13px;">' + weekLabel + '</div>' +
-          '<table style="width:100%;border-collapse:collapse;">' +
-            '<thead><tr style="background:#f5f5f5;"><th style="padding:6px 12px;text-align:left;font-size:11px;">Día</th><th style="padding:6px 12px;text-align:left;font-size:11px;">Fecha</th><th style="padding:6px 12px;text-align:left;font-size:11px;">Guardia</th></tr></thead>' +
-            '<tbody>' + rows + '</tbody>' +
-          '</table>';
-
-        var prevBtn = document.getElementById("sp-guardias-prev");
-        var nextBtn = document.getElementById("sp-guardias-next");
-        if (prevBtn) prevBtn.disabled = false;
-        if (nextBtn) nextBtn.disabled = false;
-      });
-    }
-
-    var overlay = document.createElement("div");
-    overlay.id = "sp-guardias-modal";
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:500px;width:95%;max-height:90vh;overflow:auto;font-family:system-ui;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-        '<h3 style="margin:0;font-size:16px;">📅 Guardias DBA</h3>' +
-        '<button id="sp-guardias-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
-      '</div>' +
-      '<div id="sp-guardias-content" style="min-height:200px;"></div>' +
-      '<div style="display:flex;justify-content:center;gap:12px;margin-top:12px;align-items:center;">' +
-        '<button id="sp-guardias-prev" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">← Anterior</button>' +
-        '<button id="sp-guardias-next" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">Siguiente →</button>' +
-      '</div>' +
-    '</div>';
-    document.body.appendChild(overlay);
-
-    document.getElementById("sp-guardias-close").addEventListener("click", function() { overlay.remove(); });
-    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
-    document.getElementById("sp-guardias-prev").addEventListener("click", function() { loadWeek(weekOffset - 1); });
-    document.getElementById("sp-guardias-next").addEventListener("click", function() { loadWeek(weekOffset + 1); });
-
-    loadWeek(0);
-  }
 
   // --- Suggested Comments Button ---
   const SUGGESTED_BTN_ID = "sp-suggested-btn";
@@ -6302,7 +6249,6 @@
     injectSearchButton();
     injectDashboardButton();
     injectWaterButton();
-    injectGuardiasButton();
     injectSuggestedCommentsButton();
     injectReportButton();
     injectMondayStatsButton();
