@@ -4358,24 +4358,22 @@
       }
 
       // Guardias tab logic
-      var guardiasWeekOffset = 0;
+      var guardiasMonthOffset = 0;
       function loadGuardias(offset) {
-        guardiasWeekOffset = offset;
+        guardiasMonthOffset = offset;
         var gContent = document.getElementById("sp-dba-guardias-content");
         if (!gContent) return;
         gContent.innerHTML = '<div style="text-align:center;color:#888;padding:20px;">Cargando...</div>';
 
         var today = new Date();
-        var dayOfWeek = today.getDay();
-        var monday = new Date(today);
-        monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-        var targetMonday = new Date(monday);
-        targetMonday.setDate(monday.getDate() + (offset * 7));
-        var targetFriday = new Date(targetMonday);
-        targetFriday.setDate(targetMonday.getDate() + 4);
+        var targetMonth = new Date(today.getFullYear(), today.getMonth() + offset, 1);
+        var year = targetMonth.getFullYear();
+        var month = targetMonth.getMonth();
+        var startStr = year + "-" + String(month + 1).padStart(2, "0") + "-01";
+        var lastDay = new Date(year, month + 1, 0).getDate();
+        var endStr = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(lastDay).padStart(2, "0");
 
-        var startStr = targetMonday.getFullYear() + "-" + String(targetMonday.getMonth() + 1).padStart(2, "0") + "-" + String(targetMonday.getDate()).padStart(2, "0");
-        var endStr = targetFriday.getFullYear() + "-" + String(targetFriday.getMonth() + 1).padStart(2, "0") + "-" + String(targetFriday.getDate()).padStart(2, "0");
+        var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
         chrome.runtime.sendMessage({ type: "notion-query", dbId: GUARDIAS_DB, body: {
           filter: { and: [
@@ -4384,38 +4382,59 @@
           ]},
           sorts: [{ property: "Fecha", direction: "ascending" }]
         }}, function(resp) {
-          var entries = [];
+          var entries = {};
           if (resp && resp.success && resp.data.results) {
-            entries = resp.data.results.map(function(p) {
-              return { name: p.properties.Nombre?.title?.[0]?.plain_text || "", date: p.properties.Fecha?.date?.start || "" };
+            resp.data.results.forEach(function(p) {
+              var date = p.properties.Fecha?.date?.start || "";
+              var name = p.properties.Nombre?.title?.[0]?.plain_text || "";
+              if (date) entries[date] = name;
             });
           }
-          var dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
-          var meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+
           var todayStr = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
 
-          var rows = "";
-          for (var i = 0; i < 5; i++) {
-            var d = new Date(targetMonday);
-            d.setDate(targetMonday.getDate() + i);
-            var dStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-            var entry = entries.find(function(e) { return e.date === dStr; });
-            var isToday = dStr === todayStr;
-            var dateDisplay = d.getDate() + " de " + meses[d.getMonth()];
-            rows += '<tr style="' + (isToday ? 'background:#E3F2FD;font-weight:600;' : '') + '">' +
-              '<td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:12px;">' + dias[i] + '</td>' +
-              '<td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:12px;color:#888;">' + dateDisplay + '</td>' +
-              '<td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:12px;font-weight:600;">' + (entry ? entry.name : '—') + '</td>' +
-            '</tr>';
+          // Build calendar grid
+          var firstDayOfWeek = new Date(year, month, 1).getDay(); // 0=Sun
+          // Adjust to Mon=0
+          var startOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+
+          var headerHTML = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:1px;margin-bottom:2px;">';
+          var dias = ["Lun", "Mar", "Mié", "Jue", "Vie"];
+          dias.forEach(function(d) { headerHTML += '<div style="text-align:center;font-size:10px;font-weight:600;color:#888;padding:4px;">' + d + '</div>'; });
+          headerHTML += '</div>';
+
+          var calHTML = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:2px;">';
+          // Fill empty cells for days before the 1st (only weekdays)
+          var weekdayOffset = startOffset; // How many weekday cells to skip
+          for (var s = 0; s < weekdayOffset && weekdayOffset < 5; s++) {
+            calHTML += '<div style="padding:6px;min-height:50px;"></div>';
           }
-          var weekLabel = "Lun " + targetMonday.getDate() + " - Vie " + targetFriday.getDate() + " de " + meses[targetFriday.getMonth()] + " " + targetFriday.getFullYear();
-          gContent.innerHTML = '<div style="text-align:center;font-weight:600;margin-bottom:8px;font-size:13px;">' + weekLabel + '</div>' +
-            '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f5f5f5;"><th style="padding:6px 12px;text-align:left;font-size:11px;">Día</th><th style="padding:6px 12px;text-align:left;font-size:11px;">Fecha</th><th style="padding:6px 12px;text-align:left;font-size:11px;">Guardia</th></tr></thead><tbody>' + rows + '</tbody></table>';
+
+          for (var day = 1; day <= lastDay; day++) {
+            var d = new Date(year, month, day);
+            var dow = d.getDay();
+            if (dow === 0 || dow === 6) continue; // Skip weekends
+
+            var dStr = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+            var entry = entries[dStr] || "";
+            var isToday = dStr === todayStr;
+            var bgColor = isToday ? "#E3F2FD" : "#f9f9f9";
+            var borderColor = isToday ? "#1976D2" : "#e0e0e0";
+            var firstName = entry ? entry.split(" ")[0] : "";
+
+            calHTML += '<div style="padding:4px 6px;min-height:50px;background:' + bgColor + ';border:1px solid ' + borderColor + ';border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;">' +
+              '<div style="font-size:13px;font-weight:' + (isToday ? '700' : '600') + ';color:' + (isToday ? '#1976D2' : '#333') + ';">' + day + '</div>' +
+              '<div style="font-size:9px;color:#555;text-align:center;margin-top:2px;' + (isToday ? 'font-weight:600;' : '') + '">' + firstName + '</div>' +
+            '</div>';
+          }
+          calHTML += '</div>';
+
+          gContent.innerHTML = '<div style="text-align:center;font-weight:600;margin-bottom:10px;font-size:14px;">' + meses[month] + ' ' + year + '</div>' + headerHTML + calHTML;
 
           var prevBtn = document.getElementById("sp-dba-guardias-prev");
           var nextBtn = document.getElementById("sp-dba-guardias-next");
-          if (prevBtn) { prevBtn.onclick = function() { loadGuardias(guardiasWeekOffset - 1); }; }
-          if (nextBtn) { nextBtn.onclick = function() { loadGuardias(guardiasWeekOffset + 1); }; }
+          if (prevBtn) { prevBtn.onclick = function() { loadGuardias(guardiasMonthOffset - 1); }; }
+          if (nextBtn) { nextBtn.onclick = function() { loadGuardias(guardiasMonthOffset + 1); }; }
         });
       }
 
