@@ -6189,7 +6189,49 @@
             } else if (isText) {
               var textContent = new TextDecoder("utf-8").decode(byteArray);
               var escaped = textContent.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-              contentHTML = '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:85vh;overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + escaped + '</pre></div>';
+              // Determine language for syntax highlighting
+              var extMatch = fileName.match(/\.([^.]+)$/);
+              var ext = extMatch ? extMatch[1].toLowerCase() : "";
+              var needsHighlight = ext === "sql" || ext === "js" || ext === "ts" || ext === "py" || ext === "json" || ext === "xml" || ext === "html" || ext === "css";
+
+              if (needsHighlight) {
+                var highlighted = escaped;
+                if (ext === "sql") {
+                  // SQL keywords
+                  highlighted = highlighted.replace(/\b(SELECT|FROM|WHERE|INSERT|INTO|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TABLE|INDEX|VIEW|PROCEDURE|FUNCTION|TRIGGER|BEGIN|END|IF|ELSE|THEN|CASE|WHEN|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|IS|NULL|AS|ON|JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|UNION|ALL|DISTINCT|ORDER|BY|GROUP|HAVING|LIMIT|OFFSET|TOP|VALUES|EXEC|EXECUTE|DECLARE|VARCHAR|INT|BIGINT|NVARCHAR|DATETIME|BIT|FLOAT|DECIMAL|PRIMARY|KEY|FOREIGN|REFERENCES|CONSTRAINT|DEFAULT|IDENTITY|GO|USE|DATABASE|SCHEMA|GRANT|REVOKE|COMMIT|ROLLBACK|TRANSACTION|WITH|NOLOCK|COUNT|SUM|AVG|MAX|MIN|COALESCE|ISNULL|CAST|CONVERT|GETDATE|DATEADD|DATEDIFF|LEN|SUBSTRING|REPLACE|TRIM|UPPER|LOWER|ROW_NUMBER|OVER|PARTITION|RANK|DENSE_RANK|LAG|LEAD|MERGE|OUTPUT|INSERTED|DELETED|CURSOR|FETCH|NEXT|OPEN|CLOSE|DEALLOCATE|PRINT|RAISERROR|TRY|CATCH|THROW|RETURN|WHILE|BREAK|CONTINUE|TEMP|TEMPORARY|TRUNCATE|ASC|DESC|HAVING|EXCEPT|INTERSECT)\b/gi, '<span style="color:#569CD6;">$1</span>');
+                  // Strings
+                  highlighted = highlighted.replace(/(&apos;|&#39;|&#x27;|'[^']*')/g, '<span style="color:#CE9178;">$1</span>');
+                  // Comments
+                  highlighted = highlighted.replace(/(--[^\n]*)/g, '<span style="color:#6A9955;">$1</span>');
+                  highlighted = highlighted.replace(/(\/\*[\s\S]*?\*\/)/g, '<span style="color:#6A9955;">$1</span>');
+                  // Numbers
+                  highlighted = highlighted.replace(/\b(\d+)\b/g, '<span style="color:#B5CEA8;">$1</span>');
+                } else if (ext === "json") {
+                  // Keys
+                  highlighted = highlighted.replace(/(&quot;[^&]*?&quot;)\s*:/g, '<span style="color:#9CDCFE;">$1</span>:');
+                  // String values
+                  highlighted = highlighted.replace(/:\s*(&quot;[^&]*?&quot;)/g, ': <span style="color:#CE9178;">$1</span>');
+                  // Numbers/booleans
+                  highlighted = highlighted.replace(/:\s*(true|false|null|\d+\.?\d*)/g, ': <span style="color:#B5CEA8;">$1</span>');
+                } else if (ext === "js" || ext === "ts") {
+                  highlighted = highlighted.replace(/\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|new|this|try|catch|throw|typeof|instanceof)\b/g, '<span style="color:#569CD6;">$1</span>');
+                  highlighted = highlighted.replace(/(\/\/[^\n]*)/g, '<span style="color:#6A9955;">$1</span>');
+                  highlighted = highlighted.replace(/(&quot;[^&]*?&quot;|&apos;[^&]*?&apos;)/g, '<span style="color:#CE9178;">$1</span>');
+                } else if (ext === "py") {
+                  highlighted = highlighted.replace(/\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|in|not|and|or|True|False|None|self|print|lambda|yield|raise|pass|break|continue)\b/g, '<span style="color:#569CD6;">$1</span>');
+                  highlighted = highlighted.replace(/(#[^\n]*)/g, '<span style="color:#6A9955;">$1</span>');
+                } else if (ext === "xml" || ext === "html") {
+                  highlighted = highlighted.replace(/(&lt;\/?[a-zA-Z][a-zA-Z0-9]*)/g, '<span style="color:#569CD6;">$1</span>');
+                  highlighted = highlighted.replace(/(\s[a-zA-Z-]+)=/g, '<span style="color:#9CDCFE;">$1</span>=');
+                  highlighted = highlighted.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span style="color:#6A9955;">$1</span>');
+                } else if (ext === "css") {
+                  highlighted = highlighted.replace(/([.#]?[a-zA-Z_-][a-zA-Z0-9_-]*)\s*\{/g, '<span style="color:#D7BA7D;">$1</span> {');
+                  highlighted = highlighted.replace(/([a-z-]+)\s*:/g, '<span style="color:#9CDCFE;">$1</span>:');
+                }
+                contentHTML = '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:85vh;overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + highlighted + '</pre></div>';
+              } else {
+                contentHTML = '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:85vh;overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + escaped + '</pre></div>';
+              }
             } else {
               contentHTML = '<div style="background:#fff;padding:24px;border-radius:8px;text-align:center;"><p style="margin:0 0 12px;font-size:14px;">No se puede previsualizar: <b>' + fileName + '</b></p><a href="' + url + '" download="' + fileName + '" style="padding:8px 16px;background:#1976D2;color:#fff;border-radius:6px;text-decoration:none;font-size:13px;">📥 Descargar</a></div>';
             }
