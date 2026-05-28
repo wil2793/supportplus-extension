@@ -4393,38 +4393,44 @@
 
           var todayStr = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
 
-          // Build calendar grid
+          // Build calendar grid (7 days including weekends)
           var firstDayOfWeek = new Date(year, month, 1).getDay(); // 0=Sun
           // Adjust to Mon=0
           var startOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
 
-          var headerHTML = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:1px;margin-bottom:2px;">';
-          var dias = ["Lun", "Mar", "Mié", "Jue", "Vie"];
-          dias.forEach(function(d) { headerHTML += '<div style="text-align:center;font-size:10px;font-weight:600;color:#888;padding:4px;">' + d + '</div>'; });
+          var headerHTML = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;margin-bottom:2px;">';
+          var dias = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+          dias.forEach(function(d, i) { headerHTML += '<div style="text-align:center;font-size:10px;font-weight:600;color:' + (i >= 5 ? '#E65100' : '#888') + ';padding:4px;">' + d + '</div>'; });
           headerHTML += '</div>';
 
-          var calHTML = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:2px;">';
-          // Fill empty cells for days before the 1st (only weekdays)
-          var weekdayOffset = startOffset; // How many weekday cells to skip
-          for (var s = 0; s < weekdayOffset && weekdayOffset < 5; s++) {
+          var calHTML = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">';
+          // Fill empty cells for days before the 1st
+          for (var s = 0; s < startOffset; s++) {
             calHTML += '<div style="padding:6px;min-height:50px;"></div>';
           }
+
+          // Get current user's name to highlight their days
+          var currentUserName = "";
+          Object.keys(allUserPages).forEach(function(pid) {
+            if (allUserPages[pid].correo === currentEmail) currentUserName = allUserPages[pid].nombre;
+          });
 
           for (var day = 1; day <= lastDay; day++) {
             var d = new Date(year, month, day);
             var dow = d.getDay();
-            if (dow === 0 || dow === 6) continue; // Skip weekends
 
             var dStr = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
             var entry = entries[dStr] || "";
             var isToday = dStr === todayStr;
-            var bgColor = isToday ? "#E3F2FD" : "#f9f9f9";
-            var borderColor = isToday ? "#1976D2" : "#e0e0e0";
+            var isWeekend = dow === 0 || dow === 6;
+            var isMyDay = entry && currentUserName && entry.toLowerCase().includes(currentUserName.split(" ")[0].toLowerCase());
+            var bgColor = isToday ? "#E3F2FD" : isMyDay ? "#E8F5E9" : isWeekend ? "#FFF3E0" : "#f9f9f9";
+            var borderColor = isToday ? "#1976D2" : isMyDay ? "#4CAF50" : "#e0e0e0";
             var firstName = entry ? entry.split(" ")[0] : "";
 
             calHTML += '<div style="padding:4px 6px;min-height:50px;background:' + bgColor + ';border:1px solid ' + borderColor + ';border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;">' +
-              '<div style="font-size:13px;font-weight:' + (isToday ? '700' : '600') + ';color:' + (isToday ? '#1976D2' : '#333') + ';">' + day + '</div>' +
-              '<div style="font-size:9px;color:#555;text-align:center;margin-top:2px;' + (isToday ? 'font-weight:600;' : '') + '">' + firstName + '</div>' +
+              '<div style="font-size:13px;font-weight:' + (isToday ? '700' : '600') + ';color:' + (isToday ? '#1976D2' : isWeekend ? '#E65100' : '#333') + ';">' + day + '</div>' +
+              '<div style="font-size:9px;color:#555;text-align:center;margin-top:2px;' + (isMyDay ? 'font-weight:700;color:#2E7D32;' : '') + '">' + firstName + '</div>' +
             '</div>';
           }
           calHTML += '</div>';
