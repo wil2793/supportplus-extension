@@ -6047,6 +6047,18 @@
         if (takeAttachInput) { takeAttachInput.addEventListener("change", function() { for (var i = 0; i < takeAttachInput.files.length; i++) takePendingFiles.push(takeAttachInput.files[i]); takeAttachInput.value = ""; renderTakeFiles(); }); }
         if (takeCloseAttachInput) { takeCloseAttachInput.addEventListener("change", function() { for (var i = 0; i < takeCloseAttachInput.files.length; i++) takeCloseFiles.push(takeCloseAttachInput.files[i]); takeCloseAttachInput.value = ""; renderTakeCloseFiles(); }); }
 
+        // Paste image from clipboard into take textareas
+        var takeCommentEl = document.getElementById("sp-qd-take-comment");
+        var takeCloseCommentEl = document.getElementById("sp-qd-take-close-comment");
+        if (takeCommentEl) { takeCommentEl.addEventListener("paste", function(e) {
+          var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+          for (var i = 0; i < items.length; i++) { if (items[i].type.indexOf("image") !== -1) { var f = items[i].getAsFile(); if (f) { takePendingFiles.push(new File([f], "clipboard_" + Date.now() + ".png", { type: f.type })); renderTakeFiles(); } e.preventDefault(); break; } }
+        }); }
+        if (takeCloseCommentEl) { takeCloseCommentEl.addEventListener("paste", function(e) {
+          var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+          for (var i = 0; i < items.length; i++) { if (items[i].type.indexOf("image") !== -1) { var f = items[i].getAsFile(); if (f) { takeCloseFiles.push(new File([f], "clipboard_" + Date.now() + ".png", { type: f.type })); renderTakeCloseFiles(); } e.preventDefault(); break; } }
+        }); }
+
         // Confirm button - executes the take action
         var takeConfirmBtn = document.getElementById("sp-qd-take-confirm");
         if (takeConfirmBtn) {
@@ -6190,6 +6202,13 @@
           }
         }
         if (closeAttachInput) { closeAttachInput.addEventListener("change", function() { for (var i = 0; i < closeAttachInput.files.length; i++) closePendingFiles.push(closeAttachInput.files[i]); closeAttachInput.value = ""; renderCloseFiles(); }); }
+
+        // Paste image from clipboard into close textarea
+        var closeCommentEl = document.getElementById("sp-qd-close-comment");
+        if (closeCommentEl) { closeCommentEl.addEventListener("paste", function(e) {
+          var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+          for (var i = 0; i < items.length; i++) { if (items[i].type.indexOf("image") !== -1) { var f = items[i].getAsFile(); if (f) { closePendingFiles.push(new File([f], "clipboard_" + Date.now() + ".png", { type: f.type })); renderCloseFiles(); } e.preventDefault(); break; } }
+        }); }
 
         var closeConfirmBtn = document.getElementById("sp-qd-close-confirm");
         if (closeConfirmBtn) {
