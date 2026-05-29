@@ -6584,6 +6584,7 @@
       var lt = document.getElementById("sp-loading-toast"); if (lt) lt.remove();
       showSuccessToast("✅ Migrado a Monday");
       document.dispatchEvent(new CustomEvent("sp-refresh-panel"));
+      injectButtons();
     } catch (err) {
       var lt2 = document.getElementById("sp-loading-toast"); if (lt2) lt2.remove();
       showErrorToast("Error Monday: " + err.message);
@@ -6783,6 +6784,7 @@
         }
         showSuccessToast("Ticket migrado a Monday");
         document.dispatchEvent(new CustomEvent("sp-refresh-panel"));
+        injectButtons();
         if (isDetailView()) {
           var migrateOverlay = document.createElement("div");
           migrateOverlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
