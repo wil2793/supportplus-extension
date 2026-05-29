@@ -6463,12 +6463,15 @@
 
       // Inject migrate buttons for "Cerrado" tickets
       if (statusText === "Cerrado" && rowBelongsToMe) {
-        if (row.querySelector("." + BTN_CLASS) || row.querySelector("." + SYNCED_CLASS)) return;
+        if (row.querySelector("." + SYNCED_CLASS)) return;
         const codeEl = firstCell.querySelector("p.MuiTypography-body1");
         const uniqueCode = codeEl ? codeEl.textContent.trim() : "";
         if (uniqueCode && synced[uniqueCode]) {
+          // Remove existing migrate button if present and replace with synced badge
+          var oldBtn = row.querySelector("." + BTN_CLASS);
+          if (oldBtn) oldBtn.remove();
           container.appendChild(createSyncedBadge(synced[uniqueCode]));
-        } else {
+        } else if (!row.querySelector("." + BTN_CLASS)) {
           // Only show migrate button if ticket matches board period
           var dateCell = row.querySelector('[data-field="createdAt"]');
           var dateText = dateCell ? dateCell.textContent.trim() : "";
