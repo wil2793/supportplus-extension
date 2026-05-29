@@ -111,6 +111,7 @@
   var currentUserGroups = []; // Groups from Notion
   var canMigrateMonday = false; // Permission from Notion role
   var canDragDrop = false; // Permission from sub-group "Drag And Drop"
+  var _lastDropTime = 0; // Timestamp of last drag-and-drop to prevent accidental modal opens
 
   function getActiveViewMode() {
     return currentViewMode || currentUserRole;
@@ -704,13 +705,11 @@
 
       // Click on ticket opens modal (only if not dragging)
       var isDragging = false;
-      var isDragging = false;
-      var lastDropTime = 0;
       container.addEventListener("mousedown", function(e) { isDragging = false; });
       container.addEventListener("mousemove", function(e) { if (e.buttons) isDragging = true; });
       container.addEventListener("click", function(e) {
         if (isDragging) return;
-        if (Date.now() - lastDropTime < 1000) return;
+        if (Date.now() - _lastDropTime < 1500) return;
         var ticket = e.target.closest(".sp-mgr-ticket");
         if (!ticket) return;
         var ticketId = ticket.dataset.ticketId;
@@ -764,7 +763,7 @@
             if (!res.ok) throw new Error("HTTP " + res.status);
             var json2 = await res.json();
             if (json2.success) {
-              lastDropTime = Date.now();
+              _lastDropTime = Date.now();
               // Refresh this group detail
               container.innerHTML = "";
               loadManagerGroupDetail(parseInt(targetGroupId), container, spToken, canDrag);
