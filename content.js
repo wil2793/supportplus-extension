@@ -759,20 +759,12 @@
 
           // Move ticket visually immediately (optimistic UI)
           if (src) {
-            src.style.opacity = "1";
-            zone.appendChild(src);
-            // Update source column count
-            if (srcZone) {
-              var srcCount = srcZone.previousElementSibling ? srcZone.previousElementSibling.querySelector(".sp-mgr-pcount") : null;
-              if (srcCount) srcCount.textContent = "(" + srcZone.querySelectorAll(".sp-mgr-ticket").length + ")";
-            }
-            // Update target column count
-            var tgtCount = zone.previousElementSibling ? zone.previousElementSibling.querySelector(".sp-mgr-pcount") : null;
-            if (tgtCount) tgtCount.textContent = "(" + zone.querySelectorAll(".sp-mgr-ticket").length + ")";
+            src.style.opacity = "0.5";
+            src.style.border = "1px dashed #1976D2";
           }
           _lastDropTime = Date.now();
 
-          // API call in background
+          // API call
           try {
             var res = await fetch("https://macropayapi.supportplus.mx/tickets/web/reassign/" + ticketId, {
               method: "PUT",
@@ -782,8 +774,13 @@
             if (!res.ok) throw new Error("HTTP " + res.status);
             var json2 = await res.json();
             if (json2.success) {
-              // Already moved visually - no need to refresh
-              showSuccessToast("Ticket reasignado");
+              // Remove the ticket from source immediately
+              if (src) src.remove();
+              // Refresh after a short delay
+              setTimeout(function() {
+                container.innerHTML = "";
+                loadManagerGroupDetail(parseInt(targetGroupId), container, spToken, canDrag);
+              }, 300);
             }
           } catch(err) {}
         });
