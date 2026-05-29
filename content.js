@@ -5506,6 +5506,7 @@
                 (hasMondayConfig ? '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Migrar a Monday</label><select id="sp-qd-take-group" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;"><option value="">-- Selecciona destino --</option></select>' : '') +
               '</div>' +
               '<div style="display:flex;gap:6px;margin-top:8px;"><button id="sp-qd-take-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:11px;font-weight:600;">Confirmar</button><button id="sp-qd-take-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:11px;font-weight:600;">Cancelar</button></div>' +
+              '<div id="sp-qd-take-suggested" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;"></div>' +
             '</div>' +
           '</div>' : '') +
           // Action row - only if not closed and not waiting
@@ -5522,6 +5523,7 @@
                 '<textarea id="sp-qd-close-comment" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea>' +
                 (showMondayOption ? '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Migrar a Monday</label><select id="sp-qd-close-group" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;margin-bottom:6px;"><option value="">-- Selecciona destino --</option></select>' : '') +
                 '<div style="display:flex;gap:6px;"><button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:' + (showMondayOption ? '#D94040' : '#616161') + ';color:#fff;cursor:pointer;font-size:11px;font-weight:600;">Confirmar</button><button id="sp-qd-close-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:11px;font-weight:600;">Cancelar</button></div>' +
+                '<div id="sp-qd-close-suggested" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;"></div>' +
               '</div>' +
             '</div>';
             return closeHTML;
@@ -5784,42 +5786,42 @@
             }
           }
         });
-        // Load suggested comments
-        var suggestedDiv = document.getElementById("sp-qd-suggested");
-        if (suggestedDiv) {
-          chrome.storage.local.get("suggestedComments", function(r) {
-            var comments = r.suggestedComments || {};
-            var groupId = getTeamConfig().resolutionGroupId;
-            var groupComments = comments[groupId] || [];
+        // Load suggested comments into all containers
+        var suggestedContainers = ["sp-qd-suggested", "sp-qd-take-suggested", "sp-qd-close-suggested"];
+        chrome.storage.local.get("suggestedComments", function(r) {
+          var comments = r.suggestedComments || {};
+          var groupId = getTeamConfig().resolutionGroupId;
+          var groupComments = comments[groupId] || [];
+          suggestedContainers.forEach(function(containerId) {
+            var container = document.getElementById(containerId);
+            if (!container) return;
             groupComments.forEach(function(c) {
               var chip = document.createElement("button");
               chip.textContent = c.text.substring(0, 40) + (c.text.length > 40 ? "..." : "");
               chip.title = c.text;
               chip.style.cssText = "padding:3px 8px;font-size:10px;border:1px solid #90CAF9;border-radius:12px;background:#E3F2FD;color:#1565C0;cursor:pointer;white-space:nowrap;";
               chip.addEventListener("click", function() {
-                // Insert in the visible comment field
-                var bottomSection = document.getElementById("sp-qd-comment-section");
                 var takeComment = document.getElementById("sp-qd-take-comment");
                 var takeCloseComment = document.getElementById("sp-qd-take-close-comment");
                 var closeComment = document.getElementById("sp-qd-close-comment");
                 if (takeCloseComment && takeCloseComment.offsetParent !== null) {
                   takeCloseComment.value = c.text;
                   takeCloseComment.focus();
-                } else if (takeComment && takeComment.offsetParent !== null) {
-                  takeComment.value = c.text;
-                  takeComment.focus();
                 } else if (closeComment && closeComment.offsetParent !== null) {
                   closeComment.value = c.text;
                   closeComment.focus();
-                } else if (bottomSection && bottomSection.style.display !== "none") {
+                } else if (takeComment && takeComment.offsetParent !== null) {
+                  takeComment.value = c.text;
+                  takeComment.focus();
+                } else if (commentInputEl) {
                   commentInputEl.value = c.text;
                   commentInputEl.focus();
                 }
               });
-              suggestedDiv.appendChild(chip);
+              container.appendChild(chip);
             });
           });
-        }
+        });
       }
 
       // Add attachment to existing comment
