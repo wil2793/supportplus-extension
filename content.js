@@ -691,16 +691,16 @@
         });
         container.addEventListener("dragover", function(e) {
           e.preventDefault();
-          var zone = e.target.closest(".sp-mgr-ptickets");
+          var zone = e.target.closest(".sp-mgr-ptickets") || (e.target.closest("[style*='border-radius:6px']") ? e.target.closest("[style*='border-radius:6px']").querySelector(".sp-mgr-ptickets") : null);
           if (zone) zone.style.background = "#e3f2fd";
         });
         container.addEventListener("dragleave", function(e) {
-          var zone = e.target.closest(".sp-mgr-ptickets");
+          var zone = e.target.closest(".sp-mgr-ptickets") || (e.target.closest("[style*='border-radius:6px']") ? e.target.closest("[style*='border-radius:6px']").querySelector(".sp-mgr-ptickets") : null);
           if (zone && !zone.contains(e.relatedTarget)) zone.style.background = "#fafafa";
         });
         container.addEventListener("drop", async function(e) {
           e.preventDefault();
-          var zone = e.target.closest(".sp-mgr-ptickets");
+          var zone = e.target.closest(".sp-mgr-ptickets") || (e.target.closest("[style*='border-radius:6px']") ? e.target.closest("[style*='border-radius:6px']").querySelector(".sp-mgr-ptickets") : null);
           if (!zone) return;
           zone.style.background = "#fafafa";
           var ticketId = e.dataTransfer.getData("text/plain");
