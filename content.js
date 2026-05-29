@@ -730,18 +730,21 @@
         });
         container.addEventListener("dragover", function(e) {
           e.preventDefault();
-          var zone = e.target.closest(".sp-mgr-ptickets") || (e.target.closest("[style*='border-radius:6px']") ? e.target.closest("[style*='border-radius:6px']").querySelector(".sp-mgr-ptickets") : null);
-          if (zone) zone.style.background = "#e3f2fd";
+          var col = e.target.closest("[style*='border-radius:6px']");
+          var zone = e.target.closest(".sp-mgr-ptickets") || (col ? col.querySelector(".sp-mgr-ptickets") : null);
+          if (zone) { zone.style.background = "#e3f2fd"; zone.style.outline = "2px dashed #1976D2"; }
         });
         container.addEventListener("dragleave", function(e) {
-          var zone = e.target.closest(".sp-mgr-ptickets") || (e.target.closest("[style*='border-radius:6px']") ? e.target.closest("[style*='border-radius:6px']").querySelector(".sp-mgr-ptickets") : null);
-          if (zone && !zone.contains(e.relatedTarget)) zone.style.background = "#fafafa";
+          var col = e.target.closest("[style*='border-radius:6px']");
+          var zone = e.target.closest(".sp-mgr-ptickets") || (col ? col.querySelector(".sp-mgr-ptickets") : null);
+          if (zone && !zone.contains(e.relatedTarget)) { zone.style.background = "#fafafa"; zone.style.outline = "none"; }
         });
         container.addEventListener("drop", async function(e) {
           e.preventDefault();
           var zone = e.target.closest(".sp-mgr-ptickets") || (e.target.closest("[style*='border-radius:6px']") ? e.target.closest("[style*='border-radius:6px']").querySelector(".sp-mgr-ptickets") : null);
           if (!zone) return;
           zone.style.background = "#fafafa";
+          zone.style.outline = "none";
           var ticketId = e.dataTransfer.getData("text/plain");
           var targetProfileId = zone.dataset.profileId;
           var targetGroupId = zone.dataset.groupId;
@@ -754,6 +757,22 @@
             if (srcZone && srcZone.dataset.profileId === targetProfileId) return;
           }
 
+          // Move ticket visually immediately (optimistic UI)
+          if (src) {
+            src.style.opacity = "1";
+            zone.appendChild(src);
+            // Update source column count
+            if (srcZone) {
+              var srcCount = srcZone.previousElementSibling ? srcZone.previousElementSibling.querySelector(".sp-mgr-pcount") : null;
+              if (srcCount) srcCount.textContent = "(" + srcZone.querySelectorAll(".sp-mgr-ticket").length + ")";
+            }
+            // Update target column count
+            var tgtCount = zone.previousElementSibling ? zone.previousElementSibling.querySelector(".sp-mgr-pcount") : null;
+            if (tgtCount) tgtCount.textContent = "(" + zone.querySelectorAll(".sp-mgr-ticket").length + ")";
+          }
+          _lastDropTime = Date.now();
+
+          // API call in background
           try {
             var res = await fetch("https://macropayapi.supportplus.mx/tickets/web/reassign/" + ticketId, {
               method: "PUT",
@@ -763,10 +782,8 @@
             if (!res.ok) throw new Error("HTTP " + res.status);
             var json2 = await res.json();
             if (json2.success) {
-              _lastDropTime = Date.now();
-              // Refresh this group detail
-              container.innerHTML = "";
-              loadManagerGroupDetail(parseInt(targetGroupId), container, spToken, canDrag);
+              // Already moved visually - no need to refresh
+              showSuccessToast("Ticket reasignado");
             }
           } catch(err) {}
         });
