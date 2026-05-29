@@ -6088,23 +6088,76 @@
             try {
               var myProfId = await getMyProfileId();
               if (!myProfId) throw new Error("No se pudo obtener tu perfil");
-              var res = await fetch(SP_API + "/reassign/" + ticketId, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                body: JSON.stringify({ resolutionGroupId: teamConfig.resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: teamConfig.resolutionGroupLabel, value: teamConfig.resolutionGroupId }, ticketCommentRequest: { internal: false, content: comment } }),
-              });
-              if (!res.ok) throw new Error("HTTP " + res.status);
-              var json2 = await res.json();
-              if (!json2.success) throw new Error("No success");
+
+              // If there are files, post comment separately to get commentId for attachments
+              if (takePendingFiles.length > 0) {
+                // Reassign without comment
+                var res = await fetch(SP_API + "/reassign/" + ticketId, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                  body: JSON.stringify({ resolutionGroupId: teamConfig.resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: teamConfig.resolutionGroupLabel, value: teamConfig.resolutionGroupId } }),
+                });
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                // Post comment separately
+                var commentRes = await fetch(SP_API + "/comment/" + ticketId, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                  body: JSON.stringify({ content: "<p>" + comment + "</p>", internal: false }),
+                });
+                var commentJson = await commentRes.json();
+                var commentId = commentJson.data?.id || commentJson.id;
+                // Upload files
+                if (commentId) {
+                  var formData = new FormData();
+                  takePendingFiles.forEach(function(f) { formData.append("files", f); });
+                  var fileRes = await fetch("https://macropayapi.supportplus.mx/files", { method: "POST", headers: { authorization: "Bearer " + spToken }, body: formData });
+                  if (fileRes.ok) {
+                    var fileJson = await fileRes.json();
+                    var uploadedFiles = fileJson.data || fileJson;
+                    if (Array.isArray(uploadedFiles) && uploadedFiles.length) {
+                      var attachPayload = uploadedFiles.map(function(f) { return { fileId: f.id }; });
+                      await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", { method: "POST", headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken }, body: JSON.stringify({ attachments: attachPayload, commentId: commentId, isInternal: false }) });
+                    }
+                  }
+                }
+              } else {
+                // No files - reassign with comment inline
+                var res = await fetch(SP_API + "/reassign/" + ticketId, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                  body: JSON.stringify({ resolutionGroupId: teamConfig.resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: teamConfig.resolutionGroupLabel, value: teamConfig.resolutionGroupId }, ticketCommentRequest: { internal: false, content: comment } }),
+                });
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                var json2 = await res.json();
+                if (!json2.success) throw new Error("No success");
+              }
 
               if (takeDoneCheck.checked) {
                 var closeComment = document.getElementById("sp-qd-take-close-comment").value.trim();
-                if (closeComment) {
-                  await fetch(SP_API + "/comment/" + ticketId, {
+                if (closeComment || takeCloseFiles.length > 0) {
+                  var closeCommentRes = await fetch(SP_API + "/comment/" + ticketId, {
                     method: "POST",
                     headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                    body: JSON.stringify({ content: "<p>" + closeComment + "</p>", internal: false }),
+                    body: JSON.stringify({ content: "<p>" + (closeComment || "(archivo adjunto)") + "</p>", internal: false }),
                   });
+                  // Upload close files if any
+                  if (takeCloseFiles.length > 0) {
+                    var closeCommentJson = await closeCommentRes.json();
+                    var closeCommentId = closeCommentJson.data?.id || closeCommentJson.id;
+                    if (closeCommentId) {
+                      var formData2 = new FormData();
+                      takeCloseFiles.forEach(function(f) { formData2.append("files", f); });
+                      var fileRes2 = await fetch("https://macropayapi.supportplus.mx/files", { method: "POST", headers: { authorization: "Bearer " + spToken }, body: formData2 });
+                      if (fileRes2.ok) {
+                        var fileJson2 = await fileRes2.json();
+                        var uploadedFiles2 = fileJson2.data || fileJson2;
+                        if (Array.isArray(uploadedFiles2) && uploadedFiles2.length) {
+                          var attachPayload2 = uploadedFiles2.map(function(f) { return { fileId: f.id }; });
+                          await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", { method: "POST", headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken }, body: JSON.stringify({ attachments: attachPayload2, commentId: closeCommentId, isInternal: false }) });
+                        }
+                      }
+                    }
+                  }
                 }
                 await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
                   method: "PATCH",
@@ -6238,13 +6291,29 @@
             closeConfirmBtn.textContent = "⏳...";
             showLoadingToast("Cerrando ticket...");
             try {
-              // Comment if provided
-              if (closeComment) {
-                await fetch(SP_API + "/comment/" + ticketId, {
+              // Comment if provided (with file upload)
+              if (closeComment || closePendingFiles.length > 0) {
+                var cRes = await fetch(SP_API + "/comment/" + ticketId, {
                   method: "POST",
                   headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                  body: JSON.stringify({ content: "<p>" + closeComment + "</p>", internal: false }),
+                  body: JSON.stringify({ content: "<p>" + (closeComment || "(archivo adjunto)") + "</p>", internal: false }),
                 });
+                if (closePendingFiles.length > 0 && cRes.ok) {
+                  var cJson = await cRes.json();
+                  var cId = cJson.data?.id || cJson.id;
+                  if (cId) {
+                    var fd = new FormData();
+                    closePendingFiles.forEach(function(f) { fd.append("files", f); });
+                    var fRes = await fetch("https://macropayapi.supportplus.mx/files", { method: "POST", headers: { authorization: "Bearer " + spToken }, body: fd });
+                    if (fRes.ok) {
+                      var fJson = await fRes.json();
+                      var uFiles = fJson.data || fJson;
+                      if (Array.isArray(uFiles) && uFiles.length) {
+                        await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", { method: "POST", headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken }, body: JSON.stringify({ attachments: uFiles.map(function(f) { return { fileId: f.id }; }), commentId: cId, isInternal: false }) });
+                      }
+                    }
+                  }
+                }
               }
               // If no one assigned, assign to me first
               if (!holderName || holderName === "Sin asignar") {
