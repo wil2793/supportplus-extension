@@ -5450,7 +5450,11 @@
   }
 
   var _qdCommentsInterval = null;
+  var _qdLastOpen = 0;
   async function showQuickDetailModal(ticketId) {
+    // Debounce: prevent double-open within 500ms
+    if (Date.now() - _qdLastOpen < 500) return;
+    _qdLastOpen = Date.now();
     // Clear any previous interval from a prior modal
     if (_qdCommentsInterval) { clearInterval(_qdCommentsInterval); _qdCommentsInterval = null; }
     var existing = document.getElementById("sp-quick-detail-modal");
