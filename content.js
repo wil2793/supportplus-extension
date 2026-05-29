@@ -5511,11 +5511,13 @@
             '</div>' +
             '<div id="sp-qd-take-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:11px;">' +
               '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario al tomar</label>' +
-              '<textarea id="sp-qd-take-comment" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;">se revisa</textarea>' +
+              '<div style="display:flex;gap:4px;align-items:flex-start;"><textarea id="sp-qd-take-comment" style="flex:1;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;">se revisa</textarea><label style="padding:6px 8px;border:1px solid #ddd;border-radius:4px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-take-attach" type="file" multiple style="display:none;"></label></div>' +
+              '<div id="sp-qd-take-attach-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;"></div>' +
               '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;"><input type="checkbox" id="sp-qd-take-done"> <b>Ticket realizado</b></label>' +
               '<div id="sp-qd-take-extra" style="display:none;margin-top:6px;">' +
                 '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label>' +
-                '<textarea id="sp-qd-take-close-comment" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea>' +
+                '<div style="display:flex;gap:4px;align-items:flex-start;"><textarea id="sp-qd-take-close-comment" placeholder="Comentario de cierre..." style="flex:1;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea><label style="padding:6px 8px;border:1px solid #ddd;border-radius:4px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-take-close-attach" type="file" multiple style="display:none;"></label></div>' +
+                '<div id="sp-qd-take-close-attach-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;"></div>' +
                 (hasMondayConfig ? '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Migrar a Monday</label><select id="sp-qd-take-group" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;"><option value="">-- Selecciona destino --</option></select>' : '') +
               '</div>' +
               '<div style="display:flex;gap:6px;margin-top:8px;"><button id="sp-qd-take-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:11px;font-weight:600;">Confirmar</button><button id="sp-qd-take-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:11px;font-weight:600;">Cancelar</button></div>' +
@@ -5533,7 +5535,8 @@
               '</div>' +
               '<div id="sp-qd-close-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:11px;">' +
                 '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label>' +
-                '<textarea id="sp-qd-close-comment" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea>' +
+                '<div style="display:flex;gap:4px;align-items:flex-start;"><textarea id="sp-qd-close-comment" placeholder="Comentario de cierre..." style="flex:1;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea><label style="padding:6px 8px;border:1px solid #ddd;border-radius:4px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-close-attach" type="file" multiple style="display:none;"></label></div>' +
+                '<div id="sp-qd-close-attach-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;"></div>' +
                 (showMondayOption ? '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Migrar a Monday</label><select id="sp-qd-close-group" style="width:100%;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;margin-bottom:6px;"><option value="">-- Selecciona destino --</option></select>' : '') +
                 '<div style="display:flex;gap:6px;"><button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:' + (showMondayOption ? '#D94040' : '#616161') + ';color:#fff;cursor:pointer;font-size:11px;font-weight:600;">Confirmar</button><button id="sp-qd-close-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:11px;font-weight:600;">Cancelar</button></div>' +
                 '<div id="sp-qd-close-suggested" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;"></div>' +
@@ -6009,6 +6012,41 @@
           });
         }
 
+        // File attachments for take form
+        var takePendingFiles = [];
+        var takeCloseFiles = [];
+        var takeAttachInput = document.getElementById("sp-qd-take-attach");
+        var takeAttachList = document.getElementById("sp-qd-take-attach-list");
+        var takeCloseAttachInput = document.getElementById("sp-qd-take-close-attach");
+        var takeCloseAttachList = document.getElementById("sp-qd-take-close-attach-list");
+
+        function renderTakeFiles() {
+          if (takeAttachList) {
+            takeAttachList.innerHTML = "";
+            takePendingFiles.forEach(function(f, idx) {
+              var chip = document.createElement("span");
+              chip.style.cssText = "padding:2px 6px;background:#E3F2FD;border:1px solid #90CAF9;border-radius:3px;font-size:9px;color:#1565C0;display:flex;align-items:center;gap:3px;";
+              chip.innerHTML = '📎 ' + f.name + ' <span style="cursor:pointer;color:#D32F2F;" data-idx="' + idx + '">✕</span>';
+              chip.querySelector("span").addEventListener("click", function() { takePendingFiles.splice(idx, 1); renderTakeFiles(); });
+              takeAttachList.appendChild(chip);
+            });
+          }
+        }
+        function renderTakeCloseFiles() {
+          if (takeCloseAttachList) {
+            takeCloseAttachList.innerHTML = "";
+            takeCloseFiles.forEach(function(f, idx) {
+              var chip = document.createElement("span");
+              chip.style.cssText = "padding:2px 6px;background:#E3F2FD;border:1px solid #90CAF9;border-radius:3px;font-size:9px;color:#1565C0;display:flex;align-items:center;gap:3px;";
+              chip.innerHTML = '📎 ' + f.name + ' <span style="cursor:pointer;color:#D32F2F;" data-idx="' + idx + '">✕</span>';
+              chip.querySelector("span").addEventListener("click", function() { takeCloseFiles.splice(idx, 1); renderTakeCloseFiles(); });
+              takeCloseAttachList.appendChild(chip);
+            });
+          }
+        }
+        if (takeAttachInput) { takeAttachInput.addEventListener("change", function() { for (var i = 0; i < takeAttachInput.files.length; i++) takePendingFiles.push(takeAttachInput.files[i]); takeAttachInput.value = ""; renderTakeFiles(); }); }
+        if (takeCloseAttachInput) { takeCloseAttachInput.addEventListener("change", function() { for (var i = 0; i < takeCloseAttachInput.files.length; i++) takeCloseFiles.push(takeCloseAttachInput.files[i]); takeCloseAttachInput.value = ""; renderTakeCloseFiles(); }); }
+
         // Confirm button - executes the take action
         var takeConfirmBtn = document.getElementById("sp-qd-take-confirm");
         if (takeConfirmBtn) {
@@ -6134,6 +6172,24 @@
             if (bottomComment) bottomComment.style.display = "";
           });
         }
+
+        // File attachments for close form
+        var closePendingFiles = [];
+        var closeAttachInput = document.getElementById("sp-qd-close-attach");
+        var closeAttachList = document.getElementById("sp-qd-close-attach-list");
+        function renderCloseFiles() {
+          if (closeAttachList) {
+            closeAttachList.innerHTML = "";
+            closePendingFiles.forEach(function(f, idx) {
+              var chip = document.createElement("span");
+              chip.style.cssText = "padding:2px 6px;background:#E3F2FD;border:1px solid #90CAF9;border-radius:3px;font-size:9px;color:#1565C0;display:flex;align-items:center;gap:3px;";
+              chip.innerHTML = '📎 ' + f.name + ' <span style="cursor:pointer;color:#D32F2F;" data-idx="' + idx + '">✕</span>';
+              chip.querySelector("span").addEventListener("click", function() { closePendingFiles.splice(idx, 1); renderCloseFiles(); });
+              closeAttachList.appendChild(chip);
+            });
+          }
+        }
+        if (closeAttachInput) { closeAttachInput.addEventListener("change", function() { for (var i = 0; i < closeAttachInput.files.length; i++) closePendingFiles.push(closeAttachInput.files[i]); closeAttachInput.value = ""; renderCloseFiles(); }); }
 
         var closeConfirmBtn = document.getElementById("sp-qd-close-confirm");
         if (closeConfirmBtn) {
