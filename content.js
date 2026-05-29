@@ -4117,7 +4117,8 @@
             id: p.id,
             name: p.properties.Nombre?.title?.[0]?.plain_text || "",
             producto: p.properties.Producto?.rich_text?.[0]?.plain_text || "",
-            cantidad: p.properties.Cantidad?.number || 1
+            cantidad: p.properties.Cantidad?.number || 1,
+            subGrupoId: p.properties.MSP_SubGrupo?.relation?.[0]?.id || ""
           };
         });
       }
@@ -4226,10 +4227,23 @@
 
       var productHeaders = columns.map(function(col) { return '<th style="padding:6px 10px;text-align:center;">' + col.colName + '</th>'; }).join("");
 
-      // Check if all users completed all columns of each product
+      // Map products to their sub-group members using the MSP_SubGrupo relation
+      var productSubGroupMap = {}; // productId -> [memberIds]
+      visibleProducts.forEach(function(p) {
+        var sgRelation = p.subGrupoId || "";
+        var matchedSg = subGroups.find(function(sg) { return sg.id === sgRelation; });
+        productSubGroupMap[p.id] = matchedSg ? matchedSg.members : [];
+      });
+
+      // Check if all MEMBERS of the sub-group completed all columns of each product
       var productCompletionMap = {};
       visibleProducts.forEach(function(p) {
-        productCompletionMap[p.id] = users.every(function(u) { return (logCountMap[u.id + "_" + p.id] || 0) >= p.cantidad; });
+        var members = productSubGroupMap[p.id];
+        if (members.length === 0) {
+          productCompletionMap[p.id] = false;
+        } else {
+          productCompletionMap[p.id] = members.every(function(uid) { return (logCountMap[uid + "_" + p.id] || 0) >= p.cantidad; });
+        }
       });
 
       var tableRows = users.map(function(u, idx) {
@@ -4237,16 +4251,19 @@
           var userCount = logCountMap[u.id + "_" + col.productId] || 0;
           var producto = visibleProducts.find(function(p) { return p.id === col.productId; });
           var cantidad = producto ? producto.cantidad : 1;
+          // Check if user is member of this product's sub-group
+          var productMembers = productSubGroupMap[col.productId] || [];
+          var isMember = productMembers.length === 0 || productMembers.includes(u.id);
+          if (!isMember) {
+            return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;"><span style="color:#bbb;font-size:10px;" title="No participa en este producto">⊘</span></td>';
+          }
           var isMarked = userCount > col.colIndex;
           var isMe = u.id === userPageId;
-          // How many times this column has been marked (for adelantos)
           var timesMarked = isMarked ? Math.floor((userCount - col.colIndex - 1) / cantidad) + 1 : 0;
-          // User can mark the next column (colIndex === userCount % cantidad means it's the next one to mark)
           var nextColIndex = userCount % cantidad;
           if (isMe && !isMarked && col.colIndex === userCount) {
             return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;"><input type="checkbox" class="sp-dba-check" data-product-id="' + col.productId + '" data-product-name="' + col.colName + '" data-user-name="' + u.nombre + '" style="cursor:pointer;width:16px;height:16px;"></td>';
           } else if (isMe && isMarked && userCount >= cantidad && col.colIndex === nextColIndex) {
-            // Already completed full cycle, show checkbox for next round
             return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">\u2705' + (timesMarked > 1 ? ' <span style="font-size:9px;color:#888;">(x' + timesMarked + ')</span>' : '') + '</td>';
           } else {
             var display = isMarked ? '\u2705' + (timesMarked > 1 ? ' <span style="font-size:9px;color:#888;">(x' + timesMarked + ')</span>' : '') : '\u2014';
