@@ -150,9 +150,17 @@ async function syncNotionData() {
       }
     }
 
+    // 6. Get latest version from Notion
+    const VERSIONS_DB = "36f20e0684b98004b283ec713d3cde8a";
+    const versionsRaw = await notionQuery(VERSIONS_DB, { filter: { property: "Activo", checkbox: { equals: true } }, sorts: [{ property: "Fecha de creación", direction: "descending" }], page_size: 1 });
+    let latestVersion = "";
+    if (versionsRaw.results && versionsRaw.results[0]) {
+      latestVersion = versionsRaw.results[0].properties.Version?.title?.[0]?.plain_text || "";
+    }
+
     // Save to storage
-    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, suggestedComments, mondayToken: mondayTokenFromNotion, notionSyncTime: Date.now() });
-    console.log("[SP Background] Notion synced:", Object.keys(usersMap).length, "users,", rolesList.length, "roles,", commentsRaw.length, "comments, monday token:", mondayTokenFromNotion ? "OK" : "MISSING");
+    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, suggestedComments, mondayToken: mondayTokenFromNotion, latestVersion, notionSyncTime: Date.now() });
+    console.log("[SP Background] Notion synced:", Object.keys(usersMap).length, "users,", rolesList.length, "roles,", commentsRaw.length, "comments, monday token:", mondayTokenFromNotion ? "OK" : "MISSING", "latest version:", latestVersion);
   } catch (e) {
     console.error("[SP Background] Notion sync error:", e);
   }

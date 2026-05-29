@@ -1,6 +1,43 @@
 (function () {
   console.log("[SP] Extension loading...");
 
+  // Version check against Notion
+  var _currentVersion = chrome.runtime.getManifest().version;
+  var _versionBlocked = false;
+  function checkVersion() {
+    chrome.storage.local.get("latestVersion", function(r) {
+      var latest = r.latestVersion || "";
+      if (!latest || latest === _currentVersion) return;
+      var cur = _currentVersion.split(".").map(Number);
+      var lat = latest.split(".").map(Number);
+      if (lat[0] > cur[0]) {
+        // Major version change - block everything
+        _versionBlocked = true;
+        var blocker = document.createElement("div");
+        blocker.id = "sp-version-blocker";
+        blocker.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:999999;display:flex;align-items:center;justify-content:center;";
+        blocker.innerHTML = '<div style="background:#fff;padding:30px;border-radius:12px;text-align:center;max-width:400px;font-family:system-ui;"><h2 style="margin:0 0 12px;color:#D32F2F;">⚠️ Actualización requerida</h2><p style="margin:0 0 8px;font-size:14px;">Tu versión (<b>' + _currentVersion + '</b>) está muy desactualizada.<br>La versión actual es <b>' + latest + '</b>.</p><p style="margin:0;font-size:13px;color:#555;">Actualiza la extensión para continuar usando SupportPlus Tools.</p></div>';
+        document.body.appendChild(blocker);
+      } else if (lat[1] > cur[1]) {
+        // Minor version change - show toast
+        if (document.getElementById("sp-version-toast")) return;
+        var toast = document.createElement("div");
+        toast.id = "sp-version-toast";
+        toast.style.cssText = "position:fixed;bottom:20px;right:20px;background:#FF8F00;color:#fff;padding:12px 18px;border-radius:8px;font-size:12px;font-family:system-ui;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,0.3);cursor:pointer;";
+        toast.innerHTML = '🔄 Nueva versión disponible: <b>' + latest + '</b> (tienes ' + _currentVersion + ')<br><span style="font-size:10px;opacity:0.8;">Click para cerrar</span>';
+        toast.addEventListener("click", function() { toast.remove(); });
+        document.body.appendChild(toast);
+      }
+      // Patch version (x.x.1) - no notification
+    });
+  }
+  // Check on load (after a delay to let sync finish)
+  setTimeout(checkVersion, 3000);
+  // Check on focus
+  document.addEventListener("visibilitychange", function() {
+    if (document.visibilityState === "visible" && !_versionBlocked) checkVersion();
+  });
+
   // Make loading backdrop less invasive - thin top bar instead of fullscreen (all users)
   const hideBackdrop = document.createElement("style");
   hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } } .MuiDataGrid-cell[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; } .MuiDataGrid-columnHeader[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; }";
