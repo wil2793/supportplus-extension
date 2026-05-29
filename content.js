@@ -973,12 +973,14 @@
     setCache(ids);
     // Update DataGrid row UI if visible
     try {
-      var rows = document.querySelectorAll('.MuiDataGrid-row');
-      rows.forEach(function(row) {
-        var codeCell = row.querySelector('[data-field="uniqueCode"]');
-        if (codeCell && codeCell.textContent.includes(ticketId)) {
-          var migrateBtn = row.querySelector('.' + BTN_CLASS);
-          if (migrateBtn) migrateBtn.replaceWith(createSyncedBadge(mondayItemId));
+      document.querySelectorAll('.' + BTN_CLASS).forEach(function(btn) {
+        // Find the row this button belongs to
+        var row = btn.closest('.MuiDataGrid-row') || btn.closest('tr') || btn.parentElement;
+        if (!row) return;
+        // Check if this row contains the ticket
+        var rowText = row.textContent || "";
+        if (rowText.includes(ticketId) || row.getAttribute('data-id') === String(ticketId)) {
+          btn.replaceWith(createSyncedBadge(mondayItemId));
         }
       });
     } catch(e) {}
