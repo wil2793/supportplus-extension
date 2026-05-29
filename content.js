@@ -971,6 +971,17 @@
     const ids = getCache() || {};
     ids[ticketId] = mondayItemId;
     setCache(ids);
+    // Update DataGrid row UI if visible
+    try {
+      var rows = document.querySelectorAll('.MuiDataGrid-row');
+      rows.forEach(function(row) {
+        var codeCell = row.querySelector('[data-field="uniqueCode"]');
+        if (codeCell && codeCell.textContent.includes(ticketId)) {
+          var migrateBtn = row.querySelector('.' + BTN_CLASS);
+          if (migrateBtn) migrateBtn.replaceWith(createSyncedBadge(mondayItemId));
+        }
+      });
+    } catch(e) {}
   }
 
   // --- Monday API ---
