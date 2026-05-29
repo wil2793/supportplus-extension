@@ -4126,7 +4126,7 @@
     });
 
     // 2. Get ALL active log entries (Activo = true)
-    chrome.runtime.sendMessage({ type: "notion-query", dbId: LOG_DB, body: { filter: { property: "Activo", checkbox: { equals: true } }, sorts: [{ property: "FechaCreacion", direction: "ascending" }] } }, function(resp) {
+    chrome.runtime.sendMessage({ type: "notion-query", dbId: LOG_DB, body: { filter: { property: "Activo", checkbox: { equals: true } }, sorts: [{ property: "Fecha de creación", direction: "ascending" }] } }, function(resp) {
       if (resp && resp.success && resp.data.results) {
         todayLog = resp.data.results.map(function(p) {
           return {
@@ -4134,7 +4134,7 @@
             productId: p.properties.DBA_cat_Productos?.relation?.[0]?.id || "",
             userId: p.properties.MSP_Usuarios?.relation?.[0]?.id || "",
             name: p.properties.Nombre?.title?.[0]?.plain_text || "",
-            date: p.properties.FechaCreacion?.date?.start || ""
+            date: p.properties["Fecha de creación"]?.created_time || ""
           };
         });
       }
@@ -4387,10 +4387,10 @@
 
         chrome.runtime.sendMessage({ type: "notion-query", dbId: LOG_DB, body: {
           filter: { and: [
-            { property: "FechaCreacion", date: { on_or_after: startDate } },
-            { property: "FechaCreacion", date: { on_or_before: endDate } }
+            { property: "Fecha de creación", created_time: { on_or_after: startDate } },
+            { property: "Fecha de creación", created_time: { on_or_before: endDate + "T23:59:59" } }
           ]},
-          sorts: [{ property: "FechaCreacion", direction: "descending" }]
+          sorts: [{ property: "Fecha de creación", direction: "descending" }]
         }}, function(resp) {
           var logs = [];
           var mesesFecha = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
@@ -4401,7 +4401,7 @@
               var prodName = visibleProducts.find(function(vp) { return vp.id === producto; });
               var userName = allUserPages[usuario];
               var displayName = (prodName ? prodName.producto : "Producto") + " - " + (userName ? userName.nombre.split(" ")[0] : "Usuario");
-              var rawDate = p.properties.FechaCreacion?.date?.start || "";
+              var rawDate = p.properties["Fecha de creación"]?.created_time || "";
               var formattedDate = "";
               if (rawDate) {
                 var parts = rawDate.split("-");
@@ -4542,7 +4542,6 @@
           var createProps = {
             "Nombre": { title: [{ text: { content: nombreConcat } }] },
             "DBA_cat_Productos": { relation: [{ id: productId }] },
-            "FechaCreacion": { date: { start: todayStr } },
             "Activo": { checkbox: true }
           };
           if (userPageId) createProps["MSP_Usuarios"] = { relation: [{ id: userPageId }] };
@@ -4662,7 +4661,6 @@
             "Nombre": { title: [{ text: { content: nombreConcat } }] },
             "DBA_cat_Productos": { relation: [{ id: selectedProductId }] },
             "MSP_Usuarios": { relation: [{ id: selectedUserId }] },
-            "FechaCreacion": { date: { start: todayStr } },
             "Activo": { checkbox: true }
           };
 
