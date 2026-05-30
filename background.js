@@ -143,10 +143,16 @@ async function syncNotionData() {
     // 5. Get config tokens (Monday token from Notion)
     const configRaw = await notionQueryAll(NOTION_CONFIG_DB);
     let mondayTokenFromNotion = "";
+    let mondayWorkspaceId = "";
+    let mondayFolderId = "";
     for (const c of configRaw) {
       const name = (c.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase();
       if (name === "token_monday") {
         mondayTokenFromNotion = c.properties.Valor?.rich_text?.[0]?.plain_text || "";
+      } else if (name === "monday_workspace_id") {
+        mondayWorkspaceId = c.properties.Valor?.rich_text?.[0]?.plain_text || "";
+      } else if (name === "monday_folder_id") {
+        mondayFolderId = c.properties.Valor?.rich_text?.[0]?.plain_text || "";
       }
     }
 
@@ -159,7 +165,7 @@ async function syncNotionData() {
     }
 
     // Save to storage
-    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, suggestedComments, mondayToken: mondayTokenFromNotion, latestVersion, notionSyncTime: Date.now() });
+    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, suggestedComments, mondayToken: mondayTokenFromNotion, mondayWorkspaceId, mondayFolderId, latestVersion, notionSyncTime: Date.now() });
     console.log("[SP Background] Notion synced:", Object.keys(usersMap).length, "users,", rolesList.length, "roles,", commentsRaw.length, "comments, monday token:", mondayTokenFromNotion ? "OK" : "MISSING", "latest version:", latestVersion);
   } catch (e) {
     console.error("[SP Background] Notion sync error:", e);

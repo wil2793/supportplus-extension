@@ -1007,8 +1007,60 @@
     });
   }
   function getMondayBoardId() {
-    return new Promise((r) => {
-      chrome.storage.local.get("mondayBoardId", ({ mondayBoardId }) => r(mondayBoardId));
+    return new Promise(async (resolve) => {
+      var stored = await new Promise(r => chrome.storage.local.get(["mondayBoardId", "mondayBoardMonth"], (d) => r(d)));
+      var now = new Date();
+      var currentMonth = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+      // If stored board is for current month, use it
+      if (stored.mondayBoardId && stored.mondayBoardMonth === currentMonth) {
+        return resolve(stored.mondayBoardId);
+      }
+      // Need to find or create board for current month
+      try {
+        var mondayToken = await getMondayToken();
+        if (!mondayToken) return resolve(stored.mondayBoardId || null);
+        var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+        var boardName = "Tickets DBA - " + meses[now.getMonth()] + " - " + now.getFullYear();
+        // Get config from Notion storage
+        var config = await new Promise(r => chrome.storage.local.get(["mondayWorkspaceId", "mondayFolderId"], (d) => r(d)));
+        var workspaceId = config.mondayWorkspaceId || "9956268";
+        var folderId = config.mondayFolderId || "16653587";
+        // Search for existing board with this name in the workspace
+        var searchRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [' + workspaceId + '], limit: 50) { id name } }', {});
+        var existingBoard = (searchRes.boards || []).find(function(b) { return b.name.trim().toLowerCase() === boardName.trim().toLowerCase(); });
+        if (existingBoard) {
+          chrome.storage.local.set({ mondayBoardId: existingBoard.id, mondayBoardMonth: currentMonth });
+          return resolve(existingBoard.id);
+        }
+        // Board doesn't exist - duplicate from previous month's board
+        var prevBoardId = stored.mondayBoardId;
+        if (!prevBoardId) {
+          // Try to find last month's board
+          var prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          var prevBoardName = "Tickets DBA - " + meses[prevMonth.getMonth()] + " - " + prevMonth.getFullYear();
+          var prevBoard = (searchRes.boards || []).find(function(b) { return b.name.trim().toLowerCase() === prevBoardName.trim().toLowerCase(); });
+          if (prevBoard) prevBoardId = prevBoard.id;
+        }
+        if (!prevBoardId) return resolve(null);
+        // Duplicate structure only
+        var dupRes = await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $boardName: String!, $workspaceId: ID!, $folderId: ID!) { duplicate_board(board_id: $boardId, duplicate_type: duplicate_board_with_structure, board_name: $boardName, workspace_id: $workspaceId, folder_id: $folderId) { board { id } } }', { boardId: String(prevBoardId), boardName: boardName, workspaceId: String(workspaceId), folderId: String(folderId) });
+        var newBoardId = dupRes.duplicate_board?.board?.id;
+        if (newBoardId) {
+          // Delete all groups from the new board (they come from the duplicate with items)
+          var newBoardData = await mondayQuery(mondayToken, '{ boards(ids: [' + newBoardId + ']) { groups { id } } }', {});
+          var groups = newBoardData.boards?.[0]?.groups || [];
+          for (var g of groups) {
+            await mondayQuery(mondayToken, 'mutation { delete_group(board_id: ' + newBoardId + ', group_id: "' + g.id + '") { id } }', {});
+          }
+          chrome.storage.local.set({ mondayBoardId: newBoardId, mondayBoardMonth: currentMonth });
+          console.log("[SP] Created new Monday board:", boardName, newBoardId);
+          return resolve(newBoardId);
+        }
+        return resolve(stored.mondayBoardId || null);
+      } catch(e) {
+        console.log("[SP] getMondayBoardId error:", e.message);
+        return resolve(stored.mondayBoardId || null);
+      }
     });
   }
 
