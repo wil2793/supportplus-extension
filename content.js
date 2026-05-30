@@ -6710,8 +6710,8 @@
                 if (!tRes.ok) throw new Error("HTTP " + tRes.status);
                 var tJson = await tRes.json();
                 var ticket = tJson.data || tJson;
-                // Get creator's resolution group name
-                var creatorGroup = ticket.resolutionGroup?.name || ticket.resolutionGroupName || "Sin grupo";
+                // Get requester's department/group name
+                var creatorGroup = ticket.ticketInfo?.departmentName || ticket.resolutionGroup?.name || "Sin grupo";
                 // Get board
                 var boardId = await getMondayBoardId();
                 if (!boardId) throw new Error("No board");
@@ -6719,7 +6719,7 @@
                 var board = boardData.boards[0];
                 if (!board) throw new Error("Board not found");
                 // Find or create group
-                var targetGroup = board.groups.find(function(g) { return g.title.toLowerCase() === creatorGroup.toLowerCase(); });
+                var targetGroup = board.groups.find(function(g) { return g.title.trim().toLowerCase() === creatorGroup.trim().toLowerCase(); });
                 if (!targetGroup) {
                   // Create group
                   var createGroupRes = await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $groupName: String!) { create_group(board_id: $boardId, group_name: $groupName) { id } }', { boardId: board.id, groupName: creatorGroup });
