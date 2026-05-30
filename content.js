@@ -1116,19 +1116,6 @@
     const ids = getCache() || {};
     ids[ticketId] = mondayItemId;
     setCache(ids);
-    // Update DataGrid row UI if visible
-    try {
-      document.querySelectorAll('.' + BTN_CLASS).forEach(function(btn) {
-        // Find the row this button belongs to
-        var row = btn.closest('.MuiDataGrid-row') || btn.closest('tr') || btn.parentElement;
-        if (!row) return;
-        // Check if this row contains the ticket
-        var rowText = row.textContent || "";
-        if (rowText.includes(ticketId) || row.getAttribute('data-id') === String(ticketId)) {
-          btn.replaceWith(createSyncedBadge(mondayItemId));
-        }
-      });
-    } catch(e) {}
   }
 
   // --- Monday API ---
