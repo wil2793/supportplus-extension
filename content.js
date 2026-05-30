@@ -115,6 +115,26 @@
   var _mondayGroupCache = {}; // Cache of created Monday groups: groupName -> groupId
   var _autoMigrateQueue = Promise.resolve(); // Serial queue for auto-migrations
 
+  // Update Monday item person when analyst changes
+  async function updateMondayPerson(ticketId, uniqueCode, analystEmail) {
+    try {
+      var mondayToken = await getMondayToken();
+      if (!mondayToken || !analystEmail) return;
+      var boardId = await getMondayBoardId();
+      if (!boardId) return;
+      var code = uniqueCode || String(ticketId);
+      var cache = getCache() || {};
+      var mondayItemId = cache[code];
+      if (!mondayItemId) return;
+      var users = await getMondayUsers(mondayToken);
+      var userId = users[analystEmail.toLowerCase()];
+      if (!userId) return;
+      var personValue = JSON.stringify({ multiple_person_mm25nvfq: { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] } });
+      await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: boardId, itemId: String(mondayItemId), columnValues: personValue });
+      console.log("[SP] Monday person updated:", code, "->", analystEmail);
+    } catch(e) { console.log("[SP] Monday person update failed:", e.message); }
+  }
+
   // Update Monday item status when SP ticket status changes
   async function updateMondayStatus(ticketId, uniqueCode, newStatusName) {
     try {
@@ -6103,6 +6123,7 @@
           var opt = document.createElement("option");
           opt.value = p.profileId;
           opt.textContent = p.profileFullName;
+          opt.dataset.email = p.email || "";
           assignSelect.appendChild(opt);
         });
 
@@ -6307,6 +6328,7 @@
               } else {
                 showSuccessToast("Ticket tomado");
                 updateMondayStatus(ticketId, t.uniqueCode, "Asignado");
+                chrome.storage.local.get("userEmail", function(r) { if (r.userEmail) updateMondayPerson(ticketId, t.uniqueCode, r.userEmail); });
               }
               overlay.remove();
               showQuickDetailModal(ticketId);
@@ -6335,6 +6357,9 @@
             var json2 = await res.json();
             if (json2.success) {
               showSuccessToast("Ticket asignado");
+              updateMondayStatus(ticketId, t.uniqueCode, "Asignado");
+              var assignedOpt = assignSelect.options[assignSelect.selectedIndex];
+              if (assignedOpt && assignedOpt.dataset.email) updateMondayPerson(ticketId, t.uniqueCode, assignedOpt.dataset.email);
               overlay.remove();
               showQuickDetailModal(ticketId);
             } else throw new Error("No success");
