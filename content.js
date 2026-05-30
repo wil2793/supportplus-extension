@@ -115,6 +115,31 @@
   var _mondayGroupCache = {}; // Cache of created Monday groups: groupName -> groupId
   var _autoMigrateQueue = Promise.resolve(); // Serial queue for auto-migrations
 
+  // Update Monday item status when SP ticket status changes
+  async function updateMondayStatus(ticketId, uniqueCode, newStatusName) {
+    try {
+      var mondayToken = await getMondayToken();
+      if (!mondayToken) return;
+      var boardId = await getMondayBoardId();
+      if (!boardId) return;
+      // Find the item in Monday by uniqueCode
+      var code = uniqueCode || String(ticketId);
+      var cache = getCache() || {};
+      var mondayItemId = cache[code];
+      if (!mondayItemId) return; // Not migrated yet, auto-migrate will handle it
+      // Map status
+      var spStatus = (newStatusName || "").toLowerCase();
+      var mondayStatusIndex = 5;
+      if (spStatus === "cerrado") mondayStatusIndex = 1;
+      else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
+      else if (spStatus === "en espera") mondayStatusIndex = 5;
+      else if (spStatus === "estancado") mondayStatusIndex = 2;
+      // Update Monday item
+      await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: boardId, itemId: String(mondayItemId), columnValues: JSON.stringify({ status: { index: mondayStatusIndex } }) });
+      console.log("[SP] Monday status updated:", code, "->", newStatusName);
+    } catch(e) { console.log("[SP] Monday status update failed:", e.message); }
+  }
+
   function getActiveViewMode() {
     return currentViewMode || currentUserRole;
   }
@@ -5995,6 +6020,7 @@
           });
           if (!statusRes.ok) throw new Error("HTTP " + statusRes.status);
           showSuccessToast("Estatus cambiado a: " + newStatusName);
+          updateMondayStatus(ticketId, t.uniqueCode, newStatusName);
           statusSelect.style.color = STATUS_TEXT_COLORS[newStatusName] || "#333";
           // Reload valid options for new status
           var newOptRes = await fetch("https://macropayapi.supportplus.mx/ticket-status/next-status-options/" + newStatusId, {
@@ -6227,8 +6253,10 @@
                   return;
                 }
                 showSuccessToast("Ticket tomado y cerrado");
+                updateMondayStatus(ticketId, t.uniqueCode, "Cerrado");
               } else {
                 showSuccessToast("Ticket tomado");
+                updateMondayStatus(ticketId, t.uniqueCode, "Asignado");
               }
               overlay.remove();
               showQuickDetailModal(ticketId);
@@ -6396,6 +6424,7 @@
                 return;
               }
               showSuccessToast("Ticket cerrado");
+              updateMondayStatus(ticketId, t.uniqueCode, "Cerrado");
               overlay.remove();
               showQuickDetailModal(ticketId);
             } catch(err) {
@@ -6441,6 +6470,7 @@
             var json2 = await res.json();
             if (json2.success) {
               showSuccessToast("Ticket reabierto");
+              updateMondayStatus(ticketId, t.uniqueCode, "Asignado");
               overlay.remove();
               showQuickDetailModal(ticketId);
             } else throw new Error("No success");
