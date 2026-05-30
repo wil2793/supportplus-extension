@@ -112,6 +112,8 @@
   var canMigrateMonday = false; // Permission from Notion role
   var canDragDrop = false; // Permission from sub-group "Drag And Drop"
   var _lastDropTime = 0; // Timestamp of last drag-and-drop to prevent accidental modal opens
+  var _mondayGroupCache = {}; // Cache of created Monday groups: groupName -> groupId
+  var _autoMigrateQueue = Promise.resolve(); // Serial queue for auto-migrations
 
   function getActiveViewMode() {
     return currentViewMode || currentUserRole;
@@ -6699,8 +6701,9 @@
             migratingBadge.style.cssText = "padding:2px 8px;font-size:10px;border-radius:4px;background:#FFF3E0;color:#E65100;margin-left:6px;white-space:nowrap;";
             migratingBadge.textContent = "⏳ Migrando...";
             container.appendChild(migratingBadge);
-            // Fetch ticket detail to get creator's group, then auto-migrate
-            (async function(tId, badge, uCode) {
+            // Fetch ticket detail to get creator's group, then auto-migrate (serialized)
+            _autoMigrateQueue = _autoMigrateQueue.then(function() {
+              return (async function(tId, badge, uCode) {
               try {
                 var spToken = getToken();
                 var mondayToken = await getMondayToken();
@@ -6718,12 +6721,19 @@
                 var boardData = await mondayQuery(mondayToken, 'query ($boardId: [ID!]!) { boards(ids: $boardId) { id name groups { id title } } }', { boardId: boardId });
                 var board = boardData.boards[0];
                 if (!board) throw new Error("Board not found");
-                // Find or create group
-                var targetGroup = board.groups.find(function(g) { return g.title.trim().toLowerCase() === creatorGroup.trim().toLowerCase(); });
+                // Find or create group (use cache to avoid duplicates)
+                var groupKey = creatorGroup.trim().toLowerCase();
+                var targetGroup = board.groups.find(function(g) { return g.title.trim().toLowerCase() === groupKey; });
+                if (!targetGroup && _mondayGroupCache[groupKey]) {
+                  targetGroup = { id: _mondayGroupCache[groupKey], title: creatorGroup };
+                }
                 if (!targetGroup) {
                   // Create group
                   var createGroupRes = await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $groupName: String!) { create_group(board_id: $boardId, group_name: $groupName) { id } }', { boardId: board.id, groupName: creatorGroup });
                   targetGroup = { id: createGroupRes.create_group.id, title: creatorGroup };
+                  _mondayGroupCache[groupKey] = targetGroup.id;
+                } else {
+                  _mondayGroupCache[groupKey] = targetGroup.id;
                 }
                 // Migrate ticket
                 var desc = (ticket.description || "").replace(/<[^>]*>/g, "");
@@ -6769,6 +6779,7 @@
                 console.log("[SP] Auto-migrate failed:", tId, err.message);
               }
             })(ticketId, migratingBadge, uniqueCode);
+            });
           }
         }
       }
