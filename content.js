@@ -6678,22 +6678,35 @@
         if (oldClose) oldClose.remove();
       }
 
-      // Inject migrate buttons for "Cerrado" tickets
+      // Auto-migrate "Cerrado" tickets that aren't in Monday yet
       if (statusText === "Cerrado" && rowBelongsToMe) {
         if (row.querySelector("." + SYNCED_CLASS)) return;
         const codeEl = firstCell.querySelector("p.MuiTypography-body1");
         const uniqueCode = codeEl ? codeEl.textContent.trim() : "";
         if (uniqueCode && synced[uniqueCode]) {
-          // Remove existing migrate button if present and replace with synced badge
+          // Already migrated - show badge
           var oldBtn = row.querySelector("." + BTN_CLASS);
           if (oldBtn) oldBtn.remove();
           container.appendChild(createSyncedBadge(synced[uniqueCode]));
-        } else if (!row.querySelector("." + BTN_CLASS)) {
-          // Only show migrate button if ticket matches board period
+        } else if (!row.querySelector("." + BTN_CLASS) && !row.dataset.spAutoMigrating) {
+          // Not migrated - auto-migrate in background
           var dateCell = row.querySelector('[data-field="createdAt"]');
           var dateText = dateCell ? dateCell.textContent.trim() : "";
           if (ticketMatchesBoard(dateText, boardDate)) {
-            container.appendChild(createButton(ticketId));
+            row.dataset.spAutoMigrating = "true";
+            // Show a small indicator
+            var migratingBadge = document.createElement("span");
+            migratingBadge.className = BTN_CLASS;
+            migratingBadge.style.cssText = "padding:2px 8px;font-size:10px;border-radius:4px;background:#FFF3E0;color:#E65100;margin-left:6px;white-space:nowrap;";
+            migratingBadge.textContent = "⏳ Migrando...";
+            container.appendChild(migratingBadge);
+            // Auto-migrate
+            handleMondayClick(ticketId).then(function() {
+              migratingBadge.remove();
+            }).catch(function() {
+              migratingBadge.textContent = "⚠️";
+              migratingBadge.style.color = "#D32F2F";
+            });
           }
         }
       }
