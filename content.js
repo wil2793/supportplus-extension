@@ -6678,8 +6678,8 @@
         if (oldClose) oldClose.remove();
       }
 
-      // Auto-migrate "Cerrado" tickets that aren't in Monday yet
-      if (statusText === "Cerrado" && rowBelongsToMe) {
+      // Auto-migrate ANY ticket that isn't in Monday yet
+      if (rowBelongsToMe) {
         if (row.querySelector("." + SYNCED_CLASS)) return;
         const codeEl = firstCell.querySelector("p.MuiTypography-body1");
         const uniqueCode = codeEl ? codeEl.textContent.trim() : "";
@@ -6740,10 +6740,18 @@
                     if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
                   } catch(e) {}
                 }
+                // Map SP status to Monday status index
+                var spStatus = (ticket.ticketStatusName || "").toLowerCase();
+                var mondayStatusIndex = 5; // Default: "No iniciado"
+                if (spStatus === "cerrado") mondayStatusIndex = 1; // "Listo"
+                else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0; // "En Proceso"
+                else if (spStatus === "en espera") mondayStatusIndex = 5; // "No iniciado"
+                else if (spStatus === "estancado") mondayStatusIndex = 2; // "Estancado"
+
                 var columnValues = JSON.stringify({
                   descripci_n_mkn9e5f4: { text: desc },
                   ...(personValue.personsAndTeams ? { multiple_person_mm25nvfq: personValue } : {}),
-                  status: { index: 1 },
+                  status: { index: mondayStatusIndex },
                   priority_mkn9kbe9: { index: priorityIndex },
                   cronograma_mkn9hwe3: { from: createdDate, to: createdDate },
                   link_mknkdctz: { url: "https://macropay.supportplus.mx/es/dashboard/tickets/" + tId, text: uCode || String(tId) },
