@@ -6683,13 +6683,16 @@
       // Auto-migrate ANY ticket that isn't in Monday yet
       if (rowBelongsToMe) {
         if (row.querySelector("." + SYNCED_CLASS)) return;
+        if (row.dataset.spAutoMigrating) return;
         const codeEl = firstCell.querySelector("p.MuiTypography-body1");
         const uniqueCode = codeEl ? codeEl.textContent.trim() : "";
         if (uniqueCode && synced[uniqueCode]) {
-          // Already migrated - show badge
+          // Already migrated - show badge (only if not already shown)
           var oldBtn = row.querySelector("." + BTN_CLASS);
           if (oldBtn) oldBtn.remove();
-          container.appendChild(createSyncedBadge(synced[uniqueCode]));
+          if (!row.querySelector("." + SYNCED_CLASS)) {
+            container.appendChild(createSyncedBadge(synced[uniqueCode]));
+          }
         } else if (!row.querySelector("." + BTN_CLASS) && !row.dataset.spAutoMigrating) {
           // Not migrated - auto-migrate in background
           var dateCell = row.querySelector('[data-field="createdAt"]');
