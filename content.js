@@ -6694,19 +6694,73 @@
           var dateText = dateCell ? dateCell.textContent.trim() : "";
           if (ticketMatchesBoard(dateText, boardDate)) {
             row.dataset.spAutoMigrating = "true";
-            // Show a small indicator
             var migratingBadge = document.createElement("span");
             migratingBadge.className = BTN_CLASS;
             migratingBadge.style.cssText = "padding:2px 8px;font-size:10px;border-radius:4px;background:#FFF3E0;color:#E65100;margin-left:6px;white-space:nowrap;";
             migratingBadge.textContent = "⏳ Migrando...";
             container.appendChild(migratingBadge);
-            // Auto-migrate
-            handleMondayClick(ticketId).then(function() {
-              migratingBadge.remove();
-            }).catch(function() {
-              migratingBadge.textContent = "⚠️";
-              migratingBadge.style.color = "#D32F2F";
-            });
+            // Fetch ticket detail to get creator's group, then auto-migrate
+            (async function(tId, badge, uCode) {
+              try {
+                var spToken = getToken();
+                var mondayToken = await getMondayToken();
+                if (!spToken || !mondayToken) throw new Error("No token");
+                // Get ticket detail
+                var tRes = await fetch(SP_API + "/" + tId, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+                if (!tRes.ok) throw new Error("HTTP " + tRes.status);
+                var tJson = await tRes.json();
+                var ticket = tJson.data || tJson;
+                // Get creator's resolution group name
+                var creatorGroup = ticket.resolutionGroup?.name || ticket.resolutionGroupName || "Sin grupo";
+                // Get board
+                var boardId = await getMondayBoardId();
+                if (!boardId) throw new Error("No board");
+                var boardData = await mondayQuery(mondayToken, 'query ($boardId: [ID!]!) { boards(ids: $boardId) { id name groups { id title } } }', { boardId: boardId });
+                var board = boardData.boards[0];
+                if (!board) throw new Error("Board not found");
+                // Find or create group
+                var targetGroup = board.groups.find(function(g) { return g.title.toLowerCase() === creatorGroup.toLowerCase(); });
+                if (!targetGroup) {
+                  // Create group
+                  var createGroupRes = await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $groupName: String!) { create_group(board_id: $boardId, group_name: $groupName) { id } }', { boardId: board.id, groupName: creatorGroup });
+                  targetGroup = { id: createGroupRes.create_group.id, title: creatorGroup };
+                }
+                // Migrate ticket
+                var desc = (ticket.description || "").replace(/<[^>]*>/g, "");
+                var itemName = ticket.subject || "Sin asunto";
+                var createdDate = new Date(ticket.createdAt).toISOString().slice(0, 10);
+                var spPriority = (ticket.incidentPriorityName || ticket.incidentPriority?.name || "").toLowerCase().trim();
+                var priorityIndex = PRIORITY_MAP[spPriority] ?? PRIORITY_MAP["medio"];
+                var holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
+                var personValue = {};
+                if (holderEmail) {
+                  try {
+                    var users = await getMondayUsers(mondayToken);
+                    var userId = users[holderEmail.toLowerCase()];
+                    if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
+                  } catch(e) {}
+                }
+                var columnValues = JSON.stringify({
+                  descripci_n_mkn9e5f4: { text: desc },
+                  ...(personValue.personsAndTeams ? { multiple_person_mm25nvfq: personValue } : {}),
+                  status: { index: 1 },
+                  priority_mkn9kbe9: { index: priorityIndex },
+                  cronograma_mkn9hwe3: { from: createdDate, to: createdDate },
+                  link_mknkdctz: { url: "https://macropay.supportplus.mx/es/dashboard/tickets/" + tId, text: uCode || String(tId) },
+                  text_mm2c9nhc: uCode || String(tId),
+                });
+                var result = await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $groupId: String!, $itemName: String!, $columnValues: JSON!) { create_item(board_id: $boardId, group_id: $groupId, item_name: $itemName, column_values: $columnValues) { id } }', { boardId: board.id, groupId: targetGroup.id, itemName: itemName, columnValues: columnValues });
+                if (result.create_item) {
+                  addToCache(uCode || String(tId), result.create_item.id);
+                  badge.remove();
+                  container.appendChild(createSyncedBadge(result.create_item.id));
+                }
+              } catch(err) {
+                badge.textContent = "⚠️";
+                badge.style.color = "#D32F2F";
+                console.log("[SP] Auto-migrate failed:", tId, err.message);
+              }
+            })(ticketId, migratingBadge, uniqueCode);
           }
         }
       }
