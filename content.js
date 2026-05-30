@@ -139,22 +139,19 @@
   async function updateMondayStatus(ticketId, uniqueCode, newStatusName) {
     try {
       var mondayToken = await getMondayToken();
-      if (!mondayToken) return;
+      if (!mondayToken) { console.log("[SP] updateMondayStatus: no token"); return; }
       var boardId = await getMondayBoardId();
-      if (!boardId) return;
-      // Find the item in Monday by uniqueCode
+      if (!boardId) { console.log("[SP] updateMondayStatus: no boardId"); return; }
       var code = uniqueCode || String(ticketId);
       var cache = getCache() || {};
       var mondayItemId = cache[code];
-      if (!mondayItemId) return; // Not migrated yet, auto-migrate will handle it
-      // Map status
+      if (!mondayItemId) { console.log("[SP] updateMondayStatus: ticket not in cache:", code, "cache keys:", Object.keys(cache).slice(0, 5)); return; }
       var spStatus = (newStatusName || "").toLowerCase();
       var mondayStatusIndex = 5;
       if (spStatus === "cerrado") mondayStatusIndex = 1;
       else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
       else if (spStatus === "en espera") mondayStatusIndex = 5;
       else if (spStatus === "estancado") mondayStatusIndex = 2;
-      // Update Monday item
       await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: boardId, itemId: String(mondayItemId), columnValues: JSON.stringify({ status: { index: mondayStatusIndex } }) });
       console.log("[SP] Monday status updated:", code, "->", newStatusName);
     } catch(e) { console.log("[SP] Monday status update failed:", e.message); }
