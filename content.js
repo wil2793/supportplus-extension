@@ -1116,22 +1116,17 @@
     if (cached) return cached;
     const mondayToken = await getMondayToken();
     if (!mondayToken) return {};
-    const configuredBoardId = await getMondayBoardId();
     try {
-      let boardIds = [];
-      if (configuredBoardId) {
-        boardIds = [configuredBoardId];
-      } else {
-        const boardsData = await mondayQuery(mondayToken, `{ boards(limit:500) { id name } }`);
-        boardIds = boardsData.boards
-          .filter((b) => b.name.startsWith("Tickets DBA") && !b.name.includes("Subelementos"))
-          .map((b) => b.id);
-      }
+      // Always search ALL ticket boards
+      const boardsData = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
+      const boardIds = (boardsData.boards || [])
+        .filter((b) => b.name.includes("Tickets DBA") && !b.name.includes("Subelementos"))
+        .map((b) => b.id);
       if (!boardIds.length) return {};
       const synced = {};
       for (const boardId of boardIds) {
         const firstPage = await mondayQuery(mondayToken,
-          `query ($boardId: [ID!]!) { boards(ids: $boardId) { items_page(limit: 500) { cursor items { id column_values(ids: ["text_mm2c9nhc"]) { text } } } } }`,
+          'query ($boardId: [ID!]!) { boards(ids: $boardId) { items_page(limit: 500) { cursor items { id column_values(ids: ["text_mm2c9nhc"]) { text } } } } }',
           { boardId });
         let page = firstPage.boards[0].items_page;
         for (const item of page.items) {
@@ -1141,7 +1136,7 @@
         let cursor = page.cursor;
         while (cursor) {
           const next = await mondayQuery(mondayToken,
-            `query ($cursor: String!) { next_items_page(limit: 500, cursor: $cursor) { cursor items { id column_values(ids: ["text_mm2c9nhc"]) { text } } } }`,
+            'query ($cursor: String!) { next_items_page(limit: 500, cursor: $cursor) { cursor items { id column_values(ids: ["text_mm2c9nhc"]) { text } } } }',
             { cursor });
           for (const item of next.next_items_page.items) {
             const code = (item.column_values[0]?.text || "").trim();
