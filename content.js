@@ -6792,21 +6792,20 @@
           if (!row.querySelector("." + SYNCED_CLASS)) {
             container.appendChild(createSyncedBadge(synced[uniqueCode]));
           }
-          // Sync status and person directly to Monday
-          if (!row.dataset.spSyncing) {
-            row.dataset.spSyncing = "1";
-            (async function(tId, uCode) {
+        }
+        // Always sync status and person to Monday for migrated tickets
+        if (uniqueCode && synced[uniqueCode] && !row.dataset.spSyncing) {
+          row.dataset.spSyncing = "1";
+          (async function(tId, uCode) {
               try {
                 var spToken = getToken();
                 var mondayToken = await getMondayToken();
                 if (!spToken || !mondayToken) return;
-                // Fetch ticket from SP
                 var spRes = await fetch(SP_API + "/" + tId, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
                 if (!spRes.ok) return;
                 var ticket = (await spRes.json()).data || await spRes.json();
                 var spStatus = (ticket.ticketStatusName || "").toLowerCase();
                 var holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
-                // Find item in Monday across all boards
                 var boardsRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
                 var ticketBoards = (boardsRes.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
                 for (var b of ticketBoards) {
@@ -6814,13 +6813,11 @@
                   var items = itemRes.items_page_by_column_values?.items || [];
                   if (items.length) {
                     var mondayItemId = items[0].id;
-                    // Update status
                     var mondayStatusIndex = 5;
                     if (spStatus === "cerrado") mondayStatusIndex = 1;
                     else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
                     else if (spStatus === "estancado") mondayStatusIndex = 2;
                     var colValues = { status: { index: mondayStatusIndex } };
-                    // Update person
                     if (holderEmail) {
                       var users = await getMondayUsers(mondayToken);
                       var userId = users[holderEmail.toLowerCase()];
@@ -6832,9 +6829,10 @@
                   }
                 }
               } catch(e) { console.log("[SP] Monday sync failed:", e.message); } finally { row.dataset.spSyncing = ""; }
-            })(ticketId, uniqueCode);
-          }
-        } else if (!row.querySelector("." + BTN_CLASS) && !row.dataset.spAutoMigrating) {
+          })(ticketId, uniqueCode);
+        }
+        if (!uniqueCode || !synced[uniqueCode]) {
+        if (!row.querySelector("." + BTN_CLASS) && !row.dataset.spAutoMigrating) {
           // Not migrated - auto-migrate in background
           var dateCell = row.querySelector('[data-field="createdAt"]');
           var dateText = dateCell ? dateCell.textContent.trim() : "";
@@ -6925,6 +6923,7 @@
             })(ticketId, migratingBadge, uniqueCode);
             });
           }
+        }
         }
       }
     });
