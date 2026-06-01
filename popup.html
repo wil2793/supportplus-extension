@@ -26,6 +26,27 @@
         padding-top: 10px;
         margin-top: 12px;
       }
+      .version {
+        font-size: 11px;
+        color: #888;
+        margin: 8px 0;
+      }
+      .download-btn {
+        display: inline-block;
+        margin-top: 10px;
+        padding: 8px 16px;
+        background: #1976D2;
+        color: #fff;
+        border-radius: 6px;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+      }
+      .download-btn:hover {
+        background: #1565C0;
+      }
     </style>
   </head>
   <body>
@@ -34,12 +55,26 @@
       Extensión de productividad para la gestión de tickets en SupportPlus con
       integración a Monday.com.
     </p>
+    <p class="version">Versión instalada: <b id="sp-current-version">...</b></p>
+    <div id="sp-download-section"></div>
     <p style="font-size: 12px; color: #888">
       Configura la extensión desde el botón ⚙️ en el header de SupportPlus.
     </p>
     <div class="footer">
-      Desarrollado por el equipo de<br /><b>Bases de Datos (DBA)</b
-      ><br />Macropay
+      Desarrollado por el equipo de<br /><b>Bases de Datos (DBA)</b><br />Macropay
     </div>
+    <script>
+      var version = chrome.runtime.getManifest().version;
+      document.getElementById("sp-current-version").textContent = "v" + version;
+      chrome.storage.local.get(["latestVersion", "latestZipUrl"], function(r) {
+        var latest = r.latestVersion || "";
+        var zipUrl = r.latestZipUrl || "";
+        var section = document.getElementById("sp-download-section");
+        if (zipUrl) {
+          var label = (latest && latest !== version) ? "📥 Descargar v" + latest : "📥 Descargar última versión";
+          section.innerHTML = '<a class="download-btn" href="' + zipUrl + '" download>' + label + '</a>';
+        }
+      });
+    </script>
   </body>
 </html>
