@@ -116,6 +116,87 @@
   var _mondayGroupCache = {}; // Cache of created Monday groups: groupName -> groupId
   var _autoMigrateQueue = Promise.resolve(); // Serial queue for auto-migrations
 
+  // ============================================================
+  // MODAL COMPONENT - Reusable modal factory
+  // ============================================================
+  // Usage: var m = createModal({ id, title, content, options });
+  //   m.overlay  - the overlay element
+  //   m.body     - the content container (inside the modal, below header)
+  //   m.modal    - the modal box element
+  //   m.close()  - programmatically close the modal
+  //
+  // Options:
+  //   maxWidth   - default "450px"
+  //   width      - default "90%"
+  //   maxHeight  - default "90vh"
+  //   scroll     - default true (overflow-y:auto on body)
+  //   zIndex     - default 99999
+  //   textAlign  - default "left"
+  //   headerActions - extra HTML for the header (buttons, etc.)
+  //   onClose    - callback when modal is closed
+  //   closeOnBackdrop - default true
+  // ============================================================
+  function createModal(opts) {
+    var id = opts.id || "sp-modal-" + Date.now();
+    var title = opts.title || "";
+    var content = opts.content || "";
+    var o = opts.options || {};
+    var maxWidth = o.maxWidth || "450px";
+    var width = o.width || "90%";
+    var maxHeight = o.maxHeight || "90vh";
+    var scroll = o.scroll !== false;
+    var zIndex = o.zIndex || 99999;
+    var textAlign = o.textAlign || "left";
+    var headerActions = o.headerActions || "";
+    var onClose = o.onClose || null;
+    var closeOnBackdrop = o.closeOnBackdrop !== false;
+
+    // Remove existing modal with same id
+    var existing = document.getElementById(id);
+    if (existing) existing.remove();
+
+    var overlay = document.createElement("div");
+    overlay.id = id;
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:" + zIndex + ";display:flex;align-items:center;justify-content:center;";
+
+    var modalStyle = "background:#fff;border-radius:12px;max-width:" + maxWidth + ";width:" + width + ";max-height:" + maxHeight + ";display:flex;flex-direction:column;font-family:system-ui;text-align:" + textAlign + ";overflow:hidden;";
+    var headerStyle = "display:flex;justify-content:space-between;align-items:center;padding:16px 20px 12px;border-bottom:1px solid #eee;flex-shrink:0;";
+    var bodyStyle = "padding:16px 20px 20px;" + (scroll ? "overflow-y:auto;flex:1;" : "");
+
+    overlay.innerHTML = '<div class="sp-modal-box" style="' + modalStyle + '">' +
+      '<div class="sp-modal-header" style="' + headerStyle + '">' +
+        '<h3 style="margin:0;font-size:16px;">' + title + '</h3>' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          headerActions +
+          '<button class="sp-modal-close-btn" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px;color:#666;" title="Cerrar">✕</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="sp-modal-body" style="' + bodyStyle + '">' + content + '</div>' +
+    '</div>';
+
+    document.body.appendChild(overlay);
+
+    var modal = overlay.querySelector(".sp-modal-box");
+    var body = overlay.querySelector(".sp-modal-body");
+    var closeBtn = overlay.querySelector(".sp-modal-close-btn");
+
+    function close() {
+      overlay.remove();
+      if (onClose) onClose();
+    }
+
+    closeBtn.addEventListener("click", close);
+    if (closeOnBackdrop) {
+      overlay.addEventListener("click", function(e) { if (e.target === overlay) close(); });
+    }
+    document.addEventListener("keydown", function handler(e) {
+      if (e.key === "Escape" && document.getElementById(id)) { close(); document.removeEventListener("keydown", handler); }
+    });
+
+    return { overlay: overlay, modal: modal, body: body, close: close };
+  }
+  // ============================================================
+
   // Update Monday item person when analyst changes
   async function updateMondayPerson(ticketId, uniqueCode, analystEmail) {
     try {
@@ -1689,25 +1770,21 @@
   }
 
   function showReassignAppModal(ticketId) {
-    var existing = document.getElementById("sp-reassign-app-modal");
-    if (existing) existing.remove();
+    var m = createModal({
+      id: "sp-reassign-app-modal",
+      title: "⚠️ Reasignar a Aplicaciones",
+      content: '<p style="font-size:14px;color:#555;margin:0 0 8px;">Este ticket dejará de ser nuestro y pasará a mejor vida con el equipo de Aplicaciones.</p>' +
+        '<p style="font-size:13px;color:#888;margin:0 0 20px;">🪦 Descanse en paz... o no, depende de Aplicaciones.</p>' +
+        '<div id="sp-reassign-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button id="sp-reassign-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#C62828;color:#fff;cursor:pointer;font-size:14px;">Sí, reasignar</button>' +
+          '<button id="sp-reassign-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
+        '</div>',
+      options: { maxWidth: "420px", textAlign: "center" }
+    });
+    var overlay = m.overlay;
 
-    var overlay = document.createElement("div");
-    overlay.id = "sp-reassign-app-modal";
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:420px;width:90%;font-family:system-ui;text-align:center;">' +
-      '<h3 style="margin:0 0 16px;color:#C62828;">⚠️ Reasignar a Aplicaciones</h3>' +
-      '<p style="font-size:14px;color:#555;margin:0 0 8px;">Este ticket dejará de ser nuestro y pasará a mejor vida con el equipo de Aplicaciones.</p>' +
-      '<p style="font-size:13px;color:#888;margin:0 0 20px;">🪦 Descanse en paz... o no, depende de Aplicaciones.</p>' +
-      '<div id="sp-reassign-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
-      '<div style="display:flex;gap:8px;">' +
-        '<button id="sp-reassign-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#C62828;color:#fff;cursor:pointer;font-size:14px;">Sí, reasignar</button>' +
-        '<button id="sp-reassign-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
-      '</div></div>';
-    document.body.appendChild(overlay);
-
-    document.getElementById("sp-reassign-cancel").addEventListener("click", function() { overlay.remove(); });
-    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+    document.getElementById("sp-reassign-cancel").addEventListener("click", m.close);
 
     document.getElementById("sp-reassign-confirm").addEventListener("click", async function() {
       overlay.remove();
@@ -1748,14 +1825,13 @@
         if (!res.ok) throw new Error("HTTP " + res.status);
         var json = await res.json();
         if (json.success) {
-          var successOverlay = document.createElement("div");
-          successOverlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-          successOverlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:360px;width:90%;font-family:system-ui;text-align:center;">' +
-            '<h3 style="margin:0 0 12px;color:#2E7D32;">✅ Ticket reasignado</h3>' +
-            '<p style="font-size:14px;color:#555;margin:0 0 16px;">El ticket fue reasignado a Aplicaciones exitosamente. 🪦 Descanse en paz.</p>' +
-            '<button id="sp-reassign-ok" style="width:100%;padding:10px;border:none;border-radius:6px;background:#2E7D32;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">Aceptar</button>' +
-          '</div>';
-          document.body.appendChild(successOverlay);
+          var sm = createModal({
+            id: "sp-reassign-success",
+            title: "✅ Ticket reasignado",
+            content: '<p style="font-size:14px;color:#555;margin:0 0 16px;">El ticket fue reasignado a Aplicaciones exitosamente. 🪦 Descanse en paz.</p>' +
+              '<button id="sp-reassign-ok" style="width:100%;padding:10px;border:none;border-radius:6px;background:#2E7D32;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">Aceptar</button>',
+            options: { maxWidth: "360px", textAlign: "center", closeOnBackdrop: false }
+          });
           document.getElementById("sp-reassign-ok").addEventListener("click", function() {
             window.location.href = "/es/dashboard/tickets-mesa";
           });
@@ -3428,26 +3504,25 @@
       return '<option value="' + p.profileId + '">' + p.profileFullName + '</option>';
     }).join("");
 
-    var overlay = document.createElement("div");
-    overlay.id = "sp-reopen-modal";
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:400px;width:90%;font-family:system-ui;">' +
-      '<h3 style="margin:0 0 16px;color:#FF8F00;">🔓 Reabrir ticket #' + ticketId + '</h3>' +
-      '<p style="font-size:13px;color:#555;margin:0 0 12px;">Al reasignar un ticket cerrado a otra persona, se reabrirá automáticamente.</p>' +
-      (currentHolder && currentHolder !== "Sin asignar" ? '<p style="font-size:12px;color:#888;margin:0 0 12px;">Asignado actualmente a: <b>' + currentHolder + '</b></p>' : '') +
-      '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Reasignar a:</label>' +
-      '<select id="sp-reopen-person" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:16px;font-size:13px;">' +
-        '<option value="">-- Selecciona --</option>' + opts +
-      '</select>' +
-      '<div id="sp-reopen-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;color:#D94040;"></div>' +
-      '<div style="display:flex;gap:8px;">' +
-        '<button id="sp-reopen-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#FF8F00;color:#fff;cursor:pointer;font-size:14px;">🔄 Reabrir</button>' +
-        '<button id="sp-reopen-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
-      '</div></div>';
-    document.body.appendChild(overlay);
+    var m = createModal({
+      id: "sp-reopen-modal",
+      title: "🔓 Reabrir ticket #" + ticketId,
+      content: '<p style="font-size:13px;color:#555;margin:0 0 12px;">Al reasignar un ticket cerrado a otra persona, se reabrirá automáticamente.</p>' +
+        (currentHolder && currentHolder !== "Sin asignar" ? '<p style="font-size:12px;color:#888;margin:0 0 12px;">Asignado actualmente a: <b>' + currentHolder + '</b></p>' : '') +
+        '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Reasignar a:</label>' +
+        '<select id="sp-reopen-person" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:16px;font-size:13px;">' +
+          '<option value="">-- Selecciona --</option>' + opts +
+        '</select>' +
+        '<div id="sp-reopen-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;color:#D94040;"></div>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button id="sp-reopen-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#FF8F00;color:#fff;cursor:pointer;font-size:14px;">🔄 Reabrir</button>' +
+          '<button id="sp-reopen-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
+        '</div>',
+      options: { maxWidth: "400px" }
+    });
+    var overlay = m.overlay;
 
-    document.getElementById("sp-reopen-cancel").addEventListener("click", function() { overlay.remove(); });
-    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+    document.getElementById("sp-reopen-cancel").addEventListener("click", m.close);
 
     document.getElementById("sp-reopen-confirm").addEventListener("click", async function() {
       var personId = document.getElementById("sp-reopen-person").value;
@@ -4072,29 +4147,22 @@
     var existing = document.getElementById("sp-dashboard-modal");
     if (existing) existing.remove();
 
-    var overlay = document.createElement("div");
-    overlay.id = "sp-dashboard-modal";
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:700px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
-        '<h3 style="margin:0;">📊 Tickets cerrados por analista</h3>' +
-        '<button id="sp-dash-close" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Cerrar</button>' +
-      '</div>' +
-      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">' +
+    var m = createModal({
+      id: "sp-dashboard-modal",
+      title: "📊 Tickets cerrados por analista",
+      content: '<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">' +
         '<label style="font-size:12px;">Desde:</label>' +
         '<input id="sp-dash-from" type="datetime-local" value="' + dashboardFrom + '" style="padding:5px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;">' +
         '<label style="font-size:12px;">Hasta:</label>' +
         '<input id="sp-dash-to" type="datetime-local" value="' + dashboardTo + '" style="padding:5px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;">' +
         '<button id="sp-dash-refresh" style="padding:5px 14px;font-size:12px;border:none;border-radius:6px;background:#00796B;color:#fff;cursor:pointer;font-weight:600;">Regenerar</button>' +
       '</div>' +
-      '<div id="sp-dash-results" style="flex:1;overflow:auto;min-height:200px;"></div>' +
-      '</div>';
-    document.body.appendChild(overlay);
+      '<div id="sp-dash-results" style="flex:1;overflow:auto;min-height:200px;"></div>',
+      options: { maxWidth: "700px", width: "95%", maxHeight: "90vh" }
+    });
+    var overlay = m.overlay;
 
     document.getElementById("sp-dash-results").innerHTML = buildDashboardChart(dashboardData || []);
-
-    document.getElementById("sp-dash-close").addEventListener("click", function() { overlay.remove(); });
-    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
 
     document.getElementById("sp-dash-refresh").addEventListener("click", function() {
       dashboardFrom = document.getElementById("sp-dash-from").value;
@@ -4807,24 +4875,18 @@
   function showSuggestedCommentsModal() {
     var existing = document.getElementById("sp-suggested-modal");
     if (existing) { existing.remove(); return; }
-    var overlay = document.createElement("div");
-    overlay.id = "sp-suggested-modal";
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99998;display:flex;align-items:center;justify-content:center;";
-    overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:600px;width:95%;max-height:80vh;display:flex;flex-direction:column;font-family:system-ui;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-        '<h3 style="margin:0;font-size:16px;">💬 Comentarios sugeridos</h3>' +
-        '<button id="sp-sug-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
-      '</div>' +
-      '<div style="display:flex;gap:6px;margin-bottom:12px;">' +
+
+    var m = createModal({
+      id: "sp-suggested-modal",
+      title: "💬 Comentarios sugeridos",
+      content: '<div style="display:flex;gap:6px;margin-bottom:12px;">' +
         '<input id="sp-sug-new-input" type="text" placeholder="Nuevo comentario sugerido..." style="flex:1;padding:6px 10px;font-size:12px;border:1px solid #ddd;border-radius:6px;">' +
         '<button id="sp-sug-add" style="padding:6px 12px;border:none;border-radius:6px;background:#7B1FA2;color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">+ Agregar</button>' +
       '</div>' +
-      '<div id="sp-sug-list" style="flex:1;overflow:auto;"></div>' +
-    '</div>';
-    document.body.appendChild(overlay);
-
-    document.getElementById("sp-sug-close").addEventListener("click", function() { overlay.remove(); });
-    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+      '<div id="sp-sug-list" style="flex:1;overflow:auto;"></div>',
+      options: { maxWidth: "600px", width: "95%", maxHeight: "80vh", zIndex: 99998 }
+    });
+    var overlay = m.overlay;
 
     var groupId = getTeamConfig().resolutionGroupId;
     var groupPageId = null;
@@ -5192,21 +5254,13 @@
       barsHTML += '</div>';
     });
 
-    var overlay = document.createElement("div");
-    overlay.id = "sp-monday-stats-modal";
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:700px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
-        '<h3 style="margin:0;font-size:18px;">📈 ' + boardName + ' <span style="font-size:13px;color:#888;font-weight:400;">(' + totalItems + ' tickets migrados)</span></h3>' +
-        '<button id="sp-stats-close" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Cerrar</button>' +
-      '</div>' +
-      '<h4 style="margin:0 0 12px;font-size:14px;color:#555;">Tickets por persona</h4>' +
-      '<div style="flex:1;overflow:auto;">' + barsHTML + '</div>' +
-      '</div>';
-    document.body.appendChild(overlay);
-
-    document.getElementById("sp-stats-close").addEventListener("click", function() { overlay.remove(); });
-    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+    var m = createModal({
+      id: "sp-monday-stats-modal",
+      title: '📈 ' + boardName + ' <span style="font-size:13px;color:#888;font-weight:400;">(' + totalItems + ' tickets migrados)</span>',
+      content: '<h4 style="margin:0 0 12px;font-size:14px;color:#555;">Tickets por persona</h4>' +
+        '<div style="flex:1;overflow:auto;">' + barsHTML + '</div>',
+      options: { maxWidth: "700px", width: "95%", maxHeight: "90vh" }
+    });
   }
 
   const QUICK_SEARCH_ID = "sp-quick-search";
@@ -5290,22 +5344,20 @@
 
     var modalTitle = title || ("Tickets: " + statusName);
 
-    var overlay = document.createElement("div");
-    overlay.id = "sp-search-modal";
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:900px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
-        '<h3 style="margin:0;">' + modalTitle + '</h3>' +
-        '<div style="display:flex;gap:8px;"><button id="sp-qf-refresh" style="padding:6px 14px;border:1px solid #2196F3;border-radius:6px;background:#fff;color:#2196F3;cursor:pointer;font-size:13px;">🔄 Actualizar</button><button id="sp-qf-close" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Cerrar</button></div>' +
-      '</div>' +
-      '<div id="sp-qf-results" style="flex:1;overflow:auto;min-height:100px;"><div style="text-align:center;padding:20px;color:#888;">Buscando...</div></div>' +
-      '<div id="sp-qf-paging" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:#888;"></div>' +
-      '</div>';
-    document.body.appendChild(overlay);
+    var m = createModal({
+      id: "sp-search-modal",
+      title: modalTitle,
+      content: '<div id="sp-qf-results" style="flex:1;overflow:auto;min-height:100px;"><div style="text-align:center;padding:20px;color:#888;">Buscando...</div></div>' +
+        '<div id="sp-qf-paging" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:#888;"></div>',
+      options: {
+        maxWidth: "900px", width: "95%", maxHeight: "90vh",
+        headerActions: '<button id="sp-qf-refresh" style="padding:6px 14px;border:1px solid #2196F3;border-radius:6px;background:#fff;color:#2196F3;cursor:pointer;font-size:13px;">🔄 Actualizar</button>'
+      },
+      onClose: function() { activeModalRefresh = null; }
+    });
+    var overlay = m.overlay;
 
     document.getElementById("sp-qf-refresh").addEventListener("click", function() { if (activeModalRefresh) activeModalRefresh(); });
-    document.getElementById("sp-qf-close").addEventListener("click", function() { activeModalRefresh = null; overlay.remove(); });
-    overlay.addEventListener("click", function(e) { if (e.target === overlay) { activeModalRefresh = null; overlay.remove(); } });
 
     var currentPage = 1;
     activeModalRefresh = doQuickSearch;
@@ -5368,19 +5420,16 @@
     var existing = document.getElementById("sp-search-modal");
     if (existing) existing.remove();
 
-    var overlay = document.createElement("div");
-    overlay.id = "sp-search-modal";
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-
     var statusOpts = '<option value="">Todos</option><option value="Asignado">Asignado</option><option value="En espera">En espera</option><option value="En atención">En atención</option><option value="En validación">En validación</option><option value="Por confirmar">Por confirmar</option><option value="Por ejecutar">Por ejecutar</option><option value="Por revisar">Por revisar</option><option value="En aplicaciones">En aplicaciones</option><option value="Cerrado">Cerrado</option><option value="Rechazado">Rechazado</option><option value="Cancelado">Cancelado</option><option value="Reabierto">Reabierto</option>';
     var typeOpts = '<option value="">Todos</option><option value="5">Solicitud</option><option value="6">Incidente</option>';
     var priorityOpts = '<option value="">Todas</option><option value="6">Critico</option><option value="7">Alto</option><option value="8">Medio</option><option value="9">Bajo</option>';
 
     var inputStyle = 'width:100%;padding:6px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;';
 
-    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:900px;width:95%;max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;">' +
-      '<h3 style="margin:0 0 16px;">🔍 Buscar tickets</h3>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">' +
+    var m = createModal({
+      id: "sp-search-modal",
+      title: "🔍 Buscar tickets",
+      content: '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">' +
         '<div><label style="font-size:11px;color:#888;">Folio</label><input id="sp-sf-code" style="' + inputStyle + '" placeholder="Ej: 123"></div>' +
         '<div><label style="font-size:11px;color:#888;">Solicitante</label><input id="sp-sf-requester" style="' + inputStyle + '" placeholder="Nombre"></div>' +
         '<div><label style="font-size:11px;color:#888;">Estado</label><select id="sp-sf-status" style="' + inputStyle + '">' + statusOpts + '</select></div>' +
@@ -5392,16 +5441,15 @@
       '<div style="display:flex;gap:8px;margin-bottom:12px;">' +
         '<button id="sp-sf-search" style="flex:1;padding:10px;border:none;border-radius:6px;background:#7B1FA2;color:#fff;cursor:pointer;font-size:14px;">🔍 Buscar</button>' +
         '<button id="sp-sf-refresh" style="padding:10px 14px;border:1px solid #2196F3;border-radius:6px;background:#fff;color:#2196F3;cursor:pointer;font-size:14px;">🔄</button>' +
-        '<button id="sp-sf-close" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cerrar</button>' +
       '</div>' +
       '<div id="sp-sf-results" style="flex:1;overflow:auto;min-height:100px;"></div>' +
-      '<div id="sp-sf-paging" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:#888;"></div>' +
-      '</div>';
-    document.body.appendChild(overlay);
+      '<div id="sp-sf-paging" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:#888;"></div>',
+      options: { maxWidth: "900px", width: "95%", maxHeight: "90vh" },
+      onClose: function() { activeModalRefresh = null; }
+    });
+    var overlay = m.overlay;
 
     document.getElementById("sp-sf-refresh").addEventListener("click", function() { if (activeModalRefresh) activeModalRefresh(); });
-    document.getElementById("sp-sf-close").addEventListener("click", function() { activeModalRefresh = null; overlay.remove(); });
-    overlay.addEventListener("click", function(e) { if (e.target === overlay) { activeModalRefresh = null; overlay.remove(); } });
 
     var currentPage = 1;
     document.getElementById("sp-sf-search").addEventListener("click", function() { currentPage = 1; activeModalRefresh = doSearch; doSearch(); });
@@ -5604,7 +5652,7 @@
       var overlay = document.createElement("div");
       overlay.id = "sp-quick-detail-modal";
       overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-      overlay.innerHTML = '<div style="background:#fff;padding:clamp(12px, 2vw, 24px);border-radius:12px;width:clamp(400px, 85vw, 900px);max-height:90vh;display:flex;flex-direction:column;font-family:system-ui;font-size:clamp(11px, 1.1vw, 14px);">' +
+      overlay.innerHTML = '<div style="background:#fff;padding:clamp(12px, 2vw, 24px);border-radius:12px;width:clamp(400px, 85vw, 900px);max-height:90vh;display:flex;flex-direction:column;overflow-y:auto;font-family:system-ui;font-size:clamp(11px, 1.1vw, 14px);">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
           '<h3 style="margin:0;font-size:15px;">📋 ' + (t.uniqueCode || ticketId) + ' <span class="sp-qd-copy-folio" data-copy="' + (t.uniqueCode || ticketId) + '" style="cursor:pointer;font-size:12px;opacity:0.6;" title="Copiar folio">📋</span> <span style="font-weight:400;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-size:12px;">(' + statusName + ')</span></h3>' +
           '<div style="display:flex;gap:6px;align-items:center;">' +
