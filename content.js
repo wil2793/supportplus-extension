@@ -6882,12 +6882,12 @@
                   status: { index: mondayStatusIndex },
                   priority_mkn9kbe9: { index: priorityIndex },
                   cronograma_mkn9hwe3: { from: createdDate, to: createdDate },
-                  link_mknkdctz: { url: "https://macropay.supportplus.mx/es/dashboard/tickets/" + tId, text: uCode || String(tId) },
-                  text_mm2c9nhc: uCode || String(tId),
+                  link_mknkdctz: { url: "https://macropay.supportplus.mx/es/dashboard/tickets/" + tId, text: ticket.uniqueCode || uCode || String(tId) },
+                  text_mm2c9nhc: ticket.uniqueCode || uCode || String(tId),
                 });
                 var result = await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $groupId: String!, $itemName: String!, $columnValues: JSON!) { create_item(board_id: $boardId, group_id: $groupId, item_name: $itemName, column_values: $columnValues) { id } }', { boardId: board.id, groupId: targetGroup.id, itemName: itemName, columnValues: columnValues });
                 if (result.create_item) {
-                  addToCache(uCode || String(tId), result.create_item.id);
+                  addToCache(ticket.uniqueCode || uCode || String(tId), result.create_item.id);
                   badge.remove();
                   container.appendChild(createSyncedBadge(result.create_item.id));
                 }
