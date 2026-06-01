@@ -1027,11 +1027,48 @@
       chrome.storage.local.get("mondayToken", function(r) { resolve(r.mondayToken || ""); });
     });
   }
+  var _mondayBoardIdCache = null;
   function getMondayBoardId() {
+    if (_mondayBoardIdCache) return Promise.resolve(_mondayBoardIdCache);
     return new Promise(function(resolve) {
-      chrome.storage.local.get("mondayBoardId", function(d) { resolve(d.mondayBoardId || null); });
+      chrome.storage.local.get("mondayBoardId", function(d) {
+        _mondayBoardIdCache = d.mondayBoardId || null;
+        resolve(_mondayBoardIdCache);
+      });
     });
   }
+  // Find or create board for current month (called once on load)
+  async function ensureCurrentMonthBoard() {
+    try {
+      var mondayToken = await getMondayToken();
+      if (!mondayToken) return;
+      var now = new Date();
+      var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+      var boardName = "Tickets DBA - " + meses[now.getMonth()] + " - " + now.getFullYear();
+      var searchRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
+      var existingBoard = (searchRes.boards || []).find(function(b) { return b.name.trim().toLowerCase() === boardName.trim().toLowerCase(); });
+      if (existingBoard) {
+        _mondayBoardIdCache = existingBoard.id;
+        chrome.storage.local.set({ mondayBoardId: existingBoard.id });
+        return;
+      }
+      // Create from previous month
+      var prevBoardId = _mondayBoardIdCache;
+      if (!prevBoardId) return;
+      var dupRes = await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $boardName: String!, $workspaceId: ID!, $folderId: ID!) { duplicate_board(board_id: $boardId, duplicate_type: duplicate_board_with_structure, board_name: $boardName, workspace_id: $workspaceId, folder_id: $folderId) { board { id } } }', { boardId: String(prevBoardId), boardName: boardName, workspaceId: "9956268", folderId: "16653587" });
+      var newId = dupRes.duplicate_board?.board?.id;
+      if (newId) {
+        var newBoardData = await mondayQuery(mondayToken, '{ boards(ids: [' + newId + ']) { groups { id } } }', {});
+        for (var g of (newBoardData.boards?.[0]?.groups || [])) {
+          await mondayQuery(mondayToken, 'mutation { delete_group(board_id: ' + newId + ', group_id: "' + g.id + '") { id } }', {});
+        }
+        _mondayBoardIdCache = newId;
+        chrome.storage.local.set({ mondayBoardId: newId });
+        console.log("[SP] Created new Monday board:", boardName, newId);
+      }
+    } catch(e) { console.log("[SP] ensureCurrentMonthBoard error:", e.message); }
+  }
+  setTimeout(ensureCurrentMonthBoard, 8000);
 
   function collectServiceIds(node) {
     const ids = [node.id];
