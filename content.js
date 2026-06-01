@@ -6778,16 +6778,15 @@
           if (!row.querySelector("." + SYNCED_CLASS)) {
             container.appendChild(createSyncedBadge(synced[uniqueCode]));
           }
-          // Check if analyst/status needs sync (once per row)
-          if (!row.dataset.spSyncChecked) {
-            row.dataset.spSyncChecked = "true";
+          // Sync status and analyst to Monday on every check
+          if (!row.dataset.spSyncing) {
+            row.dataset.spSyncing = "true";
             var responsibleCell = row.querySelector('[data-field="responsibleName"]');
             var statusCell2 = row.querySelector('[data-field="ticketStatusName"]');
             var currentResponsible = responsibleCell ? responsibleCell.textContent.trim() : "";
             var currentStatus = statusCell2 ? statusCell2.textContent.trim() : "";
-            if (currentStatus) updateMondayStatus(ticketId, uniqueCode, currentStatus);
+            if (currentStatus) updateMondayStatus(ticketId, uniqueCode, currentStatus).finally(function() { row.dataset.spSyncing = ""; });
             if (currentResponsible && currentResponsible !== "Sin asignar") {
-              // Get email from profiles
               var prof = (getTeamConfig().profiles || []).find(function(p) { return p.profileFullName === currentResponsible; });
               if (prof && prof.email) updateMondayPerson(ticketId, uniqueCode, prof.email);
             }
