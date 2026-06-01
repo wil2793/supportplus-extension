@@ -1100,15 +1100,13 @@
 
   // --- Monday API ---
   async function mondayQuery(token, query, variables) {
-    const r = await fetch(MONDAY_API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: token },
-      body: JSON.stringify({ query, variables }),
+    return new Promise(function(resolve, reject) {
+      chrome.runtime.sendMessage({ type: "monday-query", token: token, query: query, variables: variables }, function(resp) {
+        if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+        if (!resp || !resp.success) return reject(new Error(resp?.error || "Monday query failed"));
+        resolve(resp.data);
+      });
     });
-    if (!r.ok) throw new Error(`Monday HTTP ${r.status}`);
-    const json = await r.json();
-    if (json.errors) throw new Error(json.errors[0].message);
-    return json.data;
   }
 
   // --- Sync ---

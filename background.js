@@ -257,4 +257,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     )).then(pages => sendResponse({ success: true, data: pages })).catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }
+
+  if (message.type === "monday-query") {
+    fetch("https://api.monday.com/v2", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": message.token },
+      body: JSON.stringify({ query: message.query, variables: message.variables })
+    }).then(r => r.json()).then(data => {
+      if (data.errors) sendResponse({ success: false, error: data.errors[0].message });
+      else sendResponse({ success: true, data: data.data });
+    }).catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
 });
