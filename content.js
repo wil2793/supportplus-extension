@@ -20,8 +20,8 @@
         blocker.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:999999;display:flex;align-items:center;justify-content:center;";
         blocker.innerHTML = '<div style="background:#fff;padding:30px;border-radius:12px;text-align:center;max-width:400px;font-family:system-ui;"><h2 style="margin:0 0 12px;color:#D32F2F;">⚠️ Actualización requerida</h2><p style="margin:0 0 8px;font-size:14px;">Tu versión (<b>' + _currentVersion + '</b>) está muy desactualizada.<br>La versión actual es <b>' + latest + '</b>.</p><p style="margin:0;font-size:13px;color:#555;">Actualiza la extensión para continuar usando SupportPlus Tools.</p>' + downloadBtn + '</div>';
         document.body.appendChild(blocker);
-      } else if (lat[1] > cur[1]) {
-        // Minor version change - show toast with download
+      } else {
+        // Any version difference (minor or patch) - show toast with download
         if (document.getElementById("sp-version-toast")) return;
         var toast = document.createElement("div");
         toast.id = "sp-version-toast";
@@ -30,7 +30,6 @@
         document.body.appendChild(toast);
         document.getElementById("sp-version-dismiss").addEventListener("click", function() { toast.remove(); });
       }
-      // Patch version (x.x.1) - no notification
     });
   }
   // Check on load (after a delay to let sync finish)
