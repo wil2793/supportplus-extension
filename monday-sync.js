@@ -1,7 +1,70 @@
 // Monday Auto-Sync - Syncs ALL tickets from SP API to Monday
 (function() {
   var SP_SEARCH_API = "https://macropayapi.supportplus.mx/tickets/search-by-level-and-resolution-groups";
+  var SP_TICKET_API = "https://macropayapi.supportplus.mx/tickets/web/";
   var _syncing = false;
+
+  // Intercept fetch to catch individual ticket API calls
+  var _originalFetch = window.fetch;
+  window.fetch = function() {
+    var url = arguments[0];
+    var result = _originalFetch.apply(this, arguments);
+    // Intercept individual ticket fetch
+    if (typeof url === "string" && url.match(/macropayapi\.supportplus\.mx\/tickets\/web\/\d+$/)) {
+      result.then(function(response) {
+        return response.clone().json().then(function(json) {
+          var ticket = json.data || json;
+          if (ticket && ticket.uniqueCode) {
+            syncSingleTicket(ticket);
+          }
+        }).catch(function() {});
+      }).catch(function() {});
+    }
+    return result;
+  };
+
+  async function syncSingleTicket(ticket) {
+    try {
+      var mondayToken = await getMondayToken();
+      if (!mondayToken) return;
+      var uniqueCode = ticket.uniqueCode;
+      var spStatus = (ticket.ticketStatusName || ticket.ticketStatus?.name || "").toLowerCase();
+      var holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
+
+      // Get boards
+      var boardsRes = await mondayQ(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
+      var ticketBoards = (boardsRes.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
+
+      // Find in Monday
+      var mondayItemId = null, foundBoardId = null;
+      for (var b of ticketBoards) {
+        try {
+          var itemRes = await mondayQ(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: uniqueCode });
+          var items = itemRes.items_page_by_column_values?.items || [];
+          if (items.length) { mondayItemId = items[0].id; foundBoardId = b.id; break; }
+        } catch(e) { continue; }
+      }
+      if (!mondayItemId) return;
+
+      // Map status
+      var mondayStatusIndex = 5;
+      if (spStatus === "cerrado") mondayStatusIndex = 1;
+      else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
+      else if (spStatus === "en espera") mondayStatusIndex = 5;
+      else if (spStatus === "estancado") mondayStatusIndex = 2;
+
+      var colValues = { status: { index: mondayStatusIndex } };
+
+      if (holderEmail) {
+        var mondayUsers = await getMondayUsers(mondayToken);
+        var userId = mondayUsers[holderEmail.toLowerCase()];
+        if (userId) colValues.multiple_person_mm25nvfq = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
+      }
+
+      await mondayQ(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: foundBoardId, itemId: mondayItemId, columnValues: JSON.stringify(colValues) });
+      console.log("[SP Monday Sync] Single:", uniqueCode, "->", spStatus, holderEmail);
+    } catch(e) {}
+  }
 
   async function mondayQ(token, query, variables) {
     return new Promise(function(resolve, reject) {
