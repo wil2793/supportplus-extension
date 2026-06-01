@@ -52,7 +52,7 @@
       if (!tickets.length) { _syncing = false; return; }
 
       // Get all Monday boards
-      var boardsRes = await mondayQ(mondayToken, '{ boards(workspace_ids: [_workspaceId], limit: 50) { id name } }', {});
+      var boardsRes = await mondayQ(mondayToken, '{ boards(workspace_ids: [' + _workspaceId + '], limit: 50) { id name } }', {});
       var ticketBoards = (boardsRes.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
       if (!ticketBoards.length) { _syncing = false; return; }
 
