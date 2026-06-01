@@ -86,16 +86,6 @@
 
         // Map person
         var holderEmail = t.responsibleEmail || "";
-        if (!holderEmail && t.responsibleName) {
-          // Try to get email from a detail fetch
-          try {
-            var detRes = await fetch("https://macropayapi.supportplus.mx/tickets/web/" + t.id, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
-            if (detRes.ok) {
-              var det = (await detRes.json()).data;
-              holderEmail = det?.ticketHolder?.ticketHolderLog?.email || "";
-            }
-          } catch(e) {}
-        }
         if (holderEmail) {
           if (!mondayUsers) mondayUsers = await getMondayUsers(mondayToken);
           var userId = mondayUsers[holderEmail.toLowerCase()];
