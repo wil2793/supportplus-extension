@@ -120,43 +120,50 @@
     try {
       var mondayToken = await getMondayToken();
       if (!mondayToken || !analystEmail) return;
-      var boardId = await getMondayBoardId();
-      if (!boardId) return;
       var code = uniqueCode || String(ticketId);
-      // Search item in Monday by uniqueCode column
-      var searchRes = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: boardId, columnId: "text_mm2c9nhc", value: code });
-      var items = searchRes.items_page_by_column_values?.items || [];
-      if (!items.length) return;
-      var mondayItemId = items[0].id;
+      // Search across all ticket boards
+      var boardsRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
+      var ticketBoards = (boardsRes.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
+      var mondayItemId = null, foundBoardId = null;
+      for (var b of ticketBoards) {
+        var itemRes = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: code });
+        var items = itemRes.items_page_by_column_values?.items || [];
+        if (items.length) { mondayItemId = items[0].id; foundBoardId = b.id; break; }
+      }
+      if (!mondayItemId) return;
       var users = await getMondayUsers(mondayToken);
       var userId = users[analystEmail.toLowerCase()];
       if (!userId) return;
       var personValue = JSON.stringify({ multiple_person_mm25nvfq: { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] } });
-      await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: boardId, itemId: mondayItemId, columnValues: personValue });
+      await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: foundBoardId, itemId: mondayItemId, columnValues: personValue });
       console.log("[SP] Monday person updated:", code, "->", analystEmail);
     } catch(e) { console.log("[SP] Monday person update failed:", e.message); }
   }
 
-  // Update Monday item status when SP ticket status changes
+    // Update Monday item status when SP ticket status changes
   async function updateMondayStatus(ticketId, uniqueCode, newStatusName) {
     try {
       var mondayToken = await getMondayToken();
       if (!mondayToken) return;
-      var boardId = await getMondayBoardId();
-      if (!boardId) return;
       var code = uniqueCode || String(ticketId);
-      // Search item in Monday by uniqueCode column
-      var searchRes = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: boardId, columnId: "text_mm2c9nhc", value: code });
-      var items = searchRes.items_page_by_column_values?.items || [];
-      if (!items.length) return;
-      var mondayItemId = items[0].id;
+      // Search across all ticket boards in workspace
+      var searchRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
+      var ticketBoards = (searchRes.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
+      // Search for the item in each board
+      var mondayItemId = null, foundBoardId = null;
+      for (var b of ticketBoards) {
+        var itemRes = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: code });
+        var items = itemRes.items_page_by_column_values?.items || [];
+        if (items.length) { mondayItemId = items[0].id; foundBoardId = b.id; break; }
+      }
+      if (!mondayItemId) return;
       var spStatus = (newStatusName || "").toLowerCase();
       var mondayStatusIndex = 5;
       if (spStatus === "cerrado") mondayStatusIndex = 1;
       else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
       else if (spStatus === "en espera") mondayStatusIndex = 5;
       else if (spStatus === "estancado") mondayStatusIndex = 2;
-      await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: boardId, itemId: mondayItemId, columnValues: JSON.stringify({ status: { index: mondayStatusIndex } }) });
+      await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: foundBoardId, itemId: mondayItemId, columnValues: JSON.stringify({ status: { index: mondayStatusIndex } }) });
       console.log("[SP] Monday status updated:", code, "->", newStatusName);
     } catch(e) { console.log("[SP] Monday status update failed:", e.message); }
   }
@@ -1027,48 +1034,25 @@
       chrome.storage.local.get("mondayToken", function(r) { resolve(r.mondayToken || ""); });
     });
   }
-  var _mondayBoardIdCache = null;
+  var _mondayBoardsCache = {}; // month -> boardId
+  async function getMondayBoardForMonth(year, month) {
+    var key = year + "-" + String(month + 1).padStart(2, "0");
+    if (_mondayBoardsCache[key]) return _mondayBoardsCache[key];
+    var mondayToken = await getMondayToken();
+    if (!mondayToken) return null;
+    var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    var boardName = "Tickets DBA - " + meses[month] + " - " + year;
+    var searchRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
+    var board = (searchRes.boards || []).find(function(b) { return b.name.trim().toLowerCase() === boardName.trim().toLowerCase(); });
+    if (board) { _mondayBoardsCache[key] = board.id; return board.id; }
+    return null;
+  }
+
   function getMondayBoardId() {
-    if (_mondayBoardIdCache) return Promise.resolve(_mondayBoardIdCache);
-    return new Promise(function(resolve) {
-      chrome.storage.local.get("mondayBoardId", function(d) {
-        _mondayBoardIdCache = d.mondayBoardId || null;
-        resolve(_mondayBoardIdCache);
-      });
-    });
+    // Returns current month board (for auto-migrate new tickets)
+    var now = new Date();
+    return getMondayBoardForMonth(now.getFullYear(), now.getMonth());
   }
-  // Find or create board for current month (called once on load)
-  async function ensureCurrentMonthBoard() {
-    try {
-      var mondayToken = await getMondayToken();
-      if (!mondayToken) return;
-      var now = new Date();
-      var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-      var boardName = "Tickets DBA - " + meses[now.getMonth()] + " - " + now.getFullYear();
-      var searchRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
-      var existingBoard = (searchRes.boards || []).find(function(b) { return b.name.trim().toLowerCase() === boardName.trim().toLowerCase(); });
-      if (existingBoard) {
-        _mondayBoardIdCache = existingBoard.id;
-        chrome.storage.local.set({ mondayBoardId: existingBoard.id });
-        return;
-      }
-      // Create from previous month
-      var prevBoardId = _mondayBoardIdCache;
-      if (!prevBoardId) return;
-      var dupRes = await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $boardName: String!, $workspaceId: ID!, $folderId: ID!) { duplicate_board(board_id: $boardId, duplicate_type: duplicate_board_with_structure, board_name: $boardName, workspace_id: $workspaceId, folder_id: $folderId) { board { id } } }', { boardId: String(prevBoardId), boardName: boardName, workspaceId: "9956268", folderId: "16653587" });
-      var newId = dupRes.duplicate_board?.board?.id;
-      if (newId) {
-        var newBoardData = await mondayQuery(mondayToken, '{ boards(ids: [' + newId + ']) { groups { id } } }', {});
-        for (var g of (newBoardData.boards?.[0]?.groups || [])) {
-          await mondayQuery(mondayToken, 'mutation { delete_group(board_id: ' + newId + ', group_id: "' + g.id + '") { id } }', {});
-        }
-        _mondayBoardIdCache = newId;
-        chrome.storage.local.set({ mondayBoardId: newId });
-        console.log("[SP] Created new Monday board:", boardName, newId);
-      }
-    } catch(e) { console.log("[SP] ensureCurrentMonthBoard error:", e.message); }
-  }
-  setTimeout(ensureCurrentMonthBoard, 8000);
 
   function collectServiceIds(node) {
     const ids = [node.id];
