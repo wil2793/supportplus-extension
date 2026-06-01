@@ -6838,44 +6838,7 @@
             container.appendChild(createSyncedBadge(synced[uniqueCode]));
           }
         }
-        // Always sync status and person to Monday for migrated tickets
-        if (uniqueCode && synced[uniqueCode] && !row.dataset.spSyncing) {
-          row.dataset.spSyncing = "1";
-          (async function(tId, uCode) {
-              try {
-                var spToken = getToken();
-                var mondayToken = await getMondayToken();
-                if (!spToken || !mondayToken) return;
-                var spRes = await fetch(SP_API + "/" + tId, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
-                if (!spRes.ok) return;
-                var ticket = (await spRes.json()).data || await spRes.json();
-                var spStatus = (ticket.ticketStatusName || "").toLowerCase();
-                var holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
-                var boardsRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
-                var ticketBoards = (boardsRes.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
-                for (var b of ticketBoards) {
-                  var itemRes = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: uCode });
-                  var items = itemRes.items_page_by_column_values?.items || [];
-                  if (items.length) {
-                    var mondayItemId = items[0].id;
-                    var mondayStatusIndex = 5;
-                    if (spStatus === "cerrado") mondayStatusIndex = 1;
-                    else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
-                    else if (spStatus === "estancado") mondayStatusIndex = 2;
-                    var colValues = { status: { index: mondayStatusIndex } };
-                    if (holderEmail) {
-                      var users = await getMondayUsers(mondayToken);
-                      var userId = users[holderEmail.toLowerCase()];
-                      if (userId) colValues.multiple_person_mm25nvfq = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
-                    }
-                    await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: b.id, itemId: mondayItemId, columnValues: JSON.stringify(colValues) });
-                    console.log("[SP] Monday synced:", uCode, "status:", spStatus, "person:", holderEmail);
-                    break;
-                  }
-                }
-              } catch(e) { console.log("[SP] Monday sync failed:", e.message); } finally { row.dataset.spSyncing = ""; }
-          })(ticketId, uniqueCode);
-        }
+        // Monday sync is handled by monday-sync.js using the search API
         if (!uniqueCode || !synced[uniqueCode]) {
         if (!row.querySelector("." + BTN_CLASS) && !row.dataset.spAutoMigrating) {
           // Not migrated - auto-migrate in background
@@ -7324,8 +7287,6 @@
   window.addEventListener("focus", () => {
     syncPromise = null;
     localStorage.removeItem(CACHE_KEY);
-    // Clear sync flags so Monday sync runs again
-    document.querySelectorAll("[data-sp-syncing]").forEach(function(el) { el.dataset.spSyncing = ""; });
     ensureSyncStarted().then(() => injectButtons());
     if (activeModalRefresh) activeModalRefresh();
     refreshTeamPanel();
