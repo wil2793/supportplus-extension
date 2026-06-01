@@ -5,28 +5,30 @@
   var _currentVersion = chrome.runtime.getManifest().version;
   var _versionBlocked = false;
   function checkVersion() {
-    chrome.storage.local.get("latestVersion", function(r) {
+    chrome.storage.local.get(["latestVersion", "latestZipUrl"], function(r) {
       var latest = r.latestVersion || "";
+      var zipUrl = r.latestZipUrl || "";
       if (!latest || latest === _currentVersion) return;
       var cur = _currentVersion.split(".").map(Number);
       var lat = latest.split(".").map(Number);
+      var downloadBtn = zipUrl ? '<a href="' + zipUrl + '" download style="display:inline-block;margin-top:10px;padding:8px 16px;background:#1976D2;color:#fff;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600;">📥 Descargar v' + latest + '</a>' : '';
       if (lat[0] > cur[0]) {
         // Major version change - block everything
         _versionBlocked = true;
         var blocker = document.createElement("div");
         blocker.id = "sp-version-blocker";
         blocker.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:999999;display:flex;align-items:center;justify-content:center;";
-        blocker.innerHTML = '<div style="background:#fff;padding:30px;border-radius:12px;text-align:center;max-width:400px;font-family:system-ui;"><h2 style="margin:0 0 12px;color:#D32F2F;">⚠️ Actualización requerida</h2><p style="margin:0 0 8px;font-size:14px;">Tu versión (<b>' + _currentVersion + '</b>) está muy desactualizada.<br>La versión actual es <b>' + latest + '</b>.</p><p style="margin:0;font-size:13px;color:#555;">Actualiza la extensión para continuar usando SupportPlus Tools.</p></div>';
+        blocker.innerHTML = '<div style="background:#fff;padding:30px;border-radius:12px;text-align:center;max-width:400px;font-family:system-ui;"><h2 style="margin:0 0 12px;color:#D32F2F;">⚠️ Actualización requerida</h2><p style="margin:0 0 8px;font-size:14px;">Tu versión (<b>' + _currentVersion + '</b>) está muy desactualizada.<br>La versión actual es <b>' + latest + '</b>.</p><p style="margin:0;font-size:13px;color:#555;">Actualiza la extensión para continuar usando SupportPlus Tools.</p>' + downloadBtn + '</div>';
         document.body.appendChild(blocker);
       } else if (lat[1] > cur[1]) {
-        // Minor version change - show toast
+        // Minor version change - show toast with download
         if (document.getElementById("sp-version-toast")) return;
         var toast = document.createElement("div");
         toast.id = "sp-version-toast";
-        toast.style.cssText = "position:fixed;bottom:20px;right:20px;background:#FF8F00;color:#fff;padding:12px 18px;border-radius:8px;font-size:12px;font-family:system-ui;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,0.3);cursor:pointer;";
-        toast.innerHTML = '🔄 Nueva versión disponible: <b>' + latest + '</b> (tienes ' + _currentVersion + ')<br><span style="font-size:10px;opacity:0.8;">Click para cerrar</span>';
-        toast.addEventListener("click", function() { toast.remove(); });
+        toast.style.cssText = "position:fixed;bottom:20px;right:20px;background:#FF8F00;color:#fff;padding:12px 18px;border-radius:8px;font-size:12px;font-family:system-ui;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,0.3);";
+        toast.innerHTML = '🔄 Nueva versión disponible: <b>' + latest + '</b> (tienes ' + _currentVersion + ')' + (zipUrl ? '<br><a href="' + zipUrl + '" download style="color:#fff;text-decoration:underline;font-size:11px;">📥 Descargar actualización</a>' : '') + '<br><span style="font-size:10px;opacity:0.8;cursor:pointer;" id="sp-version-dismiss">✕ Cerrar</span>';
         document.body.appendChild(toast);
+        document.getElementById("sp-version-dismiss").addEventListener("click", function() { toast.remove(); });
       }
       // Patch version (x.x.1) - no notification
     });

@@ -160,12 +160,15 @@ async function syncNotionData() {
     const VERSIONS_DB = "36f20e0684b98004b283ec713d3cde8a";
     const versionsRaw = await notionQuery(VERSIONS_DB, { filter: { property: "Activo", checkbox: { equals: true } }, sorts: [{ property: "Fecha de creación", direction: "descending" }], page_size: 1 });
     let latestVersion = "";
+    let latestZipUrl = "";
     if (versionsRaw.results && versionsRaw.results[0]) {
       latestVersion = versionsRaw.results[0].properties.Version?.title?.[0]?.plain_text || "";
+      var zipFiles = versionsRaw.results[0].properties["Archivo zip"]?.files || [];
+      if (zipFiles.length) latestZipUrl = zipFiles[0].external?.url || zipFiles[0].file?.url || "";
     }
 
     // Save to storage
-    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, suggestedComments, mondayToken: mondayTokenFromNotion, mondayWorkspaceId, mondayFolderId, latestVersion, notionSyncTime: Date.now() });
+    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, suggestedComments, mondayToken: mondayTokenFromNotion, mondayWorkspaceId, mondayFolderId, latestVersion, latestZipUrl, notionSyncTime: Date.now() });
     console.log("[SP Background] Notion synced:", Object.keys(usersMap).length, "users,", rolesList.length, "roles,", commentsRaw.length, "comments, monday token:", mondayTokenFromNotion ? "OK" : "MISSING", "latest version:", latestVersion);
   } catch (e) {
     console.error("[SP Background] Notion sync error:", e);
