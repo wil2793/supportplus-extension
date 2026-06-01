@@ -5604,22 +5604,29 @@
           else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
           else if (spStatus === "en espera") mondayStatusIndex = 5;
           else if (spStatus === "estancado") mondayStatusIndex = 2;
-          var boardsRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
-          var ticketBoards = (boardsRes.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
+
+          // Direct fetch to Monday (no background proxy needed)
+          async function mFetch(query, variables) {
+            var r = await fetch("https://api.monday.com/v2", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": mondayToken }, body: JSON.stringify({ query: query, variables: variables }) });
+            var d = await r.json();
+            return d.data;
+          }
+
+          // Find ticket in Monday boards
+          var boardsData = await mFetch('{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
+          var ticketBoards = (boardsData.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
           for (var b of ticketBoards) {
-            var itemRes = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: t.uniqueCode });
-            var items = itemRes.items_page_by_column_values?.items || [];
+            var itemData = await mFetch('query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: t.uniqueCode });
+            var items = itemData.items_page_by_column_values?.items || [];
             if (items.length) {
               var colValues = { status: { index: mondayStatusIndex } };
               if (hEmail) {
-                var mUsers = await getMondayUsers(mondayToken);
-                var uId = mUsers[hEmail.toLowerCase()];
-                console.log("[SP] Modal sync - email:", hEmail, "mondayUserId:", uId);
-                if (uId) colValues.multiple_person_mm25nvfq = { personsAndTeams: [{ id: parseInt(uId), kind: "person" }] };
-              } else {
-                console.log("[SP] Modal sync - no holder email for ticket", t.uniqueCode);
+                var usersData = await mFetch('{ users(limit:500) { id email } }', {});
+                var uId = (usersData.users || []).find(function(u) { return u.email && u.email.toLowerCase() === hEmail.toLowerCase(); });
+                if (uId) colValues.multiple_person_mm25nvfq = { personsAndTeams: [{ id: parseInt(uId.id), kind: "person" }] };
               }
-              await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: b.id, itemId: items[0].id, columnValues: JSON.stringify(colValues) });
+              await mFetch('mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: b.id, itemId: items[0].id, columnValues: JSON.stringify(colValues) });
+              console.log("[SP] Monday synced from modal:", t.uniqueCode, spStatus, hEmail);
               break;
             }
           }
