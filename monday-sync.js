@@ -1,12 +1,7 @@
-// Monday Auto-Sync - Runs independently every 60s and on focus
-// Syncs status and analyst from SP to Monday for all visible tickets
+// Monday Auto-Sync - Syncs ALL tickets from SP API to Monday
 (function() {
-  var SP_API = "https://macropayapi.supportplus.mx/tickets/web";
+  var SP_SEARCH_API = "https://macropayapi.supportplus.mx/tickets/search-by-level-and-resolution-groups";
   var _syncing = false;
-
-  async function getMondayToken() {
-    return new Promise(function(r) { chrome.storage.local.get("mondayToken", function(d) { r(d.mondayToken || ""); }); });
-  }
 
   async function mondayQ(token, query, variables) {
     return new Promise(function(resolve, reject) {
@@ -16,6 +11,10 @@
         resolve(resp.data);
       });
     });
+  }
+
+  async function getMondayToken() {
+    return new Promise(function(r) { chrome.storage.local.get("mondayToken", function(d) { r(d.mondayToken || ""); }); });
   }
 
   async function getMondayUsers(token) {
@@ -31,28 +30,30 @@
     try {
       var spToken = localStorage.getItem("token");
       var mondayToken = await getMondayToken();
-      if (!spToken || !mondayToken) return;
+      if (!spToken || !mondayToken) { _syncing = false; return; }
 
-      // Get all tickets from the current page (DataGrid rows)
-      var rows = document.querySelectorAll(".MuiDataGrid-row");
-      if (!rows.length) return;
+      // Fetch tickets from SP
+      var res = await fetch(SP_SEARCH_API + "?page=0&size=50", {
+        headers: { accept: "application/json", authorization: "Bearer " + spToken }
+      });
+      if (!res.ok) { _syncing = false; return; }
+      var json = await res.json();
+      var tickets = (json.data || json).content || [];
+      if (!tickets.length) { _syncing = false; return; }
 
-      // Get all boards
+      // Get all Monday boards
       var boardsRes = await mondayQ(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
       var ticketBoards = (boardsRes.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
-      if (!ticketBoards.length) return;
+      if (!ticketBoards.length) { _syncing = false; return; }
 
-      var mondayUsers = null; // lazy load
+      var mondayUsers = null;
+      var synced = 0;
 
-      for (var i = 0; i < rows.length; i++) {
-        var row = rows[i];
-        var ticketId = row.getAttribute("data-id");
-        if (!ticketId) continue;
-        var codeCell = row.querySelector('[data-field="uniqueCode"] p.MuiTypography-body1');
-        var uniqueCode = codeCell ? codeCell.textContent.trim() : "";
+      for (var t of tickets) {
+        var uniqueCode = t.uniqueCode || "";
         if (!uniqueCode) continue;
 
-        // Check if this ticket exists in Monday
+        // Find in Monday
         var mondayItemId = null, foundBoardId = null;
         for (var b of ticketBoards) {
           try {
@@ -63,37 +64,41 @@
         }
         if (!mondayItemId) continue;
 
-        // Fetch ticket from SP to get current status and analyst
+        // Map status
+        var spStatus = (t.ticketStatusName || "").toLowerCase();
+        var mondayStatusIndex = 5;
+        if (spStatus === "cerrado") mondayStatusIndex = 1;
+        else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
+        else if (spStatus === "en espera") mondayStatusIndex = 5;
+        else if (spStatus === "estancado") mondayStatusIndex = 2;
+
+        var colValues = { status: { index: mondayStatusIndex } };
+
+        // Map person
+        var holderEmail = t.responsibleEmail || "";
+        if (!holderEmail && t.responsibleName) {
+          // Try to get email from a detail fetch
+          try {
+            var detRes = await fetch("https://macropayapi.supportplus.mx/tickets/web/" + t.id, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+            if (detRes.ok) {
+              var det = (await detRes.json()).data;
+              holderEmail = det?.ticketHolder?.ticketHolderLog?.email || "";
+            }
+          } catch(e) {}
+        }
+        if (holderEmail) {
+          if (!mondayUsers) mondayUsers = await getMondayUsers(mondayToken);
+          var userId = mondayUsers[holderEmail.toLowerCase()];
+          if (userId) colValues.multiple_person_mm25nvfq = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
+        }
+
+        // Update Monday
         try {
-          var spRes = await fetch(SP_API + "/" + ticketId, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
-          if (!spRes.ok) continue;
-          var ticket = (await spRes.json()).data;
-          if (!ticket) continue;
-
-          var spStatus = (ticket.ticketStatusName || "").toLowerCase();
-          var holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
-
-          // Map status
-          var mondayStatusIndex = 5;
-          if (spStatus === "cerrado") mondayStatusIndex = 1;
-          else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
-          else if (spStatus === "en espera") mondayStatusIndex = 5;
-          else if (spStatus === "estancado") mondayStatusIndex = 2;
-
-          var colValues = { status: { index: mondayStatusIndex } };
-
-          // Map person
-          if (holderEmail) {
-            if (!mondayUsers) mondayUsers = await getMondayUsers(mondayToken);
-            var userId = mondayUsers[holderEmail.toLowerCase()];
-            if (userId) colValues.multiple_person_mm25nvfq = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
-          }
-
-          // Update Monday
           await mondayQ(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: foundBoardId, itemId: mondayItemId, columnValues: JSON.stringify(colValues) });
-          console.log("[SP Monday Sync]", uniqueCode, "->", spStatus, holderEmail);
-        } catch(e) { continue; }
+          synced++;
+        } catch(e) {}
       }
+      if (synced > 0) console.log("[SP Monday Sync] Updated", synced, "tickets");
     } catch(e) {
       console.log("[SP Monday Sync] Error:", e.message);
     } finally {
@@ -101,14 +106,14 @@
     }
   }
 
-  // Run on load (after 10s delay)
-  setTimeout(runSync, 10000);
+  // Run on load (15s delay)
+  setTimeout(runSync, 15000);
 
   // Run every 60 seconds
   setInterval(runSync, 60000);
 
   // Run on focus
   document.addEventListener("visibilitychange", function() {
-    if (document.visibilityState === "visible") setTimeout(runSync, 2000);
+    if (document.visibilityState === "visible") setTimeout(runSync, 3000);
   });
 })();
