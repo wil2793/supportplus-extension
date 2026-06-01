@@ -6778,25 +6778,23 @@
           if (!row.querySelector("." + SYNCED_CLASS)) {
             container.appendChild(createSyncedBadge(synced[uniqueCode]));
           }
-          // Sync status and analyst to Monday on every check
+          // Sync status and analyst to Monday from SP API
           if (!row.dataset.spSyncing) {
             row.dataset.spSyncing = "true";
-            var responsibleCell = row.querySelector('[data-field="responsibleName"]');
-            var statusCell2 = row.querySelector('[data-field="ticketStatusName"]');
-            var currentResponsible = responsibleCell ? responsibleCell.textContent.trim() : "";
-            var currentStatus = statusCell2 ? statusCell2.textContent.trim() : "";
-            if (currentStatus) updateMondayStatus(ticketId, uniqueCode, currentStatus).finally(function() { row.dataset.spSyncing = ""; });
-            if (currentResponsible && currentResponsible !== "Sin asignar") {
-              // Search email in all loaded profiles across all areas
-              var foundEmail = "";
-              Object.values(TEAM_AREAS).forEach(function(area) {
-                if (foundEmail) return;
-                (area.profiles || []).forEach(function(p) {
-                  if (p.profileFullName === currentResponsible && p.email) foundEmail = p.email;
-                });
-              });
-              if (foundEmail) updateMondayPerson(ticketId, uniqueCode, foundEmail);
-            }
+            (async function(tId, uCode) {
+              try {
+                var spToken = getToken();
+                if (!spToken) return;
+                var res = await fetch(SP_API + "/" + tId, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+                if (!res.ok) return;
+                var json = await res.json();
+                var ticket = json.data || json;
+                var ticketStatus = ticket.ticketStatusName || ticket.ticketStatus?.name || "";
+                var holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
+                if (ticketStatus) await updateMondayStatus(tId, uCode, ticketStatus);
+                if (holderEmail) await updateMondayPerson(tId, uCode, holderEmail);
+              } catch(e) {} finally { row.dataset.spSyncing = ""; }
+            })(ticketId, uniqueCode);
           }
         } else if (!row.querySelector("." + BTN_CLASS) && !row.dataset.spAutoMigrating) {
           // Not migrated - auto-migrate in background
