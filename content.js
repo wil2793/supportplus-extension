@@ -123,14 +123,16 @@
       var boardId = await getMondayBoardId();
       if (!boardId) return;
       var code = uniqueCode || String(ticketId);
-      var cache = getCache() || {};
-      var mondayItemId = cache[code];
-      if (!mondayItemId) return;
+      // Search item in Monday by uniqueCode column
+      var searchRes = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: boardId, columnId: "text_mm2c9nhc", value: code });
+      var items = searchRes.items_page_by_column_values?.items || [];
+      if (!items.length) return;
+      var mondayItemId = items[0].id;
       var users = await getMondayUsers(mondayToken);
       var userId = users[analystEmail.toLowerCase()];
       if (!userId) return;
       var personValue = JSON.stringify({ multiple_person_mm25nvfq: { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] } });
-      await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: boardId, itemId: String(mondayItemId), columnValues: personValue });
+      await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: boardId, itemId: mondayItemId, columnValues: personValue });
       console.log("[SP] Monday person updated:", code, "->", analystEmail);
     } catch(e) { console.log("[SP] Monday person update failed:", e.message); }
   }
@@ -139,20 +141,22 @@
   async function updateMondayStatus(ticketId, uniqueCode, newStatusName) {
     try {
       var mondayToken = await getMondayToken();
-      if (!mondayToken) { console.log("[SP] updateMondayStatus: no token"); return; }
+      if (!mondayToken) return;
       var boardId = await getMondayBoardId();
-      if (!boardId) { console.log("[SP] updateMondayStatus: no boardId"); return; }
+      if (!boardId) return;
       var code = uniqueCode || String(ticketId);
-      var cache = getCache() || {};
-      var mondayItemId = cache[code];
-      if (!mondayItemId) { console.log("[SP] updateMondayStatus: ticket not in cache:", code, "cache keys:", Object.keys(cache).slice(0, 5)); return; }
+      // Search item in Monday by uniqueCode column
+      var searchRes = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: boardId, columnId: "text_mm2c9nhc", value: code });
+      var items = searchRes.items_page_by_column_values?.items || [];
+      if (!items.length) return;
+      var mondayItemId = items[0].id;
       var spStatus = (newStatusName || "").toLowerCase();
       var mondayStatusIndex = 5;
       if (spStatus === "cerrado") mondayStatusIndex = 1;
       else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
       else if (spStatus === "en espera") mondayStatusIndex = 5;
       else if (spStatus === "estancado") mondayStatusIndex = 2;
-      await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: boardId, itemId: String(mondayItemId), columnValues: JSON.stringify({ status: { index: mondayStatusIndex } }) });
+      await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: boardId, itemId: mondayItemId, columnValues: JSON.stringify({ status: { index: mondayStatusIndex } }) });
       console.log("[SP] Monday status updated:", code, "->", newStatusName);
     } catch(e) { console.log("[SP] Monday status update failed:", e.message); }
   }
@@ -6773,6 +6777,20 @@
           if (oldBtn) oldBtn.remove();
           if (!row.querySelector("." + SYNCED_CLASS)) {
             container.appendChild(createSyncedBadge(synced[uniqueCode]));
+          }
+          // Check if analyst/status needs sync (once per row)
+          if (!row.dataset.spSyncChecked) {
+            row.dataset.spSyncChecked = "true";
+            var responsibleCell = row.querySelector('[data-field="responsibleName"]');
+            var statusCell2 = row.querySelector('[data-field="ticketStatusName"]');
+            var currentResponsible = responsibleCell ? responsibleCell.textContent.trim() : "";
+            var currentStatus = statusCell2 ? statusCell2.textContent.trim() : "";
+            if (currentStatus) updateMondayStatus(ticketId, uniqueCode, currentStatus);
+            if (currentResponsible && currentResponsible !== "Sin asignar") {
+              // Get email from profiles
+              var prof = (getTeamConfig().profiles || []).find(function(p) { return p.profileFullName === currentResponsible; });
+              if (prof && prof.email) updateMondayPerson(ticketId, uniqueCode, prof.email);
+            }
           }
         } else if (!row.querySelector("." + BTN_CLASS) && !row.dataset.spAutoMigrating) {
           // Not migrated - auto-migrate in background
