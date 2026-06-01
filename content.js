@@ -6834,7 +6834,7 @@
           // Not migrated - auto-migrate in background
           var dateCell = row.querySelector('[data-field="createdAt"]');
           var dateText = dateCell ? dateCell.textContent.trim() : "";
-          if (ticketMatchesBoard(dateText, boardDate)) {
+          {
             row.dataset.spAutoMigrating = "true";
             var migratingBadge = document.createElement("span");
             migratingBadge.className = BTN_CLASS;
@@ -6855,8 +6855,10 @@
                 var ticket = tJson.data || tJson;
                 // Get requester's department/group name
                 var creatorGroup = ticket.ticketInfo?.departmentName || ticket.resolutionGroup?.name || "Sin grupo";
-                // Get board
-                var boardId = await getMondayBoardId();
+                // Get board for the ticket's month
+                var ticketDate = new Date(ticket.createdAt);
+                var boardId = await getMondayBoardForMonth(ticketDate.getFullYear(), ticketDate.getMonth());
+                if (!boardId) boardId = await getMondayBoardId(); // fallback to current
                 if (!boardId) throw new Error("No board");
                 var boardData = await mondayQuery(mondayToken, 'query ($boardId: [ID!]!) { boards(ids: $boardId) { id name groups { id title } } }', { boardId: boardId });
                 var board = boardData.boards[0];
