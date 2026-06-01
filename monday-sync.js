@@ -27,12 +27,20 @@
     try {
       var mondayToken = await getMondayToken();
       if (!mondayToken) return;
+      var _workspaceId = await new Promise(function(r) {
+        chrome.storage.local.get(["notionUsers", "userEmail"], function(d) {
+          var email = (d.userEmail || "").toLowerCase();
+          var users = d.notionUsers || {};
+          var user = users[email];
+          r(user?.mondayWorkspaceId || "9956268");
+        });
+      });
       var uniqueCode = ticket.uniqueCode;
       var spStatus = (ticket.ticketStatusName || ticket.ticketStatus?.name || "").toLowerCase();
       var holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
 
       // Get boards
-      var boardsRes = await mondayQ(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
+      var boardsRes = await mondayQ(mondayToken, '{ boards(workspace_ids: [_workspaceId], limit: 50) { id name } }', {});
       var ticketBoards = (boardsRes.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
 
       // Find in Monday
@@ -95,6 +103,16 @@
       var mondayToken = await getMondayToken();
       if (!spToken || !mondayToken) { _syncing = false; return; }
 
+      // Get workspace ID from user's role config
+      var _workspaceId = await new Promise(function(r) {
+        chrome.storage.local.get(["notionUsers", "userEmail"], function(d) {
+          var email = (d.userEmail || "").toLowerCase();
+          var users = d.notionUsers || {};
+          var user = users[email];
+          r(user?.mondayWorkspaceId || "9956268");
+        });
+      });
+
       // Fetch tickets from SP
       var res = await fetch(SP_SEARCH_API + "?page=0&size=50", {
         headers: { accept: "application/json", authorization: "Bearer " + spToken }
@@ -105,7 +123,7 @@
       if (!tickets.length) { _syncing = false; return; }
 
       // Get all Monday boards
-      var boardsRes = await mondayQ(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
+      var boardsRes = await mondayQ(mondayToken, '{ boards(workspace_ids: [_workspaceId], limit: 50) { id name } }', {});
       var ticketBoards = (boardsRes.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
       if (!ticketBoards.length) { _syncing = false; return; }
 

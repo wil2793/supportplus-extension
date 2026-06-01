@@ -59,7 +59,9 @@ async function syncNotionData() {
       const name = (r.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase();
       const roleGroups = (r.properties.MSP_cat_Grupos?.relation || []).map(rel => groupsMap[rel.id]).filter(Boolean);
       const canMigrate = r.properties.PuedeMigrarMonday?.checkbox || false;
-      rolesMap[r.id] = { name, groups: roleGroups, active: r.properties.Activo?.checkbox, canMigrate };
+      const mondayFolderId = r.properties.monday_folder_id?.number ? String(r.properties.monday_folder_id.number) : "";
+      const mondayWorkspaceId = r.properties.monday_workspace_id?.number ? String(r.properties.monday_workspace_id.number) : "";
+      rolesMap[r.id] = { name, groups: roleGroups, active: r.properties.Activo?.checkbox, canMigrate, mondayFolderId, mondayWorkspaceId };
     }
 
     // Build users list: email -> { name, role, groups[], profileId, active }
@@ -91,8 +93,10 @@ async function syncNotionData() {
 
       // Can migrate Monday
       const canMigrate = (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].canMigrate : false;
+      const mondayFolderId = (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].mondayFolderId : "";
+      const mondayWorkspaceId = (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].mondayWorkspaceId : "";
 
-      usersMap[email] = { name: nombre, role: mappedRole, groups: finalGroups, profileId, active, canMigrate };
+      usersMap[email] = { name: nombre, role: mappedRole, groups: finalGroups, profileId, active, canMigrate, mondayFolderId, mondayWorkspaceId };
     }
 
     // Check sub-groups for permissions (Drag And Drop)
