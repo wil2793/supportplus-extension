@@ -6755,22 +6755,57 @@
           if (!row.querySelector("." + SYNCED_CLASS)) {
             container.appendChild(createSyncedBadge(synced[uniqueCode]));
           }
-          // Sync status and analyst to Monday from SP API
+          // Sync: delete Monday item and let auto-migrate recreate it with fresh data
           if (!row.dataset.spSyncing) {
             row.dataset.spSyncing = "true";
             (async function(tId, uCode) {
               try {
-                var spToken = getToken();
-                if (!spToken) return;
-                var res = await fetch(SP_API + "/" + tId, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
-                if (!res.ok) return;
-                var json = await res.json();
-                var ticket = json.data || json;
-                var ticketStatus = ticket.ticketStatusName || ticket.ticketStatus?.name || "";
-                var holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
-                if (ticketStatus) await updateMondayStatus(tId, uCode, ticketStatus);
-                if (holderEmail) await updateMondayPerson(tId, uCode, holderEmail);
-              } catch(e) {} finally { row.dataset.spSyncing = ""; }
+                var mondayToken = await getMondayToken();
+                if (!mondayToken) return;
+                // Find the item in Monday
+                var boardsRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
+                var ticketBoards = (boardsRes.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
+                for (var b of ticketBoards) {
+                  var itemRes = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id column_values(ids: ["status", "multiple_person_mm25nvfq"]) { id text } } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: uCode });
+                  var items = itemRes.items_page_by_column_values?.items || [];
+                  if (items.length) {
+                    // Get current SP data
+                    var spToken = getToken();
+                    if (!spToken) break;
+                    var spRes = await fetch(SP_API + "/" + tId, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+                    if (!spRes.ok) break;
+                    var spJson = await spRes.json();
+                    var ticket = spJson.data || spJson;
+                    var spStatus = (ticket.ticketStatusName || "").toLowerCase();
+                    var holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
+                    // Check if Monday status matches
+                    var mondayStatus = items[0].column_values.find(function(cv) { return cv.id === "status"; });
+                    var mondayPerson = items[0].column_values.find(function(cv) { return cv.id === "multiple_person_mm25nvfq"; });
+                    var mondayStatusText = (mondayStatus?.text || "").toLowerCase();
+                    var mondayPersonText = (mondayPerson?.text || "").toLowerCase();
+                    // Map SP status to expected Monday text
+                    var expectedStatus = "no iniciado";
+                    if (spStatus === "cerrado") expectedStatus = "listo";
+                    else if (spStatus === "asignado" || spStatus === "en atención") expectedStatus = "en proceso";
+                    else if (spStatus === "estancado") expectedStatus = "estancado";
+                    var needsUpdate = mondayStatusText !== expectedStatus || (holderEmail && !mondayPersonText.includes(holderEmail.split("@")[0]));
+                    if (needsUpdate) {
+                      // Delete and let auto-migrate recreate
+                      await mondayQuery(mondayToken, 'mutation ($itemId: ID!) { delete_item(item_id: $itemId) { id } }', { itemId: items[0].id });
+                      // Remove from cache so auto-migrate picks it up
+                      var cache = getCache() || {};
+                      delete cache[uCode];
+                      setCache(cache);
+                      // Remove synced badge so auto-migrate triggers
+                      var badge = row.querySelector("." + SYNCED_CLASS);
+                      if (badge) badge.remove();
+                      row.dataset.spAutoMigrating = "";
+                      console.log("[SP] Deleted Monday item for re-sync:", uCode);
+                    }
+                    break;
+                  }
+                }
+              } catch(e) { console.log("[SP] Sync check failed:", e.message); } finally { row.dataset.spSyncing = ""; }
             })(ticketId, uniqueCode);
           }
         } else if (!row.querySelector("." + BTN_CLASS) && !row.dataset.spAutoMigrating) {
