@@ -6797,7 +6797,7 @@
           }
           // Sync status and person directly to Monday
           if (!row.dataset.spSyncing) {
-            row.dataset.spSyncing = "true";
+            row.dataset.spSyncing = "1";
             (async function(tId, uCode) {
               try {
                 var spToken = getToken();
@@ -7281,6 +7281,8 @@
   window.addEventListener("focus", () => {
     syncPromise = null;
     localStorage.removeItem(CACHE_KEY);
+    // Clear sync flags so Monday sync runs again
+    document.querySelectorAll("[data-sp-syncing]").forEach(function(el) { el.dataset.spSyncing = ""; });
     ensureSyncStarted().then(() => injectButtons());
     if (activeModalRefresh) activeModalRefresh();
     refreshTeamPanel();
