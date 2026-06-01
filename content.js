@@ -178,19 +178,19 @@
     overlay.id = id;
     overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:" + zIndex + ";display:flex;align-items:center;justify-content:center;";
 
-    var modalStyle = "background:#fff;border-radius:12px;max-width:" + maxWidth + ";width:" + width + ";max-height:" + maxHeight + ";display:flex;flex-direction:column;font-family:system-ui;text-align:" + textAlign + ";overflow:hidden;";
+    var modalStyle = "background:#fff;border-radius:12px;max-width:" + maxWidth + ";width:" + width + ";max-height:" + maxHeight + ";display:flex;flex-direction:column;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);text-align:" + textAlign + ";overflow:hidden;";
     var headerStyle = "display:flex;justify-content:space-between;align-items:center;padding:16px 20px 12px;border-bottom:1px solid #eee;flex-shrink:0;";
     var bodyStyle = "padding:16px 20px 20px;" + (scroll ? "overflow-y:auto;flex:1;" : "");
 
     overlay.innerHTML = '<div class="sp-modal-box" style="' + modalStyle + '">' +
       '<div class="sp-modal-header" style="' + headerStyle + '">' +
-        '<h3 class="MuiTypography-root MuiTypography-body1 mui-997729" style="margin:0;font-size:16px;">' + title + '</h3>' +
+        '<h3 style="margin:0;font-size:1.1rem;font-weight:600;">' + title + '</h3>' +
         '<div style="display:flex;align-items:center;gap:8px;">' +
           headerActions +
-          '<button class="sp-modal-close-btn" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px;color:#666;" title="Cerrar">✕</button>' +
+          '<button class="sp-modal-close-btn" style="background:none;border:none;font-size:1.2rem;cursor:pointer;padding:0 4px;color:#666;" title="Cerrar">✕</button>' +
         '</div>' +
       '</div>' +
-      '<div class="sp-modal-body MuiTypography-root MuiTypography-body1 mui-cql716y" style="' + bodyStyle + '">' + content + '</div>' +
+      '<div class="sp-modal-body" style="' + bodyStyle + '">' + content + '</div>' +
     '</div>';
 
     document.body.appendChild(overlay);
@@ -5735,20 +5735,20 @@
       var overlay = document.createElement("div");
       overlay.id = "sp-quick-detail-modal";
       overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-      overlay.innerHTML = '<div style="background:#fff;padding:clamp(12px, 2vw, 24px);border-radius:12px;width:clamp(400px, 85vw, 900px);max-height:90vh;display:flex;flex-direction:column;overflow-y:auto;font-family:system-ui;font-size:clamp(11px, 1.1vw, 14px);">' +
+      overlay.innerHTML = '<div style="background:#fff;padding:clamp(12px, 2vw, 24px);border-radius:12px;width:clamp(400px, 85vw, 900px);max-height:90vh;display:flex;flex-direction:column;overflow-y:auto;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
-          '<h3 style="margin:0;font-size:15px;">📋 ' + (t.uniqueCode || ticketId) + ' <span class="sp-qd-copy-folio" data-copy="' + (t.uniqueCode || ticketId) + '" style="cursor:pointer;font-size:12px;opacity:0.6;" title="Copiar folio">📋</span> <span style="font-weight:400;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-size:12px;">(' + statusName + ')</span></h3>' +
+          '<h3 style="margin:0;font-size:1.1rem;">📋 ' + (t.uniqueCode || ticketId) + ' <span class="sp-qd-copy-folio" data-copy="' + (t.uniqueCode || ticketId) + '" style="cursor:pointer;font-size:0.85rem;opacity:0.6;" title="Copiar folio">📋</span> <span style="font-weight:400;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-size:0.85rem;">(' + statusName + ')</span></h3>' +
           '<div style="display:flex;gap:6px;align-items:center;">' +
             '<span id="sp-qd-actions" style="display:flex;gap:4px;"></span>' +
-            '<a href="/es/dashboard/tickets/' + ticketId + '" target="_blank" style="padding:5px 10px;border:1px solid #1976D2;border-radius:6px;font-size:11px;text-decoration:none;color:#1976D2;">Abrir ↗</a>' +
-            '<button id="sp-qd-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
+            '<a href="/es/dashboard/tickets/' + ticketId + '" target="_blank" style="padding:5px 10px;border:1px solid #1976D2;border-radius:6px;font-size:0.9rem;text-decoration:none;color:#1976D2;">Abrir ↗</a>' +
+            '<button id="sp-qd-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:0.9rem;">✕</button>' +
           '</div>' +
         '</div>' +
         '<div style="flex:1;overflow:auto;">' +
           // Subject + info grid
           '<div style="background:#f5f5f5;padding:8px 10px;border-radius:6px;font-size:13px;font-weight:600;margin-bottom:8px;">' + (t.subject || "Sin asunto") + '</div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;font-size:11px;">' +
-            '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;">' + (statusName === "Cerrado" ? '<span style="color:#2E7D32;font-weight:700;font-size:11px;">Cerrado</span>' : '<span style="color:#888;">Estado:</span> <select id="sp-qd-status-select" style="font-size:11px;border:none;background:transparent;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-weight:700;cursor:pointer;"><option value="" selected>' + statusName + '</option><option value="" disabled>Cargando...</option></select>') + '</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;font-size:0.9rem;">' +
+            '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;">' + (statusName === "Cerrado" ? '<span style="color:#2E7D32;font-weight:700;font-size:0.9rem;">Cerrado</span>' : '<span style="color:#888;">Estado:</span> <select id="sp-qd-status-select" style="font-size:0.9rem;border:none;background:transparent;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-weight:700;cursor:pointer;"><option value="" selected>' + statusName + '</option><option value="" disabled>Cargando...</option></select>') + '</div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Prioridad:</span> ' + priorityName + '</div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Tipo:</span> ' + reportType + '</div>' +
             '<div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Canal:</span> ' + channel + '</div>' +
@@ -5760,20 +5760,20 @@
           // Assign row (only if "En espera" / unassigned)
           (statusName === "En espera" ? '<div style="margin-bottom:8px;">' +
             '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">' +
-              '<button id="sp-qd-take-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🤚 Tomar</button>' +
-              '<select id="sp-qd-assign-select" style="flex:1;padding:6px 8px;font-size:11px;border:1px solid #ddd;border-radius:6px;"><option value="">-- Asignar a --</option></select>' +
+              '<button id="sp-qd-take-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🤚 Tomar</button>' +
+              '<select id="sp-qd-assign-select" style="flex:1;padding:6px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:6px;"><option value="">-- Asignar a --</option></select>' +
             '</div>' +
-            '<div id="sp-qd-take-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:11px;">' +
+            '<div id="sp-qd-take-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:0.9rem;">' +
               '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario al tomar</label>' +
-              '<div style="display:flex;gap:4px;align-items:flex-start;"><textarea id="sp-qd-take-comment" style="flex:1;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;">se revisa</textarea><label style="padding:6px 8px;border:1px solid #ddd;border-radius:4px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-take-attach" type="file" multiple style="display:none;"></label></div>' +
+              '<div style="display:flex;gap:4px;align-items:flex-start;"><textarea id="sp-qd-take-comment" style="flex:1;padding:5px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;">se revisa</textarea><label style="padding:6px 8px;border:1px solid #ddd;border-radius:4px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-take-attach" type="file" multiple style="display:none;"></label></div>' +
               '<div id="sp-qd-take-attach-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;"></div>' +
-              '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;"><input type="checkbox" id="sp-qd-take-done"> <b>Ticket realizado</b></label>' +
+              '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:0.9rem;"><input type="checkbox" id="sp-qd-take-done"> <b>Ticket realizado</b></label>' +
               '<div id="sp-qd-take-extra" style="display:none;margin-top:6px;">' +
                 '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label>' +
-                '<div style="display:flex;gap:4px;align-items:flex-start;"><textarea id="sp-qd-take-close-comment" placeholder="Comentario de cierre..." style="flex:1;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea><label style="padding:6px 8px;border:1px solid #ddd;border-radius:4px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-take-close-attach" type="file" multiple style="display:none;"></label></div>' +
+                '<div style="display:flex;gap:4px;align-items:flex-start;"><textarea id="sp-qd-take-close-comment" placeholder="Comentario de cierre..." style="flex:1;padding:5px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea><label style="padding:6px 8px;border:1px solid #ddd;border-radius:4px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-take-close-attach" type="file" multiple style="display:none;"></label></div>' +
                 '<div id="sp-qd-take-close-attach-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;"></div>' +
               '</div>' +
-              '<div style="display:flex;gap:6px;margin-top:8px;"><button id="sp-qd-take-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:11px;font-weight:600;">Confirmar</button><button id="sp-qd-take-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:11px;font-weight:600;">Cancelar</button></div>' +
+              '<div style="display:flex;gap:6px;margin-top:8px;"><button id="sp-qd-take-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">Confirmar</button><button id="sp-qd-take-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:0.9rem;font-weight:600;">Cancelar</button></div>' +
               '<div id="sp-qd-take-suggested" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;"></div>' +
             '</div>' +
           '</div>' : '') +
@@ -5784,13 +5784,13 @@
             var showMondayOption = hasMondayConfig && !isMigrated;
             var closeHTML = '<div style="margin-bottom:8px;">' +
               '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">' +
-                '<button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🔒 Cerrar</button>' +
+                '<button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🔒 Cerrar</button>' +
               '</div>' +
-              '<div id="sp-qd-close-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:11px;">' +
+              '<div id="sp-qd-close-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:0.9rem;">' +
                 '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label>' +
-                '<div style="display:flex;gap:4px;align-items:flex-start;"><textarea id="sp-qd-close-comment" placeholder="Comentario de cierre..." style="flex:1;padding:5px 8px;font-size:11px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea><label style="padding:6px 8px;border:1px solid #ddd;border-radius:4px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-close-attach" type="file" multiple style="display:none;"></label></div>' +
+                '<div style="display:flex;gap:4px;align-items:flex-start;"><textarea id="sp-qd-close-comment" placeholder="Comentario de cierre..." style="flex:1;padding:5px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea><label style="padding:6px 8px;border:1px solid #ddd;border-radius:4px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-close-attach" type="file" multiple style="display:none;"></label></div>' +
                 '<div id="sp-qd-close-attach-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;"></div>' +
-                '<div style="display:flex;gap:6px;"><button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:11px;font-weight:600;">Confirmar</button><button id="sp-qd-close-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:11px;font-weight:600;">Cancelar</button></div>' +
+                '<div style="display:flex;gap:6px;"><button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">Confirmar</button><button id="sp-qd-close-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:0.9rem;font-weight:600;">Cancelar</button></div>' +
                 '<div id="sp-qd-close-suggested" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;"></div>' +
               '</div>' +
             '</div>';
@@ -5798,26 +5798,26 @@
           })() +
           // Migrate only (if closed, not migrated, and Monday configured)
           (statusName === "Cerrado" && hasMondayConfig && !(t.uniqueCode && getCache() && getCache()[t.uniqueCode]) ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
-            '<button id="sp-qd-migrate-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🙂 Migrar a Monday</button>' +
+            '<button id="sp-qd-migrate-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🙂 Migrar a Monday</button>' +
           '</div>' : '') +
           // Reopen row (if closed) - no select, reopen assigns to current holder
           (statusName === "Cerrado" ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
-            '<button id="sp-qd-reopen-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#FF8F00;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">🔓 Reabrir</button>' +
+            '<button id="sp-qd-reopen-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#FF8F00;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🔓 Reabrir</button>' +
           '</div>' : '') +
           // People row
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
-            '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:11px;">' +
-              '<b style="color:#888;">👤 Solicitante:</b> ' + requesterName + ' <span class="sp-qd-copy-name" data-copy="' + requesterName + '" style="cursor:pointer;font-size:10px;opacity:0.6;" title="Copiar nombre">📋</span>' + (requesterEmail ? ' <span style="color:#888;">(' + requesterEmail + ')</span>' : '') +
+            '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:0.9rem;">' +
+              '<b style="color:#888;">👤 Solicitante:</b> ' + requesterName + ' <span class="sp-qd-copy-name" data-copy="' + requesterName + '" style="cursor:pointer;font-size:0.8rem;opacity:0.6;" title="Copiar nombre">📋</span>' + (requesterEmail ? ' <span style="color:#888;">(' + requesterEmail + ')</span>' : '') +
               (department ? '<br><span style="color:#aaa;">' + department + ' | ' + location + '</span>' : '') +
             '</div>' +
-            '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:11px;">' +
+            '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:0.9rem;">' +
               '<b style="color:#888;">🔍 Analista:</b> ' + holderName + (holderEmail ? ' <span style="color:#888;">(' + holderEmail + ')</span>' : '') +
             '</div>' +
           '</div>' +
           // Description (compact)
           '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;margin-bottom:8px;">' +
-            '<b style="font-size:10px;color:#888;">📝 Descripción</b>' +
-            '<div style="margin:4px 0 0;font-size:11px;line-height:1.5;color:#333;max-height:200px;overflow:auto;">' + desc + '</div>' +
+            '<b style="font-size:0.8rem;color:#888;">📝 Descripción</b>' +
+            '<div style="margin:4px 0 0;font-size:0.9rem;line-height:1.5;color:#333;max-height:200px;overflow:auto;">' + desc + '</div>' +
           '</div>' +
           attachHTML +
           participantsHTML +
@@ -5833,17 +5833,17 @@
                 if (cAttachments.length) {
                   cAttachHTML = '<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;">';
                   cAttachments.forEach(function(a) {
-                    cAttachHTML += '<button class="sp-qd-download" data-file-id="' + a.id + '" data-file-name="' + (a.name || "archivo").replace(/"/g, '&quot;') + '" style="padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:3px;font-size:10px;cursor:pointer;color:#1976D2;">📎 ' + (a.name || "archivo") + '</button>';
+                    cAttachHTML += '<button class="sp-qd-download" data-file-id="' + a.id + '" data-file-name="' + (a.name || "archivo").replace(/"/g, '&quot;') + '" style="padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:3px;font-size:0.8rem;cursor:pointer;color:#1976D2;">📎 ' + (a.name || "archivo") + '</button>';
                   });
                   cAttachHTML += '</div>';
                 }
                 var myName = getLoggedUserName();
                 var isMyComment = c.fullName === myName;
                 var addAttachBtn = isMyComment ? ' <label class="sp-qd-add-attach" data-comment-id="' + c.id + '" style="cursor:pointer;font-size:12px;opacity:0.6;margin-left:4px;" title="Adjuntar evidencia">📎<input type="file" multiple style="display:none;"></label>' : '';
-                return '<div style="padding:5px 8px;background:#f9f9f9;border-left:3px solid #1976D2;border-radius:4px;font-size:11px;margin-bottom:4px;">' +
-                  '<div style="display:flex;justify-content:space-between;align-items:center;"><b>' + (c.fullName || "") + '</b><span style="color:#888;font-size:10px;">' + cDate + addAttachBtn + '</span></div>' +
+                return '<div style="padding:5px 8px;background:#f9f9f9;border-left:3px solid #1976D2;border-radius:4px;font-size:0.9rem;margin-bottom:4px;">' +
+                  '<div style="display:flex;justify-content:space-between;align-items:center;"><b>' + (c.fullName || "") + '</b><span style="color:#888;font-size:0.8rem;">' + cDate + addAttachBtn + '</span></div>' +
                   '<div style="color:#555;margin-top:2px;">' + cContent + '</div>' + cAttachHTML + '</div>';
-              }).join("") : '<div style="color:#aaa;font-size:11px;padding:4px;">Sin comentarios</div>') +
+              }).join("") : '<div style="color:#aaa;font-size:0.9rem;padding:4px;">Sin comentarios</div>') +
             '</div>' +
             // Add comment form (hide if closed, unless DBA)
             (statusName !== "Cerrado" || getTeamConfig().resolutionGroupId === 19 ? (
@@ -5886,16 +5886,16 @@
               if (c.attachments && c.attachments.length) {
                 cAttachHTML = '<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;">';
                 c.attachments.forEach(function(a) {
-                  cAttachHTML += '<button class="sp-qd-download" data-file-id="' + a.id + '" data-file-name="' + (a.name || "archivo").replace(/"/g, '&quot;') + '" style="padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:3px;font-size:10px;cursor:pointer;color:#1976D2;">📎 ' + (a.name || "archivo") + '</button>';
+                  cAttachHTML += '<button class="sp-qd-download" data-file-id="' + a.id + '" data-file-name="' + (a.name || "archivo").replace(/"/g, '&quot;') + '" style="padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:3px;font-size:0.8rem;cursor:pointer;color:#1976D2;">📎 ' + (a.name || "archivo") + '</button>';
                 });
                 cAttachHTML += '</div>';
               }
               var addAttachBtn = isMyComment ? ' <label class="sp-qd-add-attach" data-comment-id="' + c.id + '" style="cursor:pointer;font-size:12px;opacity:0.6;margin-left:4px;" title="Adjuntar evidencia">📎<input type="file" multiple style="display:none;"></label>' : '';
-              return '<div style="padding:5px 8px;background:#f9f9f9;border-left:3px solid #1976D2;border-radius:4px;font-size:11px;margin-bottom:4px;">' +
-                '<div style="display:flex;justify-content:space-between;align-items:center;"><b>' + (c.fullName || "") + '</b><span style="color:#888;font-size:10px;">' + cDate + addAttachBtn + '</span></div>' +
+              return '<div style="padding:5px 8px;background:#f9f9f9;border-left:3px solid #1976D2;border-radius:4px;font-size:0.9rem;margin-bottom:4px;">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;"><b>' + (c.fullName || "") + '</b><span style="color:#888;font-size:0.8rem;">' + cDate + addAttachBtn + '</span></div>' +
                 '<div style="color:#555;margin-top:2px;">' + cContent + '</div>' + cAttachHTML + '</div>';
             }).join("");
-            list.innerHTML = html || '<div style="color:#aaa;font-size:11px;padding:4px;">Sin comentarios</div>';
+            list.innerHTML = html || '<div style="color:#aaa;font-size:0.9rem;padding:4px;">Sin comentarios</div>';
           }).catch(function() {});
       }, 30000);
 
