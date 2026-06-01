@@ -1028,52 +1028,8 @@
     });
   }
   function getMondayBoardId() {
-    return new Promise((resolve) => {
-      chrome.storage.local.get(["mondayBoardId", "mondayBoardMonth"], async function(stored) {
-        var now = new Date();
-        var currentMonth = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
-        // If stored board is for current month or no month tracking yet, use it
-        if (stored.mondayBoardId && (!stored.mondayBoardMonth || stored.mondayBoardMonth === currentMonth)) {
-          if (!stored.mondayBoardMonth) chrome.storage.local.set({ mondayBoardMonth: currentMonth });
-          return resolve(stored.mondayBoardId);
-        }
-        // Month changed - need to find or create new board
-        try {
-          var mondayToken = await getMondayToken();
-          if (!mondayToken) return resolve(stored.mondayBoardId || null);
-          var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-          var boardName = "Tickets DBA - " + meses[now.getMonth()] + " - " + now.getFullYear();
-          var config = await new Promise(r => chrome.storage.local.get(["mondayWorkspaceId", "mondayFolderId"], (d) => r(d)));
-          var workspaceId = config.mondayWorkspaceId || "9956268";
-          var folderId = config.mondayFolderId || "16653587";
-          // Search for existing board
-          var searchRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [' + workspaceId + '], limit: 50) { id name } }', {});
-          var existingBoard = (searchRes.boards || []).find(function(b) { return b.name.trim().toLowerCase() === boardName.trim().toLowerCase(); });
-          if (existingBoard) {
-            chrome.storage.local.set({ mondayBoardId: existingBoard.id, mondayBoardMonth: currentMonth });
-            return resolve(existingBoard.id);
-          }
-          // Duplicate from previous month
-          var prevBoardId = stored.mondayBoardId;
-          if (!prevBoardId) return resolve(null);
-          var dupRes = await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $boardName: String!, $workspaceId: ID!, $folderId: ID!) { duplicate_board(board_id: $boardId, duplicate_type: duplicate_board_with_structure, board_name: $boardName, workspace_id: $workspaceId, folder_id: $folderId) { board { id } } }', { boardId: String(prevBoardId), boardName: boardName, workspaceId: String(workspaceId), folderId: String(folderId) });
-          var newBoardId = dupRes.duplicate_board?.board?.id;
-          if (newBoardId) {
-            // Delete inherited groups
-            var newBoardData = await mondayQuery(mondayToken, '{ boards(ids: [' + newBoardId + ']) { groups { id } } }', {});
-            for (var g of (newBoardData.boards?.[0]?.groups || [])) {
-              await mondayQuery(mondayToken, 'mutation { delete_group(board_id: ' + newBoardId + ', group_id: "' + g.id + '") { id } }', {});
-            }
-            chrome.storage.local.set({ mondayBoardId: newBoardId, mondayBoardMonth: currentMonth });
-            console.log("[SP] Created new Monday board:", boardName, newBoardId);
-            return resolve(newBoardId);
-          }
-          return resolve(stored.mondayBoardId || null);
-        } catch(e) {
-          console.log("[SP] getMondayBoardId error:", e.message);
-          return resolve(stored.mondayBoardId || null);
-        }
-      });
+    return new Promise(function(resolve) {
+      chrome.storage.local.get("mondayBoardId", function(d) { resolve(d.mondayBoardId || null); });
     });
   }
 
