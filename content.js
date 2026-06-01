@@ -6787,8 +6787,15 @@
             var currentStatus = statusCell2 ? statusCell2.textContent.trim() : "";
             if (currentStatus) updateMondayStatus(ticketId, uniqueCode, currentStatus).finally(function() { row.dataset.spSyncing = ""; });
             if (currentResponsible && currentResponsible !== "Sin asignar") {
-              var prof = (getTeamConfig().profiles || []).find(function(p) { return p.profileFullName === currentResponsible; });
-              if (prof && prof.email) updateMondayPerson(ticketId, uniqueCode, prof.email);
+              // Search email in all loaded profiles across all areas
+              var foundEmail = "";
+              Object.values(TEAM_AREAS).forEach(function(area) {
+                if (foundEmail) return;
+                (area.profiles || []).forEach(function(p) {
+                  if (p.profileFullName === currentResponsible && p.email) foundEmail = p.email;
+                });
+              });
+              if (foundEmail) updateMondayPerson(ticketId, uniqueCode, foundEmail);
             }
           }
         } else if (!row.querySelector("." + BTN_CLASS) && !row.dataset.spAutoMigrating) {
