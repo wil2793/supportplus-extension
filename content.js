@@ -5587,7 +5587,36 @@
       var json = await res.json();
       var t = json.data || json;
 
-      // Remove loading toast
+      // Sync status and person to Monday (non-blocking, reuses ticket data)
+      (async function() {
+        try {
+          var mondayToken = await getMondayToken();
+          if (!mondayToken || !t.uniqueCode) return;
+          var spStatus = (t.ticketStatus?.name || "").toLowerCase();
+          var hEmail = t.ticketHolder?.ticketHolderLog?.email || "";
+          var mondayStatusIndex = 5;
+          if (spStatus === "cerrado") mondayStatusIndex = 1;
+          else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
+          else if (spStatus === "en espera") mondayStatusIndex = 5;
+          else if (spStatus === "estancado") mondayStatusIndex = 2;
+          var boardsRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
+          var ticketBoards = (boardsRes.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
+          for (var b of ticketBoards) {
+            var itemRes = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: t.uniqueCode });
+            var items = itemRes.items_page_by_column_values?.items || [];
+            if (items.length) {
+              var colValues = { status: { index: mondayStatusIndex } };
+              if (hEmail) {
+                var mUsers = await getMondayUsers(mondayToken);
+                var uId = mUsers[hEmail.toLowerCase()];
+                if (uId) colValues.multiple_person_mm25nvfq = { personsAndTeams: [{ id: parseInt(uId), kind: "person" }] };
+              }
+              await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: b.id, itemId: items[0].id, columnValues: JSON.stringify(colValues) });
+              break;
+            }
+          }
+        } catch(e) {}
+      })();
       var loadingToast = document.getElementById("sp-loading-toast");
       if (loadingToast) loadingToast.remove();
 
