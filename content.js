@@ -184,13 +184,13 @@
 
     overlay.innerHTML = '<div class="sp-modal-box" style="' + modalStyle + '">' +
       '<div class="sp-modal-header" style="' + headerStyle + '">' +
-        '<h3 style="margin:0;font-size:16px;">' + title + '</h3>' +
+        '<h3 class="MuiTypography-root MuiTypography-body1 mui-997729" style="margin:0;font-size:16px;">' + title + '</h3>' +
         '<div style="display:flex;align-items:center;gap:8px;">' +
           headerActions +
           '<button class="sp-modal-close-btn" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px;color:#666;" title="Cerrar">✕</button>' +
         '</div>' +
       '</div>' +
-      '<div class="sp-modal-body" style="' + bodyStyle + '">' + content + '</div>' +
+      '<div class="sp-modal-body MuiTypography-root MuiTypography-body1 mui-cql716y" style="' + bodyStyle + '">' + content + '</div>' +
     '</div>';
 
     document.body.appendChild(overlay);
