@@ -1242,7 +1242,12 @@
   async function getMondayUsers(token) {
     if (!mondayUsersPromise) {
       mondayUsersPromise = mondayQuery(token, `{ users(limit:500) { id email } }`)
-        .then((d) => d.users.reduce((m, u) => { m[u.email.toLowerCase()] = u.id; return m; }, {}));
+        .then((d) => {
+          var map = (d.users || []).reduce((m, u) => { if (u.email) m[u.email.toLowerCase()] = u.id; return m; }, {});
+          console.log("[SP] Monday users loaded:", Object.keys(map).length);
+          return map;
+        })
+        .catch(function(e) { console.log("[SP] Monday users failed:", e.message); mondayUsersPromise = null; return {}; });
     }
     return mondayUsersPromise;
   }
@@ -5609,13 +5614,16 @@
               if (hEmail) {
                 var mUsers = await getMondayUsers(mondayToken);
                 var uId = mUsers[hEmail.toLowerCase()];
+                console.log("[SP] Modal sync - email:", hEmail, "mondayUserId:", uId);
                 if (uId) colValues.multiple_person_mm25nvfq = { personsAndTeams: [{ id: parseInt(uId), kind: "person" }] };
+              } else {
+                console.log("[SP] Modal sync - no holder email for ticket", t.uniqueCode);
               }
               await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: b.id, itemId: items[0].id, columnValues: JSON.stringify(colValues) });
               break;
             }
           }
-        } catch(e) {}
+        } catch(e) { console.log("[SP] Modal Monday sync error:", e.message); }
       })();
       var loadingToast = document.getElementById("sp-loading-toast");
       if (loadingToast) loadingToast.remove();
