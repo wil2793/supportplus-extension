@@ -224,7 +224,9 @@
   // ============================================================
   (function() {
     var style = document.createElement("style");
-    style.textContent = "@media (max-width: 1200px) { .sp-hdr-btn .sp-btn-label { display:none; } .sp-hdr-btn { padding:6px 10px !important; } }";
+    style.textContent = ".sp-hdr-btn { transition: all 0.2s; } " +
+      "@media (max-width: 1600px) { .sp-hdr-btn .sp-btn-label { display:none; } .sp-hdr-btn { padding:6px 10px !important; min-width:auto !important; } } " +
+      "@media (max-width: 1100px) { .sp-hdr-btn { padding:4px 8px !important; font-size:11px !important; } }";
     document.head.appendChild(style);
   })();
 
@@ -233,7 +235,7 @@
     btn.id = opts.id || "";
     btn.className = "sp-hdr-btn";
     btn.innerHTML = '<span class="sp-btn-icon">' + (opts.icon || "") + '</span><span class="sp-btn-label"> ' + (opts.label || "") + '</span>';
-    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:" + (opts.color || "#1565C0") + ";color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;display:inline-flex;align-items:center;gap:2px;";
+    btn.style.cssText = "padding:6px 12px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:" + (opts.color || "#1565C0") + ";color:#fff;font-weight:600;white-space:nowrap;margin-right:4px;display:inline-flex;align-items:center;gap:2px;";
     btn.title = opts.label || "";
     if (opts.onClick) btn.addEventListener("click", opts.onClick);
     return btn;
@@ -1911,8 +1913,73 @@
       btn.disabled = true;
       btn.innerHTML = '<span class="sp-btn-icon">⏳</span><span class="sp-btn-label"> Sincronizando...</span>';
       try {
-        if (window._spMondaySyncForce) await window._spMondaySyncForce();
-        btn.innerHTML = '<span class="sp-btn-icon">✅</span><span class="sp-btn-label"> Sync Monday</span>';
+        var spToken = getToken();
+        var mondayToken = await getMondayToken();
+        if (!spToken || !mondayToken) throw new Error("Sin token");
+
+        // Get all ticket IDs visible in the DataGrid
+        var rows = document.querySelectorAll(".MuiDataGrid-row");
+        var ticketIds = [];
+        rows.forEach(function(row) {
+          var idCell = row.querySelector('[data-field="id"]');
+          var id = idCell ? idCell.textContent.trim() : row.getAttribute("data-id");
+          if (id) ticketIds.push(id);
+        });
+        if (!ticketIds.length) throw new Error("Sin tickets visibles");
+
+        // Direct fetch helper for Monday
+        async function mFetch(query, variables) {
+          var r = await fetch("https://api.monday.com/v2", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": mondayToken }, body: JSON.stringify({ query: query, variables: variables }) });
+          var d = await r.json();
+          return d.data;
+        }
+
+        // Get boards and users
+        var boardsData = await mFetch('{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
+        var ticketBoards = (boardsData.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
+        var usersData = await mFetch('{ users(limit:500) { id email } }', {});
+        var mondayUsersMap = {};
+        (usersData.users || []).forEach(function(u) { if (u.email) mondayUsersMap[u.email.toLowerCase()] = u.id; });
+
+        var synced = 0;
+        for (var ti = 0; ti < ticketIds.length; ti++) {
+          try {
+            // Fetch individual ticket for full data (email del analista)
+            var tRes = await fetch(SP_API + "/" + ticketIds[ti], { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+            if (!tRes.ok) continue;
+            var tJson = await tRes.json();
+            var ticket = tJson.data || tJson;
+            if (!ticket.uniqueCode) continue;
+
+            var spStatus = (ticket.ticketStatus?.name || "").toLowerCase();
+            var holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
+
+            // Find in Monday
+            var mondayItemId = null, foundBoardId = null;
+            for (var b of ticketBoards) {
+              var itemData = await mFetch('query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: ticket.uniqueCode });
+              var items = itemData.items_page_by_column_values?.items || [];
+              if (items.length) { mondayItemId = items[0].id; foundBoardId = b.id; break; }
+            }
+            if (!mondayItemId) continue;
+
+            // Map status
+            var mondayStatusIndex = 5;
+            if (spStatus === "cerrado") mondayStatusIndex = 1;
+            else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
+            else if (spStatus === "estancado") mondayStatusIndex = 2;
+
+            var colValues = { status: { index: mondayStatusIndex } };
+            if (holderEmail) {
+              var uId = mondayUsersMap[holderEmail.toLowerCase()];
+              if (uId) colValues.multiple_person_mm25nvfq = { personsAndTeams: [{ id: parseInt(uId), kind: "person" }] };
+            }
+
+            await mFetch('mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: foundBoardId, itemId: mondayItemId, columnValues: JSON.stringify(colValues) });
+            synced++;
+          } catch(e) { continue; }
+        }
+        btn.innerHTML = '<span class="sp-btn-icon">✅</span><span class="sp-btn-label"> ' + synced + ' actualizados</span>';
         setTimeout(function() { btn.innerHTML = '<span class="sp-btn-icon">🔄</span><span class="sp-btn-label"> Sync Monday</span>'; btn.disabled = false; }, 3000);
       } catch(e) {
         btn.innerHTML = '<span class="sp-btn-icon">❌</span><span class="sp-btn-label"> Error</span>';
@@ -3611,8 +3678,7 @@
             (currentUserGroups.length > 0 ? currentUserGroups : GROUP_INFO.map(function(g){return g.id;})).map(function(gId) { var g = GROUP_INFO.find(function(gi){return gi.id === gId;}) || {id:gId,name:"Grupo "+gId}; return '<option value="' + g.id + '"' + (String(currentArea) === String(g.id) ? ' selected' : '') + '>' + g.name + '</option>'; }).join("") +
           '</select>' +
           '<div id="sp-cfg-members" style="margin-bottom:8px;max-height:150px;overflow-y:auto;border:1px solid #eee;border-radius:6px;padding:6px;display:' + (currentArea ? 'block' : 'none') + ';"><div style="color:#888;font-size:11px;">Cargando miembros...</div></div>' +
-          '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Mi perfil</label>' +
-          '<select id="sp-cfg-myprofile" style="width:100%;padding:8px;font-size:13px;border:1px solid #ddd;border-radius:6px;margin-bottom:12px;"><option value="">-- Selecciona tu perfil --</option></select>' +
+          '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#555;margin-bottom:12px;cursor:pointer;"><input type="checkbox" id="sp-cfg-only-with-tickets"> Solo mostrar personas con tickets</label>' +
         '</div>' +
         '<div id="sp-cfg-panel-monday" style="display:none;">' +
           '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Board</label>' +
@@ -3653,9 +3719,14 @@
       // Members checkboxes
       var membersDiv = document.getElementById("sp-cfg-members");
       var excludedMembers = stored.visibleByGroup || {};
+      var onlyWithTicketsEl = document.getElementById("sp-cfg-only-with-tickets");
 
-      var myProfileSelect = document.getElementById("sp-cfg-myprofile");
-      var savedProfileId = stored.myProfileId || "";
+      // Load user config from Notion
+      chrome.storage.local.get(["userConfig"], function(cfg) {
+        if (cfg.userConfig && cfg.userConfig.onlyWithTickets) {
+          onlyWithTicketsEl.checked = true;
+        }
+      });
 
       function loadMembersForConfig(groupId) {
         if (!groupId) { membersDiv.style.display = "none"; return; }
@@ -3670,21 +3741,12 @@
           var visibleList = excludedMembers[String(groupId)];
           var hasConfig = visibleList && Array.isArray(visibleList) && visibleList.length > 0;
           membersDiv.innerHTML = '<div style="font-size:10px;color:#888;margin-bottom:4px;">Desmarca los que no quieras ver:</div>';
-          myProfileSelect.innerHTML = '<option value="">-- Selecciona tu perfil --</option>';
           profiles.forEach(function(p) {
             var isVisible = !hasConfig || visibleList.includes(p.profileId);
             var label = document.createElement("label");
             label.style.cssText = "display:flex;align-items:center;gap:4px;font-size:11px;padding:2px 0;cursor:pointer;";
             label.innerHTML = '<input type="checkbox" data-pid="' + p.profileId + '"' + (isVisible ? ' checked' : '') + '> ' + p.profileFullName;
             membersDiv.appendChild(label);
-            // Add to profile select (only visible ones)
-            if (isVisible) {
-              var opt = document.createElement("option");
-              opt.value = p.profileId;
-              opt.textContent = p.profileFullName;
-              if (String(p.profileId) === String(savedProfileId)) opt.selected = true;
-              myProfileSelect.appendChild(opt);
-            }
           });
         }).catch(function() { membersDiv.innerHTML = '<div style="color:#D94040;font-size:11px;">Error</div>'; });
       }
@@ -3746,35 +3808,66 @@
         var boardId = document.getElementById("sp-cfg-board-id").value;
         var boardName = document.getElementById("sp-cfg-board-search").value.trim();
         var area = document.getElementById("sp-cfg-area").value;
+        var onlyWithTickets = onlyWithTicketsEl.checked;
         var saveData = { mondayToken: token, mondayBoardId: boardId, mondayBoardName: boardName, teamArea: area };
-        // Save my profile
-        var selectedProfile = myProfileSelect.value;
-        if (selectedProfile) saveData.myProfileId = parseInt(selectedProfile);
-        // Save visible members (checked ones)
+        // Save visible members (checked ones) as blacklist (unchecked = blacklisted)
         var memberChecks = membersDiv.querySelectorAll('input[data-pid]');
+        var blacklistIds = [];
         if (memberChecks.length && area) {
           var visible = [];
-          memberChecks.forEach(function(cb) { if (cb.checked) visible.push(parseInt(cb.dataset.pid)); });
-          var vbg = excludedMembers; // reusing variable name but storing visible
+          memberChecks.forEach(function(cb) {
+            if (cb.checked) visible.push(parseInt(cb.dataset.pid));
+            else blacklistIds.push(parseInt(cb.dataset.pid));
+          });
+          var vbg = excludedMembers;
           vbg[String(area)] = visible;
           saveData.visibleByGroup = vbg;
         }
-        chrome.storage.local.set(saveData, function() {
-          overlay.remove();
-          showSuccessToast("Configuración guardada");
-          // Reload team area
-          currentTeamArea = area;
-          // Update profile ID
-          if (saveData.myProfileId) { sessionProfileId = saveData.myProfileId; myProfileId = saveData.myProfileId; }
-          // Clear profiles cache to reload with new visibility
-          profilesCache = {};
-          // Update visibleByGroup in memory
-          if (saveData.visibleByGroup) visibleByGroup = saveData.visibleByGroup;
-          // Remove panel to rebuild with new area
-          var panel = document.getElementById(TEAM_PANEL_ID);
-          if (panel) panel.remove();
-          teamPanelLoading = false;
-          loadTeamPanel();
+        // Save to Notion user config
+        chrome.storage.local.get(["userConfig"], function(cfg) {
+          var userCfg = cfg.userConfig || {};
+          var notionPageId = userCfg.pageId;
+          var notionToken = null;
+          chrome.storage.local.get(["notionUsers", "userEmail"], function(nd) {
+            var email = (nd.userEmail || "").toLowerCase();
+            var users = nd.notionUsers || {};
+            var user = users[email];
+            var userNotionId = user?.notionPageId || "";
+            // Build blacklist relations
+            var blacklistRelations = blacklistIds.map(function(pid) {
+              // Find Notion page ID for this profile
+              var found = null;
+              Object.values(users).forEach(function(u) { if (u.profileId === pid && u.notionPageId) found = u.notionPageId; });
+              return found ? { id: found } : null;
+            }).filter(Boolean);
+            var props = {
+              "MostrarSoloConTickets": { checkbox: onlyWithTickets },
+              "BlackList": { relation: blacklistRelations }
+            };
+            if (notionPageId) {
+              // Update existing
+              chrome.runtime.sendMessage({ type: "notion-update", pageId: notionPageId, body: { properties: props } });
+            } else if (userNotionId) {
+              // Create new
+              chrome.runtime.sendMessage({ type: "notion-create", body: {
+                parent: { database_id: "37320e0684b9806b84ecc4aae906f645" },
+                properties: Object.assign({ "Nombre": { title: [{ text: { content: email } }] }, "Usuario": { relation: [{ id: userNotionId }] } }, props)
+              }});
+            }
+            // Save locally too
+            saveData.userConfig = { pageId: notionPageId, onlyWithTickets: onlyWithTickets, blacklist: blacklistIds };
+            chrome.storage.local.set(saveData, function() {
+              overlay.remove();
+              showSuccessToast("Configuración guardada");
+              currentTeamArea = area;
+              profilesCache = {};
+              if (saveData.visibleByGroup) visibleByGroup = saveData.visibleByGroup;
+              var panel = document.getElementById(TEAM_PANEL_ID);
+              if (panel) panel.remove();
+              teamPanelLoading = false;
+              loadTeamPanel();
+            });
+          });
         });
       });
     });
@@ -5478,6 +5571,12 @@
       (async function() {
         try {
           var mondayToken = await getMondayToken();
+          if (!mondayToken) {
+            // Force sync and retry once
+            await new Promise(function(r) { chrome.runtime.sendMessage({ type: "sync-notion" }, r); });
+            await new Promise(function(r) { setTimeout(r, 2000); });
+            mondayToken = await getMondayToken();
+          }
           if (!mondayToken || !t.uniqueCode) return;
           var spStatus = (t.ticketStatus?.name || "").toLowerCase();
           var hEmail = t.ticketHolder?.ticketHolderLog?.email || "";
@@ -6673,9 +6772,9 @@
             btn.textContent = "📎 " + fileName;
             btn.disabled = false;
 
-            // Show file in a modal
+            // Show file in a modal with animation
             var fileModal = document.createElement("div");
-            fileModal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.8);z-index:999999;display:flex;flex-direction:column;align-items:center;justify-content:center;";
+            fileModal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0);z-index:999999;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:background 0.3s ease;";
             var isImage = /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(fileName);
             var isPdf = /\.pdf$/i.test(fileName);
             var isText = /\.(txt|sql|csv|json|xml|log|md|yml|yaml|ini|conf|sh|bat|ps1|py|js|ts|html|css|env)$/i.test(fileName);
@@ -6733,10 +6832,22 @@
             } else {
               contentHTML = '<div style="background:#fff;padding:24px;border-radius:8px;text-align:center;"><p style="margin:0 0 12px;font-size:14px;">No se puede previsualizar: <b>' + fileName + '</b></p><a href="' + url + '" download="' + fileName + '" style="padding:8px 16px;background:#1976D2;color:#fff;border-radius:6px;text-decoration:none;font-size:13px;">📥 Descargar</a></div>';
             }
-            fileModal.innerHTML = '<div style="display:flex;justify-content:flex-end;width:90vw;margin-bottom:8px;gap:8px;">' + (isText ? '<button id="sp-file-copy-text" style="padding:6px 14px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">📋 Copiar</button>' : '') + '<a id="sp-file-download" href="' + url + '" download="' + fileName + '" style="padding:6px 14px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:13px;text-decoration:none;">📥 Descargar</a><button id="sp-file-close" style="padding:6px 14px;border:none;border-radius:6px;background:rgba(255,255,255,0.9);cursor:pointer;font-size:13px;">✕ Cerrar</button></div>' + contentHTML;
+            fileModal.innerHTML = '<div class="sp-file-content" style="transform:scale(0.85) translateY(20px);opacity:0;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1),opacity 0.3s ease;"><div style="display:flex;justify-content:flex-end;width:90vw;margin-bottom:8px;gap:8px;">' + (isText ? '<button id="sp-file-copy-text" style="padding:6px 14px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">📋 Copiar</button>' : '') + '<a id="sp-file-download" href="' + url + '" download="' + fileName + '" style="padding:6px 14px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:13px;text-decoration:none;">📥 Descargar</a><button id="sp-file-close" style="padding:6px 14px;border:none;border-radius:6px;background:rgba(255,255,255,0.9);cursor:pointer;font-size:13px;">✕ Cerrar</button></div>' + contentHTML + '</div>';
             document.body.appendChild(fileModal);
-            document.getElementById("sp-file-close").addEventListener("click", function() { fileModal.remove(); URL.revokeObjectURL(url); });
-            fileModal.addEventListener("click", function(e) { if (e.target === fileModal) { fileModal.remove(); URL.revokeObjectURL(url); } });
+            // Trigger animation
+            requestAnimationFrame(function() {
+              fileModal.style.background = "rgba(0,0,0,.8)";
+              var contentEl = fileModal.querySelector(".sp-file-content");
+              if (contentEl) { contentEl.style.transform = "scale(1) translateY(0)"; contentEl.style.opacity = "1"; }
+            });
+            function closeFileModal() {
+              var contentEl = fileModal.querySelector(".sp-file-content");
+              if (contentEl) { contentEl.style.transform = "scale(0.9) translateY(10px)"; contentEl.style.opacity = "0"; }
+              fileModal.style.background = "rgba(0,0,0,0)";
+              setTimeout(function() { fileModal.remove(); URL.revokeObjectURL(url); }, 250);
+            }
+            document.getElementById("sp-file-close").addEventListener("click", closeFileModal);
+            fileModal.addEventListener("click", function(e) { if (e.target === fileModal) closeFileModal(); });
             var copyTextBtn = document.getElementById("sp-file-copy-text");
             if (copyTextBtn) {
               copyTextBtn.addEventListener("click", function() {

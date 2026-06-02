@@ -96,7 +96,7 @@ async function syncNotionData() {
       const mondayFolderId = (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].mondayFolderId : "";
       const mondayWorkspaceId = (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].mondayWorkspaceId : "";
 
-      usersMap[email] = { name: nombre, role: mappedRole, groups: finalGroups, profileId, active, canMigrate, mondayFolderId, mondayWorkspaceId };
+      usersMap[email] = { name: nombre, role: mappedRole, groups: finalGroups, profileId, active, canMigrate, mondayFolderId, mondayWorkspaceId, notionPageId: u.id };
     }
 
     // Check sub-groups for permissions (Drag And Drop)
@@ -180,8 +180,25 @@ async function syncNotionData() {
       }
     }
 
+    // 7. Get user config from Notion (blacklist, onlyWithTickets)
+    const USER_CONFIG_DB = "37320e0684b9806b84ecc4aae906f645";
+    let userConfig = {};
+    // Get current user email from storage to find their config
+    const storedData = await chrome.storage.local.get("userEmail");
+    const currentEmail = (storedData.userEmail || "").toLowerCase();
+    if (currentEmail && usersMap[currentEmail]?.notionPageId) {
+      const userNotionId = usersMap[currentEmail].notionPageId;
+      const cfgRaw = await notionQuery(USER_CONFIG_DB, { filter: { property: "Usuario", relation: { contains: userNotionId } }, page_size: 1 });
+      if (cfgRaw.results && cfgRaw.results[0]) {
+        const cfgPage = cfgRaw.results[0];
+        const blacklistRels = cfgPage.properties.BlackList?.relation || [];
+        const onlyWithTickets = cfgPage.properties.MostrarSoloConTickets?.checkbox || false;
+        userConfig = { pageId: cfgPage.id, blacklist: blacklistRels.map(r => r.id), onlyWithTickets: onlyWithTickets };
+      }
+    }
+
     // Save to storage
-    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, suggestedComments, mondayToken: mondayTokenFromNotion, mondayWorkspaceId, mondayFolderId, latestVersion, latestZipUrl, allVersions, notionSyncTime: Date.now() });
+    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, suggestedComments, mondayToken: mondayTokenFromNotion, mondayWorkspaceId, mondayFolderId, latestVersion, latestZipUrl, allVersions, userConfig, notionSyncTime: Date.now() });
     console.log("[SP Background] Notion synced:", Object.keys(usersMap).length, "users,", rolesList.length, "roles,", commentsRaw.length, "comments, monday token:", mondayTokenFromNotion ? "OK" : "MISSING", "latest version:", latestVersion, "versions:", allVersions.length);
   } catch (e) {
     console.error("[SP Background] Notion sync error:", e);
