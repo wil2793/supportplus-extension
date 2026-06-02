@@ -1884,12 +1884,21 @@
 
     const btn = document.createElement("button");
     btn.id = BULK_BTN_ID;
-    btn.textContent = "😨 Migrar varios";
+    btn.textContent = "🔄 Sync Monday";
     btn.style.cssText =
-      "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#D94040;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-    btn.addEventListener("mouseenter", () => { if (!btn.disabled) btn.textContent = "😱 Migrar varios"; });
-    btn.addEventListener("mouseleave", () => { if (!btn.disabled) btn.textContent = "😨 Migrar varios"; });
-    btn.addEventListener("click", handleBulkMigrate);
+      "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#1565C0;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+    btn.addEventListener("click", async function() {
+      btn.disabled = true;
+      btn.textContent = "⏳ Sincronizando...";
+      try {
+        if (window._spMondaySyncForce) await window._spMondaySyncForce();
+        btn.textContent = "✅ Sync Monday";
+        setTimeout(function() { btn.textContent = "🔄 Sync Monday"; btn.disabled = false; }, 3000);
+      } catch(e) {
+        btn.textContent = "❌ Error";
+        setTimeout(function() { btn.textContent = "🔄 Sync Monday"; btn.disabled = false; }, 3000);
+      }
+    });
 
     if (insertMethod === "beforeSearch") {
       const searchBtn = container.querySelector('button[aria-label="Buscar"]');
@@ -1897,216 +1906,6 @@
     } else {
       container.prepend(btn);
     }
-  }
-
-  async function handleBulkMigrate() {
-    // Prevent double click
-    const bulkBtn = document.getElementById(BULK_BTN_ID);
-    if (bulkBtn) {
-      bulkBtn.disabled = true;
-      bulkBtn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Cargando...';
-      if (!document.getElementById("sp-spinner-style")) {
-        var style = document.createElement("style");
-        style.id = "sp-spinner-style";
-        style.textContent = "@keyframes sp-spin { to { transform: rotate(360deg); } }";
-        document.head.appendChild(style);
-      }
-    }
-
-    function restoreBulkBtn() {
-      if (bulkBtn) {
-        bulkBtn.disabled = false;
-        bulkBtn.textContent = "😨 Migrar varios";
-      }
-    }
-
-    const mondayToken = await getMondayToken();
-    if (!mondayToken) { restoreBulkBtn(); return alert("Configura tu token de Monday en el popup de la extension primero."); }
-    const boardId = await getMondayBoardId();
-    if (!boardId) { restoreBulkBtn(); return alert("Configura el Board ID en el popup de la extension primero."); }
-    const spToken = getToken();
-    if (!spToken) { restoreBulkBtn(); return alert("No se encontro token de SupportPlus."); }
-
-    // Ensure sync is fresh before checking pending
-    syncPromise = null;
-    localStorage.removeItem(CACHE_KEY);
-    await ensureSyncStarted();
-
-    const pending = getPendingRows();
-    if (!pending.length) { restoreBulkBtn(); return alert("No hay tickets pendientes de migrar en esta pagina."); }
-
-    // Fetch groups from configured board
-    const boardData = await mondayQuery(mondayToken, `query ($boardId: [ID!]!) { boards(ids: $boardId) { name groups { id title } } }`, { boardId });
-    const boardName = boardData.boards[0]?.name || "";
-    const boardDate = parseBoardDate(boardName);
-    const groups = boardData.boards[0]?.groups || [];
-    const allGroups = {};
-    for (const g of groups) allGroups[g.id] = g.title;
-    const groupOpts = '<option value="">-- Selecciona --</option>' + groups.map(g => `<option value="${g.id}">${g.title}</option>`).join("");
-
-    // Build ticket rows with individual group selectors
-    const ticketRows = pending.map((p, i) => {
-      const codeCell = p.row.querySelector('[data-field="uniqueCode"]');
-      const subjectCell = p.row.querySelector('[data-field="subject"]');
-      const code = codeCell ? codeCell.textContent.trim() : p.ticketId;
-      const subject = subjectCell ? subjectCell.textContent.trim() : "";
-      const label = subject ? code + " - " + subject.substring(0, 40) + (subject.length > 40 ? "..." : "") : code;
-      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0;">' +
-        '<span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + label + '</span>' +
-        '<select data-idx="' + i + '" class="sp-bulk-group-select" style="padding:4px;font-size:11px;border:1px solid #ddd;border-radius:4px;min-width:120px;">' + groupOpts + '</select>' +
-        '</div>';
-    }).join("");
-
-    // Show assignment modal
-    restoreBulkBtn();
-    const selOverlay = document.createElement("div");
-    selOverlay.id = "sp-monday-modal";
-    selOverlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    selOverlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:560px;width:90%;max-height:85vh;display:flex;flex-direction:column;font-family:system-ui;">' +
-      '<h3 style="margin:0 0 8px;">Migracion masiva (' + pending.length + ' tickets)</h3>' +
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">' +
-        '<label style="font-size:12px;color:#555;white-space:nowrap;">Asignar todos a:</label>' +
-        '<select id="sp-bulk-all-group" style="flex:1;padding:4px;font-size:11px;border:1px solid #ddd;border-radius:4px;">' + groupOpts + '</select>' +
-        '<button id="sp-bulk-apply-all" style="padding:4px 10px;font-size:11px;border:1px solid #D94040;border-radius:4px;background:#fff;color:#D94040;cursor:pointer;white-space:nowrap;">Aplicar a todos</button>' +
-      '</div>' +
-      '<div style="flex:1;overflow:auto;border:1px solid #eee;border-radius:6px;padding:8px;margin-bottom:12px;">' + ticketRows + '</div>' +
-      '<div style="display:flex;gap:8px;">' +
-        '<button id="sp-bulk-start" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;">Iniciar migracion</button>' +
-        '<button id="sp-bulk-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
-      '</div></div>';
-    document.body.appendChild(selOverlay);
-
-    // Apply all button
-    document.getElementById("sp-bulk-apply-all").addEventListener("click", function() {
-      var val = document.getElementById("sp-bulk-all-group").value;
-      selOverlay.querySelectorAll(".sp-bulk-group-select").forEach(function(s) { s.value = val; });
-    });
-
-    // Wait for user action
-    const groupAssignments = await new Promise(function(resolve) {
-      document.getElementById("sp-bulk-start").addEventListener("click", function() {
-        var assignments = [];
-        selOverlay.querySelectorAll(".sp-bulk-group-select").forEach(function(s) {
-          assignments[parseInt(s.dataset.idx)] = s.value;
-        });
-        resolve(assignments);
-      });
-      document.getElementById("sp-bulk-cancel").addEventListener("click", function() {
-        selOverlay.remove();
-        resolve(null);
-      });
-    });
-    selOverlay.remove();
-    if (!groupAssignments) return;
-
-    // Show progress overlay
-    const overlay = document.createElement("div");
-    overlay.id = "sp-monday-modal";
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:420px;width:90%;font-family:system-ui;">' +
-      '<h3 style="margin:0 0 16px;">Migracion masiva</h3>' +
-      '<div id="sp-bulk-status" style="font-size:13px;margin-bottom:12px;">Iniciando...</div>' +
-      '<div style="height:8px;background:#eee;border-radius:4px;"><div id="sp-bulk-bar" style="height:100%;background:#D94040;border-radius:4px;width:0%;transition:width .3s"></div></div>' +
-      '<div id="sp-bulk-log" style="margin-top:12px;max-height:200px;overflow:auto;font-size:12px;color:#666;"></div>' +
-      '<button id="sp-bulk-close" style="margin-top:12px;width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;display:none;">Cerrar</button>' +
-      '</div>';
-    document.body.appendChild(overlay);
-
-    const status = document.getElementById("sp-bulk-status");
-    const bar = document.getElementById("sp-bulk-bar");
-    const log = document.getElementById("sp-bulk-log");
-    const closeBtn = document.getElementById("sp-bulk-close");
-
-    const users = await getMondayUsers(mondayToken);
-
-    let ok = 0, fail = 0;
-
-    for (let i = 0; i < pending.length; i++) {
-      const { ticketId, dateText, row } = pending[i];
-      const groupId = groupAssignments[i];
-      if (!groupId) continue;
-      status.textContent = "Procesando " + (i + 1) + " / " + pending.length + "...";
-      bar.style.width = Math.round(((i + 1) / pending.length) * 100) + "%";
-
-      try {
-        const ticketRes = await fetch(SP_API + "/" + ticketId, {
-          headers: { accept: "application/json", authorization: "Bearer " + spToken },
-        });
-        if (!ticketRes.ok) throw new Error("HTTP " + ticketRes.status);
-        const ticketJson = await ticketRes.json();
-        const ticket = ticketJson.data || ticketJson;
-
-        // Validate ticket date matches board period
-        if (boardDate) {
-          const ticketCreated = new Date(ticket.createdAt);
-          if (ticketCreated.getMonth() !== boardDate.month || ticketCreated.getFullYear() !== boardDate.year) {
-            var ticketPeriod = MONTH_NAMES[ticketCreated.getMonth()] + " " + ticketCreated.getFullYear();
-            log.innerHTML += '<div style="color:#e67e22;">⚠ ' + (ticket.uniqueCode || ticketId) + ': Ticket de ' + ticketPeriod + ', no corresponde al board (' + MONTH_NAMES[boardDate.month] + ' ' + boardDate.year + ')</div>';
-            log.scrollTop = log.scrollHeight;
-            fail++;
-            continue;
-          }
-        }
-
-        // Check if already migrated
-        const currentCache = getCache() || {};
-        if (ticket.uniqueCode && currentCache[ticket.uniqueCode]) {
-          log.innerHTML += '<div style="color:#e67e22;">' + (ticket.uniqueCode || ticketId) + ': Ya migrado, se omite</div>';
-          log.scrollTop = log.scrollHeight;
-          continue;
-        }
-
-        const holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
-        let personValue = {};
-        if (holderEmail) {
-          const userId = users[holderEmail.toLowerCase()];
-          if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
-        }
-
-        const url = BASE_URL + "/" + ticketId;
-        const desc = (ticket.description || "").replace(/<[^>]*>/g, "");
-        const itemName = ticket.subject || "Sin asunto";
-        const createdDate = new Date(ticket.createdAt).toISOString().slice(0, 10);
-        const spPriority = (ticket.incidentPriorityName || ticket.incidentPriority?.name || "").toLowerCase().trim();
-        const priorityIndex = PRIORITY_MAP[spPriority] ?? PRIORITY_MAP["medio"];
-
-        const columnValues = JSON.stringify({
-          descripci_n_mkn9e5f4: { text: desc },
-          ...(personValue.personsAndTeams ? { multiple_person_mm25nvfq: personValue } : {}),
-          status: { index: 1 },
-          priority_mkn9kbe9: { index: priorityIndex },
-          cronograma_mkn9hwe3: { from: createdDate, to: createdDate },
-          link_mknkdctz: { url: url, text: ticket.uniqueCode || url },
-          text_mm2c9nhc: ticket.uniqueCode || ticketId,
-        });
-
-        const result = await mondayQuery(mondayToken,
-          `mutation ($boardId: ID!, $groupId: String!, $itemName: String!, $columnValues: JSON!) {
-            create_item(board_id: $boardId, group_id: $groupId, item_name: $itemName, column_values: $columnValues) { id }
-          }`,
-          { boardId, groupId, itemName, columnValues }
-        );
-
-        const newItemId = result.create_item.id;
-        addToCache(ticket.uniqueCode || ticketId, newItemId);
-
-        // Update row UI
-        const btn = row.querySelector("." + BTN_CLASS);
-        if (btn) btn.replaceWith(createSyncedBadge(newItemId));
-
-        ok++;
-        log.innerHTML += '<div style="color:#00c875;">' + ticket.uniqueCode + ' -> ' + (allGroups[groupId] || groupId) + '</div>';
-      } catch (err) {
-        fail++;
-        log.innerHTML += '<div style="color:#df2f4a;">' + ticketId + ': ' + err.message + '</div>';
-      }
-
-      log.scrollTop = log.scrollHeight;
-    }
-
-    status.textContent = "Completado: " + ok + " migrados, " + fail + " errores";
-    closeBtn.style.display = "block";
-    closeBtn.addEventListener("click", function() { overlay.remove(); });
   }
 
   // --- Inject buttons ---

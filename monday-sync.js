@@ -106,6 +106,9 @@
     }
   }
 
+  // Expose for manual trigger from content.js
+  window._spMondaySyncForce = runSync;
+
   // Run on load (15s delay)
   setTimeout(runSync, 15000);
 
