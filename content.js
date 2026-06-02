@@ -216,6 +216,30 @@
   }
   // ============================================================
 
+  // ============================================================
+  // HEADER BUTTON COMPONENT - Reusable header button factory
+  // ============================================================
+  // Usage: var btn = createHeaderButton({ id, icon, label, color, onClick });
+  // Returns the button element. Responsive: shows only icon on small screens.
+  // ============================================================
+  (function() {
+    var style = document.createElement("style");
+    style.textContent = "@media (max-width: 1200px) { .sp-hdr-btn .sp-btn-label { display:none; } .sp-hdr-btn { padding:6px 10px !important; } }";
+    document.head.appendChild(style);
+  })();
+
+  function createHeaderButton(opts) {
+    var btn = document.createElement("button");
+    btn.id = opts.id || "";
+    btn.className = "sp-hdr-btn";
+    btn.innerHTML = '<span class="sp-btn-icon">' + (opts.icon || "") + '</span><span class="sp-btn-label"> ' + (opts.label || "") + '</span>';
+    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:" + (opts.color || "#1565C0") + ";color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;display:inline-flex;align-items:center;gap:2px;";
+    btn.title = opts.label || "";
+    if (opts.onClick) btn.addEventListener("click", opts.onClick);
+    return btn;
+  }
+  // ============================================================
+
   // Update Monday item person when analyst changes
   async function updateMondayPerson(ticketId, uniqueCode, analystEmail) {
     try {
@@ -1882,21 +1906,17 @@
     }
     if (!container) return;
 
-    const btn = document.createElement("button");
-    btn.id = BULK_BTN_ID;
-    btn.textContent = "🔄 Sync Monday";
-    btn.style.cssText =
-      "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#1565C0;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+    const btn = createHeaderButton({ id: BULK_BTN_ID, icon: "🔄", label: "Sync Monday", color: "#1565C0" });
     btn.addEventListener("click", async function() {
       btn.disabled = true;
-      btn.textContent = "⏳ Sincronizando...";
+      btn.innerHTML = '<span class="sp-btn-icon">⏳</span><span class="sp-btn-label"> Sincronizando...</span>';
       try {
         if (window._spMondaySyncForce) await window._spMondaySyncForce();
-        btn.textContent = "✅ Sync Monday";
-        setTimeout(function() { btn.textContent = "🔄 Sync Monday"; btn.disabled = false; }, 3000);
+        btn.innerHTML = '<span class="sp-btn-icon">✅</span><span class="sp-btn-label"> Sync Monday</span>';
+        setTimeout(function() { btn.innerHTML = '<span class="sp-btn-icon">🔄</span><span class="sp-btn-label"> Sync Monday</span>'; btn.disabled = false; }, 3000);
       } catch(e) {
-        btn.textContent = "❌ Error";
-        setTimeout(function() { btn.textContent = "🔄 Sync Monday"; btn.disabled = false; }, 3000);
+        btn.innerHTML = '<span class="sp-btn-icon">❌</span><span class="sp-btn-label"> Error</span>';
+        setTimeout(function() { btn.innerHTML = '<span class="sp-btn-icon">🔄</span><span class="sp-btn-label"> Sync Monday</span>'; btn.disabled = false; }, 3000);
       }
     });
 
@@ -3765,12 +3785,8 @@
     var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
     if (!userWrapper) return;
 
-    var btn = document.createElement("button");
-    btn.id = SEARCH_BTN_ID;
-    btn.textContent = "🔍 Buscar";
-    btn.style.cssText =
-      "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#7B1FA2;color:#fff;font-weight:600;white-space:nowrap;margin-right:12px;";
-    btn.addEventListener("click", showSearchModal);
+    var btn = createHeaderButton({ id: SEARCH_BTN_ID, icon: "🔍", label: "Buscar", color: "#7B1FA2", onClick: showSearchModal });
+    btn.style.marginRight = "12px";
     userWrapper.parentElement.insertBefore(btn, userWrapper);
   }
 
@@ -3867,17 +3883,68 @@
     // Only show if there's a newer version
     if (!_latestVersion || _latestVersion === _currentVersion || !_latestZipUrl) return;
 
-    var btn = document.createElement("button");
-    btn.id = "sp-update-btn";
-    btn.textContent = "📥 Actualizar v" + _latestVersion;
-    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#FF8F00;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-    btn.addEventListener("click", function() {
-      btn.textContent = "⏳ Descargando...";
-      btn.disabled = true;
-      downloadZip(_latestZipUrl, _latestVersion);
-      setTimeout(function() { btn.textContent = "📥 Actualizar v" + _latestVersion; btn.disabled = false; }, 5000);
-    });
+    var btn = createHeaderButton({ id: "sp-update-btn", icon: "📥", label: "Actualizar v" + _latestVersion, color: "#FF8F00", onClick: showUpdateModal });
     dashBtn.parentElement.insertBefore(btn, dashBtn);
+  }
+
+  function showUpdateModal() {
+    chrome.storage.local.get("allVersions", function(r) {
+      var allVersions = r.allVersions || [];
+      if (!allVersions.length) { showErrorToast("No hay versiones disponibles"); return; }
+
+      // Filter versions newer than current
+      var curParts = _currentVersion.split(".").map(Number);
+      function isNewer(v) {
+        var p = v.split(".").map(Number);
+        return p[0] > curParts[0] || (p[0] === curParts[0] && p[1] > curParts[1]) || (p[0] === curParts[0] && p[1] === curParts[1] && p[2] > curParts[2]);
+      }
+      var newerVersions = allVersions.filter(function(v) { return isNewer(v.version); });
+      var changelogHTML = newerVersions.length ?
+        newerVersions.map(function(v) { return '<div style="padding:6px 0;border-bottom:1px solid #eee;"><b style="color:#1976D2;">v' + v.version + '</b> <span style="font-size:0.85rem;color:#555;">— ' + (v.changes || "Sin descripción") + '</span></div>'; }).join("") :
+        '<div style="color:#888;padding:8px;">Estás en la versión más reciente.</div>';
+
+      // Version select options
+      var selectOpts = allVersions.map(function(v) {
+        return '<option value="' + v.version + '"' + (v.version === _latestVersion ? ' selected' : '') + '>' + v.version + (v.version === _latestVersion ? ' (última)' : '') + '</option>';
+      }).join("");
+
+      var m = createModal({
+        id: "sp-update-modal",
+        title: "📥 Actualización disponible",
+        content: '<div style="margin-bottom:12px;">' +
+          '<div style="font-size:0.85rem;color:#888;margin-bottom:8px;">Versión instalada: <b>' + _currentVersion + '</b> → Última: <b>' + _latestVersion + '</b></div>' +
+          '<div style="font-size:0.9rem;font-weight:600;margin-bottom:6px;">📋 Cambios desde tu versión:</div>' +
+          '<div style="max-height:200px;overflow-y:auto;border:1px solid #eee;border-radius:6px;padding:8px;">' + changelogHTML + '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">' +
+          '<label style="font-size:0.85rem;white-space:nowrap;">Descargar versión:</label>' +
+          '<select id="sp-update-version-select" style="flex:1;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">' + selectOpts + '</select>' +
+        '</div>' +
+        '<div id="sp-update-selected-changes" style="margin-bottom:12px;font-size:0.85rem;color:#555;min-height:20px;"></div>' +
+        '<button id="sp-update-download" style="width:100%;padding:10px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">📥 Descargar</button>',
+        options: { maxWidth: "500px" }
+      });
+
+      var vSelect = document.getElementById("sp-update-version-select");
+      var changesDiv = document.getElementById("sp-update-selected-changes");
+      var downloadBtn = document.getElementById("sp-update-download");
+
+      function updateSelectedChanges() {
+        var selected = allVersions.find(function(v) { return v.version === vSelect.value; });
+        changesDiv.textContent = selected ? (selected.changes || "Sin descripción") : "";
+      }
+      vSelect.addEventListener("change", updateSelectedChanges);
+      updateSelectedChanges();
+
+      downloadBtn.addEventListener("click", function() {
+        var selected = allVersions.find(function(v) { return v.version === vSelect.value; });
+        if (!selected || !selected.zipUrl) { showErrorToast("No hay archivo para esta versión"); return; }
+        downloadBtn.textContent = "⏳ Descargando...";
+        downloadBtn.disabled = true;
+        downloadZip(selected.zipUrl, selected.version);
+        setTimeout(function() { downloadBtn.textContent = "📥 Descargar"; downloadBtn.disabled = false; }, 5000);
+      });
+    });
   }
 
   function injectDashboardButton() {
@@ -3891,11 +3958,7 @@
       dashboardTo = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + "T23:59";
     }
 
-    var btn = document.createElement("button");
-    btn.id = DASHBOARD_BTN_ID;
-    btn.textContent = dashboardData ? "📊 Ver dashboard" : "📊 Dashboard";
-    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#00796B;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-    btn.addEventListener("click", handleDashboardClick);
+    var btn = createHeaderButton({ id: DASHBOARD_BTN_ID, icon: "📊", label: dashboardData ? "Ver dashboard" : "Dashboard", color: "#00796B", onClick: handleDashboardClick });
     searchBtn.parentElement.insertBefore(btn, searchBtn);
 
     var sep = document.createElement("span");
@@ -4049,11 +4112,7 @@
           });
           if (!found) return;
           if (document.getElementById(WATER_BTN_ID)) return;
-          var btn = document.createElement("button");
-          btn.id = WATER_BTN_ID;
-          btn.textContent = "🏠 DBA Info";
-          btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#0288D1;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-          btn.addEventListener("click", showWaterModal);
+          var btn = createHeaderButton({ id: WATER_BTN_ID, icon: "🏠", label: "DBA Info", color: "#0288D1", onClick: showWaterModal });
           dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
         });
       });
@@ -4707,11 +4766,7 @@
     if (document.getElementById(SUGGESTED_BTN_ID)) return;
     var dashBtn = document.getElementById(DASHBOARD_BTN_ID);
     if (!dashBtn) return;
-    var btn = document.createElement("button");
-    btn.id = SUGGESTED_BTN_ID;
-    btn.textContent = "💬 Comentarios";
-    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#00897B;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-    btn.addEventListener("click", showSuggestedCommentsModal);
+    var btn = createHeaderButton({ id: SUGGESTED_BTN_ID, icon: "💬", label: "Comentarios", color: "#00897B", onClick: showSuggestedCommentsModal });
     dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
   }
 
@@ -4782,8 +4837,7 @@
             var newText = prompt("Editar comentario:", btn.dataset.text);
             if (!newText || newText === btn.dataset.text) return;
             btn.textContent = "⏳";
-            var updateProps = { "Comentario": { rich_text: [{ text: { content: newText } }] }, "FechaModificacion": { date: { start: today } } };
-            if (userPageId) updateProps["UsuarioModificación"] = { relation: [{ id: userPageId }] };
+            var updateProps = { "Comentario": { rich_text: [{ text: { content: newText } }] } };
             chrome.runtime.sendMessage({ type: "notion-update", pageId: btn.dataset.id, body: { properties: updateProps } }, function() {
               btn.textContent = "✅";
               chrome.runtime.sendMessage({ type: "sync-notion" }, function() { loadList(); });
@@ -4824,10 +4878,8 @@
         "Nombre": { title: [{ text: { content: "" } }] },
         "Comentario": { rich_text: [{ text: { content: text } }] },
         "MSP_cat_Grupos": { relation: [{ id: groupPageId }] },
-        "Activo": { checkbox: true },
-        "FechaCreacion": { date: { start: today } }
+        "Activo": { checkbox: true }
       };
-      if (userPageId) createProps["UsuarioAlta"] = { relation: [{ id: userPageId }] };
       chrome.runtime.sendMessage({ type: "notion-create", body: {
         parent: { database_id: "36920e0684b980a19fdbd27302a65feb" },
         properties: createProps
@@ -4850,11 +4902,7 @@
     var dashBtn = document.getElementById(DASHBOARD_BTN_ID);
     if (!dashBtn) return;
 
-    var btn = document.createElement("button");
-    btn.id = REPORT_BTN_ID;
-    btn.textContent = "📥 Reporte Excel";
-    btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#1565C0;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-    btn.addEventListener("click", handleReportClick);
+    var btn = createHeaderButton({ id: REPORT_BTN_ID, icon: "📥", label: "Reporte Excel", color: "#1565C0", onClick: handleReportClick });
     dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
   }
 
@@ -4989,11 +5037,7 @@
       getMondayBoardId().then(function(boardId) {
         if (!boardId) return;
         if (document.getElementById(MONDAY_STATS_BTN_ID)) return;
-        var btn = document.createElement("button");
-        btn.id = MONDAY_STATS_BTN_ID;
-        btn.textContent = "📈 Monday Stats";
-        btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#1565C0;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-        btn.addEventListener("click", handleMondayStats);
+        var btn = createHeaderButton({ id: MONDAY_STATS_BTN_ID, icon: "📈", label: "Monday Stats", color: "#1565C0", onClick: handleMondayStats });
         reportBtn.parentElement.insertBefore(btn, reportBtn.nextSibling);
       });
     });
@@ -5835,20 +5879,79 @@
         commentInputEl.addEventListener("keydown", function(e) {
           if (e.key === "Enter") document.getElementById("sp-qd-comment-send").click();
         });
-        // Paste image from clipboard
+        // Paste image from clipboard - show preview with send button
         commentInputEl.addEventListener("paste", function(e) {
           var items = (e.clipboardData || e.originalEvent.clipboardData).items;
           for (var i = 0; i < items.length; i++) {
             if (items[i].type.indexOf("image") !== -1) {
               var file = items[i].getAsFile();
               if (file) {
-                var timestamp = new Date().getTime();
-                var namedFile = new File([file], "clipboard_" + timestamp + ".png", { type: file.type });
-                pendingFiles.push(namedFile);
-                renderPendingFiles();
-                showSuccessToast("📋 Imagen pegada desde portapapeles");
+                e.preventDefault();
+                // Remove existing preview if any
+                var existingPreview = document.getElementById("sp-qd-paste-preview");
+                if (existingPreview) existingPreview.remove();
+                // Create preview
+                var previewDiv = document.createElement("div");
+                previewDiv.id = "sp-qd-paste-preview";
+                previewDiv.style.cssText = "margin:8px 0;padding:8px;border:1px solid #1976D2;border-radius:8px;background:#e3f2fd;display:flex;align-items:center;gap:8px;";
+                var imgUrl = URL.createObjectURL(file);
+                previewDiv.innerHTML = '<img src="' + imgUrl + '" style="max-width:80px;max-height:60px;border-radius:4px;border:1px solid #ddd;">' +
+                  '<span style="flex:1;font-size:0.85rem;color:#333;">📋 Imagen del portapapeles</span>' +
+                  '<button id="sp-qd-paste-send" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:0.8rem;font-weight:600;">📎 Enviar imagen</button>' +
+                  '<button id="sp-qd-paste-cancel" style="padding:6px 8px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:0.8rem;">✕</button>';
+                commentInputEl.parentElement.insertAdjacentElement("afterend", previewDiv);
+                // Send button
+                document.getElementById("sp-qd-paste-send").addEventListener("click", async function() {
+                  var sendBtn = document.getElementById("sp-qd-paste-send");
+                  sendBtn.textContent = "⏳ Subiendo...";
+                  sendBtn.disabled = true;
+                  try {
+                    var timestamp = new Date().getTime();
+                    var namedFile = new File([file], "clipboard_" + timestamp + ".png", { type: file.type });
+                    // Post empty comment to get commentId, then attach file
+                    var commentText = commentInputEl.value.trim() || "📎 Imagen adjunta";
+                    var commentRes = await fetch(SP_API + "/" + ticketId + "/comment", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                      body: JSON.stringify({ content: commentText, internal: false })
+                    });
+                    var commentJson = await commentRes.json();
+                    var commentId = commentJson.data?.id || commentJson.id;
+                    if (commentId) {
+                      var formData = new FormData();
+                      formData.append("file", namedFile);
+                      await fetch(SP_API.replace("/tickets/web", "") + "/files", {
+                        method: "POST",
+                        headers: { authorization: "Bearer " + spToken },
+                        body: formData
+                      }).then(function(r) { return r.json(); }).then(async function(fileJson) {
+                        var fileId = fileJson.data?.id || fileJson.id;
+                        if (fileId) {
+                          await fetch(SP_API + "/" + ticketId + "/comment/" + commentId + "/attachments", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", authorization: "Bearer " + spToken },
+                            body: JSON.stringify({ fileIds: [fileId] })
+                          });
+                        }
+                      });
+                    }
+                    commentInputEl.value = "";
+                    previewDiv.remove();
+                    URL.revokeObjectURL(imgUrl);
+                    showSuccessToast("✅ Imagen enviada");
+                    // Refresh comments
+                    showQuickDetailModal(ticketId);
+                  } catch(err) {
+                    sendBtn.textContent = "❌ Error";
+                    setTimeout(function() { sendBtn.textContent = "📎 Enviar imagen"; sendBtn.disabled = false; }, 2000);
+                  }
+                });
+                // Cancel button
+                document.getElementById("sp-qd-paste-cancel").addEventListener("click", function() {
+                  previewDiv.remove();
+                  URL.revokeObjectURL(imgUrl);
+                });
               }
-              e.preventDefault();
               break;
             }
           }
@@ -5892,8 +5995,38 @@
       }
 
       // Add attachment to existing comment
+      var _selectedCommentId = null;
       overlay.querySelectorAll(".sp-qd-add-attach").forEach(function(label) {
         var fileInput = label.querySelector("input[type=file]");
+        var commentId = label.dataset.commentId;
+        var commentDiv = label.closest("div[style*='border-left']");
+
+        // Make comment clickable to select it for paste
+        if (commentDiv) {
+          commentDiv.style.cursor = "pointer";
+          commentDiv.addEventListener("click", function(e) {
+            if (e.target.tagName === "INPUT" || e.target.tagName === "LABEL" || e.target.tagName === "BUTTON") return;
+            // Deselect others
+            overlay.querySelectorAll("[data-sp-selected-comment]").forEach(function(el) {
+              el.style.border = "";
+              el.style.background = "#f9f9f9";
+              el.removeAttribute("data-sp-selected-comment");
+            });
+            // Remove existing paste preview
+            var existingPreview = document.getElementById("sp-qd-comment-paste-preview");
+            if (existingPreview) existingPreview.remove();
+            // Select this one
+            if (_selectedCommentId === commentId) {
+              _selectedCommentId = null;
+              return;
+            }
+            _selectedCommentId = commentId;
+            commentDiv.setAttribute("data-sp-selected-comment", "1");
+            commentDiv.style.border = "2px solid #1976D2";
+            commentDiv.style.background = "#e3f2fd";
+          });
+        }
+
         fileInput.addEventListener("change", async function() {
           if (!fileInput.files.length) return;
           var commentId = label.dataset.commentId;
@@ -5928,6 +6061,71 @@
             label.innerHTML = '📎<input type="file" multiple style="display:none;">';
           }
         });
+      });
+
+      // Paste image into selected comment
+      overlay.addEventListener("paste", function(e) {
+        if (!_selectedCommentId) return;
+        var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf("image") !== -1) {
+            var file = items[i].getAsFile();
+            if (file) {
+              e.preventDefault();
+              // Remove existing preview
+              var ep = document.getElementById("sp-qd-comment-paste-preview");
+              if (ep) ep.remove();
+              // Show preview below selected comment
+              var selectedEl = overlay.querySelector("[data-sp-selected-comment]");
+              if (!selectedEl) return;
+              var imgUrl = URL.createObjectURL(file);
+              var previewDiv = document.createElement("div");
+              previewDiv.id = "sp-qd-comment-paste-preview";
+              previewDiv.style.cssText = "margin:4px 0 8px;padding:8px;border:1px dashed #1976D2;border-radius:8px;background:#e3f2fd;display:flex;align-items:center;gap:8px;";
+              previewDiv.innerHTML = '<img src="' + imgUrl + '" style="max-width:60px;max-height:50px;border-radius:4px;">' +
+                '<span style="flex:1;font-size:0.85rem;">Adjuntar al comentario</span>' +
+                '<button id="sp-qd-cpaste-send" style="padding:5px 10px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:0.8rem;font-weight:600;">📎 Enviar</button>' +
+                '<button id="sp-qd-cpaste-cancel" style="padding:5px 8px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:0.8rem;">✕</button>';
+              selectedEl.insertAdjacentElement("afterend", previewDiv);
+              document.getElementById("sp-qd-cpaste-send").addEventListener("click", async function() {
+                var sendBtn = document.getElementById("sp-qd-cpaste-send");
+                sendBtn.textContent = "⏳";
+                sendBtn.disabled = true;
+                try {
+                  var namedFile = new File([file], "clipboard_" + Date.now() + ".png", { type: file.type });
+                  var formData = new FormData();
+                  formData.append("files", namedFile);
+                  var fileRes = await fetch("https://macropayapi.supportplus.mx/files", {
+                    method: "POST",
+                    headers: { authorization: "Bearer " + spToken },
+                    body: formData,
+                  });
+                  var fileJson = await fileRes.json();
+                  var uploadedFiles = fileJson.data || fileJson;
+                  if (Array.isArray(uploadedFiles) && uploadedFiles.length) {
+                    await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                      body: JSON.stringify({ attachments: [{ fileId: uploadedFiles[0].id }], commentId: parseInt(_selectedCommentId), isInternal: false }),
+                    });
+                    showSuccessToast("✅ Imagen adjuntada al comentario");
+                    URL.revokeObjectURL(imgUrl);
+                    overlay.remove();
+                    showQuickDetailModal(ticketId);
+                  }
+                } catch(err) {
+                  sendBtn.textContent = "❌";
+                  showErrorToast("Error: " + err.message);
+                }
+              });
+              document.getElementById("sp-qd-cpaste-cancel").addEventListener("click", function() {
+                previewDiv.remove();
+                URL.revokeObjectURL(imgUrl);
+              });
+            }
+            break;
+          }
+        }
       });
 
       // Status change - load valid options from API
