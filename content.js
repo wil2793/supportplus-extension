@@ -4001,7 +4001,7 @@
     // Only show if there's a newer version
     if (!_latestVersion || _latestVersion === _currentVersion || !_latestZipUrl) return;
 
-    var btn = createHeaderButton({ id: "sp-update-btn", icon: "📥", label: "Actualizar v" + _latestVersion, color: "#FF8F00", onClick: showUpdateModal });
+    var btn = createHeaderButton({ id: "sp-update-btn", icon: "📥", label: "Actualizar v" + _latestVersion, color: "#5D4037", onClick: showUpdateModal });
     dashBtn.parentElement.insertBefore(btn, dashBtn);
   }
 
@@ -4592,7 +4592,8 @@
               var usuario = p.properties.MSP_Usuarios?.relation?.[0]?.id || "";
               var prodName = visibleProducts.find(function(vp) { return vp.id === producto; });
               var userName = allUserPages[usuario];
-              var displayName = (prodName ? prodName.producto : "Producto") + " - " + (userName ? userName.nombre.split(" ")[0] : "Usuario");
+              var displayProduct = prodName ? prodName.producto : "Producto";
+              var displayPerson = userName ? userName.nombre.split(" ")[0] : "Usuario";
               var rawDate = p.properties["Fecha de creación"]?.created_time || "";
               var formattedDate = "";
               if (rawDate) {
@@ -4600,7 +4601,8 @@
                 formattedDate = parseInt(parts[2]) + " de " + mesesFecha[parseInt(parts[1]) - 1] + " del " + parts[0];
               }
               return {
-                display: displayName,
+                product: displayProduct,
+                person: displayPerson,
                 date: formattedDate,
                 active: p.properties.Activo?.checkbox
               };
@@ -4612,10 +4614,10 @@
           } else {
             var rows = logs.map(function(l) {
               var statusIcon = l.active ? '\u2705' : '\u274C';
-              return '<tr><td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:center;">' + l.date + '</td><td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:center;">' + l.display + '</td><td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;font-size:11px;">' + statusIcon + '</td></tr>';
+              return '<tr><td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:center;">' + l.date + '</td><td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:center;">' + l.product + '</td><td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:center;">' + l.person + '</td><td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;font-size:11px;">' + statusIcon + '</td></tr>';
             }).join("");
             histContent.innerHTML = '<div style="text-align:center;font-weight:600;margin-bottom:8px;font-size:13px;">' + monthLabel + '</div>' +
-              '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f5f5f5;"><th style="padding:4px 8px;text-align:center;font-size:11px;">Fecha</th><th style="padding:4px 8px;text-align:center;font-size:11px;">Registro</th><th style="padding:4px 8px;text-align:center;font-size:11px;">Activo</th></tr></thead><tbody>' + rows + '</tbody></table>';
+              '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f5f5f5;"><th style="padding:4px 8px;text-align:center;font-size:11px;">Fecha</th><th style="padding:4px 8px;text-align:center;font-size:11px;">Producto</th><th style="padding:4px 8px;text-align:center;font-size:11px;">Persona</th><th style="padding:4px 8px;text-align:center;font-size:11px;">Activo</th></tr></thead><tbody>' + rows + '</tbody></table>';
           }
 
           // Navigation
@@ -5775,11 +5777,11 @@
           // People row
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
             '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:0.9rem;">' +
-              '<b style="color:#888;">👤 Solicitante:</b> ' + requesterName + ' <span class="sp-qd-copy-name" data-copy="' + requesterName + '" style="cursor:pointer;font-size:0.8rem;opacity:0.6;" title="Copiar nombre">⧉</span>' + (requesterEmail ? '<br><span style="color:#888;">(' + requesterEmail + ') <span class="sp-qd-copy-email" data-copy="' + requesterEmail + '" style="cursor:pointer;opacity:0.6;" title="Copiar correo">⧉</span></span>' : '') +
+              '<b style="color:#888;">👤 Solicitante:</b> ' + requesterName + ' <span class="sp-qd-copy-name" data-copy="' + requesterName + '" style="cursor:pointer;font-size:0.8rem;opacity:0.6;" title="Copiar nombre">📋</span>' + (requesterEmail ? '<br><span style="color:#888;">(' + requesterEmail + ') <span class="sp-qd-copy-email" data-copy="' + requesterEmail + '" style="cursor:pointer;opacity:0.6;" title="Copiar correo">📋</span></span>' : '') +
               (department ? '<br><span style="color:#aaa;">' + department + ' | ' + location + '</span>' : '') +
             '</div>' +
             '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:0.9rem;">' +
-              '<b style="color:#888;">🔍 Analista:</b> ' + holderName + (holderEmail ? '<br><span style="color:#888;">(' + holderEmail + ') <span class="sp-qd-copy-email" data-copy="' + holderEmail + '" style="cursor:pointer;opacity:0.6;" title="Copiar correo">⧉</span></span>' : '') +
+              '<b style="color:#888;">🔍 Analista:</b> ' + holderName + (holderEmail ? '<br><span style="color:#888;">(' + holderEmail + ') <span class="sp-qd-copy-email" data-copy="' + holderEmail + '" style="cursor:pointer;opacity:0.6;" title="Copiar correo">📋</span></span>' : '') +
             '</div>' +
           '</div>' +
           // Description (compact)
@@ -5911,7 +5913,7 @@
         copyNameBtn.addEventListener("click", function() {
           navigator.clipboard.writeText(copyNameBtn.dataset.copy).then(function() {
             copyNameBtn.textContent = "✅";
-            setTimeout(function() { copyNameBtn.textContent = "⧉"; }, 1500);
+            setTimeout(function() { copyNameBtn.textContent = "📋"; }, 1500);
           });
         });
       }
@@ -5921,7 +5923,7 @@
         btn.addEventListener("click", function() {
           navigator.clipboard.writeText(btn.dataset.copy).then(function() {
             btn.textContent = "✅";
-            setTimeout(function() { btn.textContent = "⧉"; }, 1500);
+            setTimeout(function() { btn.textContent = "📋"; }, 1500);
           });
         });
       });
