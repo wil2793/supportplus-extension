@@ -176,9 +176,9 @@
 
     var overlay = document.createElement("div");
     overlay.id = id;
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:" + zIndex + ";display:flex;align-items:center;justify-content:center;";
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0);z-index:" + zIndex + ";display:flex;align-items:center;justify-content:center;transition:background 0.3s ease;";
 
-    var modalStyle = "background:#fff;border-radius:12px;max-width:" + maxWidth + ";width:" + width + ";max-height:" + maxHeight + ";display:flex;flex-direction:column;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);text-align:" + textAlign + ";overflow:hidden;";
+    var modalStyle = "background:#fff;border-radius:12px;max-width:" + maxWidth + ";width:" + width + ";max-height:" + maxHeight + ";display:flex;flex-direction:column;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);text-align:" + textAlign + ";overflow:hidden;transform:scale(0.85) translateY(20px);opacity:0;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1),opacity 0.3s ease;";
     var headerStyle = "display:flex;justify-content:space-between;align-items:center;padding:16px 20px 12px;border-bottom:1px solid #eee;flex-shrink:0;";
     var bodyStyle = "padding:16px 20px 20px;" + (scroll ? "overflow-y:auto;flex:1;" : "");
 
@@ -199,9 +199,18 @@
     var body = overlay.querySelector(".sp-modal-body");
     var closeBtn = overlay.querySelector(".sp-modal-close-btn");
 
+    // Trigger open animation
+    requestAnimationFrame(function() {
+      overlay.style.background = "rgba(0,0,0,.6)";
+      modal.style.transform = "scale(1) translateY(0)";
+      modal.style.opacity = "1";
+    });
+
     function close() {
-      overlay.remove();
-      if (onClose) onClose();
+      modal.style.transform = "scale(0.9) translateY(10px)";
+      modal.style.opacity = "0";
+      overlay.style.background = "rgba(0,0,0,0)";
+      setTimeout(function() { overlay.remove(); if (onClose) onClose(); }, 250);
     }
 
     closeBtn.addEventListener("click", close);
@@ -983,6 +992,14 @@
           if (!listEl) return;
           var countEl = listEl.previousElementSibling.querySelector(".sp-mgr-pcount");
           if (countEl) countEl.textContent = "(" + tickets.length + ")";
+
+          // Hide column if "only with tickets" is enabled and no tickets
+          var col = listEl.closest("[style*='border-radius:6px']");
+          chrome.storage.local.get("onlyWithTickets", function(cfg) {
+            if (cfg.onlyWithTickets && !tickets.length && col) {
+              col.style.display = "none";
+            }
+          });
 
           if (!tickets.length) {
             listEl.innerHTML = '<div style="text-align:center;padding:6px;color:#aaa;font-size:10px;">Sin tickets</div>';
@@ -2002,6 +2019,16 @@
     const el = document.querySelector('[class*="warapperNameUserAndLogout"] p');
     return el ? el.textContent.trim() : "";
   }
+
+  var _loggedUserEmail = "";
+  function getLoggedUserEmail() {
+    if (_loggedUserEmail) return _loggedUserEmail;
+    // Read from storage synchronously (set during checkSession)
+    chrome.storage.local.get("userEmail", function(r) { _loggedUserEmail = r.userEmail || ""; });
+    return _loggedUserEmail;
+  }
+  // Pre-load email
+  chrome.storage.local.get("userEmail", function(r) { _loggedUserEmail = (r.userEmail || "").toLowerCase(); });
 
   function highlightMyRows() {
     const myName = getLoggedUserName();
@@ -3721,11 +3748,9 @@
       var excludedMembers = stored.visibleByGroup || {};
       var onlyWithTicketsEl = document.getElementById("sp-cfg-only-with-tickets");
 
-      // Load user config from Notion
-      chrome.storage.local.get(["userConfig"], function(cfg) {
-        if (cfg.userConfig && cfg.userConfig.onlyWithTickets) {
-          onlyWithTicketsEl.checked = true;
-        }
+      // Load user config
+      chrome.storage.local.get(["onlyWithTickets"], function(cfg) {
+        if (cfg.onlyWithTickets) onlyWithTicketsEl.checked = true;
       });
 
       function loadMembersForConfig(groupId) {
@@ -3809,7 +3834,7 @@
         var boardName = document.getElementById("sp-cfg-board-search").value.trim();
         var area = document.getElementById("sp-cfg-area").value;
         var onlyWithTickets = onlyWithTicketsEl.checked;
-        var saveData = { mondayToken: token, mondayBoardId: boardId, mondayBoardName: boardName, teamArea: area };
+        var saveData = { mondayToken: token, mondayBoardId: boardId, mondayBoardName: boardName, teamArea: area, onlyWithTickets: onlyWithTickets };
         // Save visible members (checked ones) as blacklist (unchecked = blacklisted)
         var memberChecks = membersDiv.querySelectorAll('input[data-pid]');
         var blacklistIds = [];
@@ -5676,10 +5701,10 @@
 
       var overlay = document.createElement("div");
       overlay.id = "sp-quick-detail-modal";
-      overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-      overlay.innerHTML = '<div style="background:#fff;padding:clamp(12px, 2vw, 24px);border-radius:12px;width:clamp(400px, 85vw, 900px);max-height:90vh;display:flex;flex-direction:column;overflow-y:auto;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);">' +
+      overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0);z-index:99999;display:flex;align-items:center;justify-content:center;transition:background 0.3s ease;";
+      overlay.innerHTML = '<div style="background:#fff;padding:clamp(12px, 2vw, 24px);border-radius:12px;width:clamp(400px, 85vw, 900px);max-height:90vh;display:flex;flex-direction:column;overflow-y:auto;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);transform:scale(0.85) translateY(20px);opacity:0;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1),opacity 0.3s ease;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
-          '<h3 style="margin:0;font-size:1.1rem;">📋 ' + (t.uniqueCode || ticketId) + ' <span class="sp-qd-copy-folio" data-copy="' + (t.uniqueCode || ticketId) + '" style="cursor:pointer;font-size:0.85rem;opacity:0.6;" title="Copiar folio">📋</span> <span style="font-weight:400;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-size:0.85rem;">(' + statusName + ')</span></h3>' +
+          '<h3 style="margin:0;font-size:1.1rem;">📋 ' + (t.uniqueCode || ticketId) + ' <span class="sp-qd-copy-folio" data-copy="' + (t.uniqueCode || ticketId) + '" style="cursor:pointer;font-size:0.85rem;opacity:0.6;" title="Copiar folio">⧉</span> <span style="font-weight:400;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-size:0.85rem;">(' + statusName + ')</span></h3>' +
           '<div style="display:flex;gap:6px;align-items:center;">' +
             '<span id="sp-qd-actions" style="display:flex;gap:4px;"></span>' +
             '<a href="/es/dashboard/tickets/' + ticketId + '" target="_blank" style="padding:5px 10px;border:1px solid #1976D2;border-radius:6px;font-size:0.9rem;text-decoration:none;color:#1976D2;">Abrir ↗</a>' +
@@ -5732,6 +5757,7 @@
                 '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label>' +
                 '<div style="display:flex;gap:4px;align-items:flex-start;"><textarea id="sp-qd-close-comment" placeholder="Comentario de cierre..." style="flex:1;padding:5px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea><label style="padding:6px 8px;border:1px solid #ddd;border-radius:4px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-close-attach" type="file" multiple style="display:none;"></label></div>' +
                 '<div id="sp-qd-close-attach-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;"></div>' +
+                (holderEmail && holderEmail.toLowerCase() !== getLoggedUserEmail().toLowerCase() ? '<label style="display:flex;align-items:center;gap:4px;margin-bottom:6px;font-size:0.85rem;cursor:pointer;color:#D94040;"><input type="checkbox" id="sp-qd-steal-check"> Robar ticket (autoasignarme antes de cerrar)</label>' : '') +
                 '<div style="display:flex;gap:6px;"><button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">Confirmar</button><button id="sp-qd-close-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:0.9rem;font-weight:600;">Cancelar</button></div>' +
                 '<div id="sp-qd-close-suggested" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;"></div>' +
               '</div>' +
@@ -5749,11 +5775,11 @@
           // People row
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
             '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:0.9rem;">' +
-              '<b style="color:#888;">👤 Solicitante:</b> ' + requesterName + ' <span class="sp-qd-copy-name" data-copy="' + requesterName + '" style="cursor:pointer;font-size:0.8rem;opacity:0.6;" title="Copiar nombre">📋</span>' + (requesterEmail ? ' <span style="color:#888;">(' + requesterEmail + ')</span>' : '') +
+              '<b style="color:#888;">👤 Solicitante:</b> ' + requesterName + ' <span class="sp-qd-copy-name" data-copy="' + requesterName + '" style="cursor:pointer;font-size:0.8rem;opacity:0.6;" title="Copiar nombre">⧉</span>' + (requesterEmail ? '<br><span style="color:#888;">(' + requesterEmail + ') <span class="sp-qd-copy-email" data-copy="' + requesterEmail + '" style="cursor:pointer;opacity:0.6;" title="Copiar correo">⧉</span></span>' : '') +
               (department ? '<br><span style="color:#aaa;">' + department + ' | ' + location + '</span>' : '') +
             '</div>' +
             '<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:0.9rem;">' +
-              '<b style="color:#888;">🔍 Analista:</b> ' + holderName + (holderEmail ? ' <span style="color:#888;">(' + holderEmail + ')</span>' : '') +
+              '<b style="color:#888;">🔍 Analista:</b> ' + holderName + (holderEmail ? '<br><span style="color:#888;">(' + holderEmail + ') <span class="sp-qd-copy-email" data-copy="' + holderEmail + '" style="cursor:pointer;opacity:0.6;" title="Copiar correo">⧉</span></span>' : '') +
             '</div>' +
           '</div>' +
           // Description (compact)
@@ -5803,8 +5829,22 @@
         '</div></div>';
       document.body.appendChild(overlay);
 
-      document.getElementById("sp-qd-close").addEventListener("click", function() { if (_qdCommentsInterval) { clearInterval(_qdCommentsInterval); _qdCommentsInterval = null; } overlay.remove(); });
-      overlay.addEventListener("click", function(e) { if (e.target === overlay) { if (_qdCommentsInterval) { clearInterval(_qdCommentsInterval); _qdCommentsInterval = null; } overlay.remove(); } });
+      // Trigger open animation
+      requestAnimationFrame(function() {
+        overlay.style.background = "rgba(0,0,0,.6)";
+        var modalBox = overlay.querySelector("div");
+        if (modalBox) { modalBox.style.transform = "scale(1) translateY(0)"; modalBox.style.opacity = "1"; }
+      });
+
+      function closeQdModal() {
+        if (_qdCommentsInterval) { clearInterval(_qdCommentsInterval); _qdCommentsInterval = null; }
+        var modalBox = overlay.querySelector("div");
+        if (modalBox) { modalBox.style.transform = "scale(0.9) translateY(10px)"; modalBox.style.opacity = "0"; }
+        overlay.style.background = "rgba(0,0,0,0)";
+        setTimeout(function() { overlay.remove(); }, 250);
+      }
+      document.getElementById("sp-qd-close").addEventListener("click", closeQdModal);
+      overlay.addEventListener("click", function(e) { if (e.target === overlay) closeQdModal(); });
 
       // Auto-refresh comments every 30s
       _qdCommentsInterval = setInterval(function() {
@@ -5860,7 +5900,7 @@
         copyFolioBtn.addEventListener("click", function() {
           navigator.clipboard.writeText(copyFolioBtn.dataset.copy).then(function() {
             copyFolioBtn.textContent = "✅";
-            setTimeout(function() { copyFolioBtn.textContent = "📋"; }, 1500);
+            setTimeout(function() { copyFolioBtn.textContent = "⧉"; }, 1500);
           });
         });
       }
@@ -5871,10 +5911,20 @@
         copyNameBtn.addEventListener("click", function() {
           navigator.clipboard.writeText(copyNameBtn.dataset.copy).then(function() {
             copyNameBtn.textContent = "✅";
-            setTimeout(function() { copyNameBtn.textContent = "📋"; }, 1500);
+            setTimeout(function() { copyNameBtn.textContent = "⧉"; }, 1500);
           });
         });
       }
+
+      // Copy email buttons
+      overlay.querySelectorAll(".sp-qd-copy-email").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          navigator.clipboard.writeText(btn.dataset.copy).then(function() {
+            btn.textContent = "✅";
+            setTimeout(function() { btn.textContent = "⧉"; }, 1500);
+          });
+        });
+      });
 
       // Attach files - multiple with remove
       var attachInput = document.getElementById("sp-qd-attach-input");
@@ -6660,6 +6710,18 @@
                     method: "PUT",
                     headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
                     body: JSON.stringify({ resolutionGroupId: getTeamConfig().resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId } }),
+                  });
+                }
+              }
+              // Steal: if checkbox is marked, reassign to me before closing
+              var stealCheck = document.getElementById("sp-qd-steal-check");
+              if (stealCheck && stealCheck.checked) {
+                var stealProfId = await getMyProfileId();
+                if (stealProfId) {
+                  await fetch(SP_API + "/reassign/" + ticketId, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                    body: JSON.stringify({ resolutionGroupId: getTeamConfig().resolutionGroupId, serviceId: null, responsibleProfileId: stealProfId, resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId } }),
                   });
                 }
               }
