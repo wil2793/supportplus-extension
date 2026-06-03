@@ -126,6 +126,12 @@
     { id: 91, name: "Compras Internas" }
   ];
 
+  // HTML escape helper to prevent XSS
+  function esc(str) {
+    if (!str) return "";
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
   var currentUserRole = "usuario";
   var currentViewMode = null; // null = use own role's view
   var currentUserGroups = []; // Groups from Notion
@@ -832,8 +838,8 @@
         var statusColor = t.ticketStatusName === "En espera" ? "#FF8F00" : t.ticketStatusName === "Asignado" ? "#1976D2" : "#4CAF50";
         html += '<div ' + (canDrag ? 'draggable="true" ' : '') + 'data-ticket-id="' + t.id + '" class="sp-mgr-ticket" style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:9px;line-height:1.3;' + (canDrag ? 'cursor:grab;' : '') + '">';
         html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
-        html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 25) + '</div>';
-        html += '<div style="display:flex;justify-content:space-between;"><span style="color:' + statusColor + ';font-weight:600;font-size:8px;">' + (t.ticketStatusName || "") + '</span><span style="color:#888;font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60px;" title="' + (isUnassigned ? (t.requesterName || "") : (t.requesterName || "")) + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
+        html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + esc((t.subject || "").substring(0, 25)) + '</div>';
+        html += '<div style="display:flex;justify-content:space-between;"><span style="color:' + statusColor + ';font-weight:600;font-size:8px;">' + (t.ticketStatusName || "") + '</span><span style="color:#888;font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60px;" title="' + (isUnassigned ? (t.requesterName || "") : (t.requesterName || "")) + '">' + esc((t.requesterName || "").split(" ")[0]) + '</span></div>';
         html += '</div>';
       });
       if (listEl.innerHTML !== html) listEl.innerHTML = html;
@@ -1008,8 +1014,8 @@
             tickets.forEach(function(t) {
               html += '<div ' + (canDrag ? 'draggable="true" ' : '') + 'data-ticket-id="' + t.id + '" class="sp-mgr-ticket" style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:9px;line-height:1.3;' + (canDrag ? 'cursor:grab;' : '') + '">';
               html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
-              html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 25) + '</div>';
-              html += '<div style="color:#888;font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</div>';
+              html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + esc((t.subject || "").substring(0, 25)) + '</div>';
+              html += '<div style="color:#888;font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(t.requesterName || "") + '">' + esc((t.requesterName || "").split(" ")[0]) + '</div>';
               html += '</div>';
             });
             listEl.innerHTML = html;
@@ -1033,8 +1039,8 @@
           tickets.forEach(function(t) {
             html += '<div ' + (canDrag ? 'draggable="true" ' : '') + 'data-ticket-id="' + t.id + '" class="sp-mgr-ticket" style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:9px;line-height:1.3;' + (canDrag ? 'cursor:grab;' : '') + '">';
             html += '<div style="font-weight:600;color:#E65100;">' + (t.uniqueCode || "") + '</div>';
-            html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 25) + '</div>';
-            html += '<div style="color:#888;font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</div>';
+            html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + esc((t.subject || "").substring(0, 25)) + '</div>';
+            html += '<div style="color:#888;font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(t.requesterName || "") + '">' + esc((t.requesterName || "").split(" ")[0]) + '</div>';
             html += '</div>';
           });
           listEl.innerHTML = html;
@@ -1074,7 +1080,7 @@
           tickets.forEach(function(t) {
             html += '<div style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #2E7D32;font-size:9px;line-height:1.3;">';
             html += '<div style="font-weight:600;color:#2E7D32;">' + (t.uniqueCode || "") + '</div>';
-            html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 25) + '</div>';
+            html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + esc((t.subject || "").substring(0, 25)) + '</div>';
             html += '<div style="color:#888;font-size:8px;">' + (t.responsibleName || "").split(" ")[0] + '</div>';
             html += '</div>';
           });
@@ -1840,8 +1846,8 @@
     var m = createModal({
       id: "sp-reassign-app-modal",
       title: "⚠️ Reasignar a Aplicaciones",
-      content: '<p style="font-size:14px;color:#555;margin:0 0 8px;">Este ticket dejará de ser nuestro y pasará a mejor vida con el equipo de Aplicaciones.</p>' +
-        '<p style="font-size:13px;color:#888;margin:0 0 20px;">🪦 Descanse en paz... o no, depende de Aplicaciones.</p>' +
+      content: '<p style="font-size:14px;color:#555;margin:0 0 8px;">Este ticket será reasignado al equipo de Aplicaciones.</p>' +
+        '<p style="font-size:13px;color:#888;margin:0 0 20px;">El ticket dejará de estar bajo nuestra responsabilidad.</p>' +
         '<div id="sp-reassign-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
         '<div style="display:flex;gap:8px;">' +
           '<button id="sp-reassign-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#C62828;color:#fff;cursor:pointer;font-size:14px;">Sí, reasignar</button>' +
@@ -1895,7 +1901,7 @@
           var sm = createModal({
             id: "sp-reassign-success",
             title: "✅ Ticket reasignado",
-            content: '<p style="font-size:14px;color:#555;margin:0 0 16px;">El ticket fue reasignado a Aplicaciones exitosamente. 🪦 Descanse en paz.</p>' +
+            content: '<p style="font-size:14px;color:#555;margin:0 0 16px;">El ticket fue reasignado a Aplicaciones exitosamente.</p>' +
               '<button id="sp-reassign-ok" style="width:100%;padding:10px;border:none;border-radius:6px;background:#2E7D32;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">Aceptar</button>',
             options: { maxWidth: "360px", textAlign: "center", closeOnBackdrop: false }
           });
@@ -2480,7 +2486,7 @@
                 html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:10px;line-height:1.3;cursor:grab;">';
                 html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
                 html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-                html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
+                html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + esc(t.requesterName || "") + '">' + esc((t.requesterName || "").split(" ")[0]) + '</span></div>';
                 html += '</div>';
               });
               listEl.innerHTML = html;
@@ -2513,7 +2519,7 @@
               html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:10px;line-height:1.3;cursor:grab;">';
               html += '<div style="font-weight:600;color:#E65100;">' + (t.uniqueCode || "") + '</div>';
               html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-              html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#FF8F00;font-weight:600;font-size:9px;">En espera</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
+              html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#FF8F00;font-weight:600;font-size:9px;">En espera</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + esc(t.requesterName || "") + '">' + esc((t.requesterName || "").split(" ")[0]) + '</span></div>';
               html += '</div>';
             });
             listEl.innerHTML = html;
@@ -2572,7 +2578,7 @@
             html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:10px;line-height:1.3;cursor:grab;">';
             html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
             html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-            html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + esc(t.requesterName || "") + '">' + esc((t.requesterName || "").split(" ")[0]) + '</span></div>';
             html += '</div>';
           });
           listEl.innerHTML = html;
@@ -2615,7 +2621,7 @@
           html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:10px;line-height:1.3;cursor:grab;">';
           html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
           html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-          html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + esc(t.requesterName || "") + '">' + esc((t.requesterName || "").split(" ")[0]) + '</span></div>';
           html += '</div>';
         });
         listEl.innerHTML = html;
@@ -2646,7 +2652,7 @@
             html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:10px;line-height:1.3;cursor:grab;">';
             html += '<div style="font-weight:600;color:#E65100;">' + (t.uniqueCode || "") + '</div>';
             html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-            html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#FF8F00;font-weight:600;font-size:9px;">En espera</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + (t.requesterName || "") + '">' + (t.requesterName || "").split(" ")[0] + '</span></div>';
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#FF8F00;font-weight:600;font-size:9px;">En espera</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + esc(t.requesterName || "") + '">' + esc((t.requesterName || "").split(" ")[0]) + '</span></div>';
             html += '</div>';
           });
           listEl.innerHTML = html;
@@ -2917,7 +2923,7 @@
       html += '<tr style="background:' + statusColor + ';border-bottom:1px solid #eee;">';
       html += '<td style="padding:6px;font-weight:600;white-space:nowrap;"><a href="/es/dashboard/tickets/' + t.id + '" target="_blank" style="color:inherit;text-decoration:none;">' + (t.uniqueCode || t.id) + '</a><span class="sp-card-copy" data-code="' + (t.uniqueCode || "") + '"></span></td>';
       html += '<td style="padding:6px;font-size:11px;">' + date + '</td>';
-      html += '<td style="padding:6px;" title="' + (t.subject || "") + '">' + subject + '</td>';
+      html += '<td style="padding:6px;" title="' + esc(t.subject || "") + '">' + subject + '</td>';
       html += '<td style="padding:6px;">' + (t.requesterName || "") + '</td>';
       html += '<td style="padding:6px;font-size:11px;font-weight:700;color:' + textColor + ';">' + (t.ticketStatusName || "") + '</td>';
       html += '<td style="padding:6px;">' + (t.responsibleName || "Sin asignar") + '</td>';
@@ -5397,7 +5403,7 @@
 
         if (!tickets.length) {
           var emptyMsg = customApiUrl && modalTitle.indexOf("pendientes") !== -1
-            ? '🎉 ¡Sin tickets pendientes! Ponte a jalar que no te pagan por estar de florero 🌵'
+            ? 'Sin tickets pendientes por atender'
             : 'Sin tickets con estado: ' + (statusName || "todos");
           results.innerHTML = '<div style="text-align:center;padding:20px;color:#888;">' + emptyMsg + '</div>';
           return;
