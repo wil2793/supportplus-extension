@@ -148,6 +148,8 @@
   var _btnDashboard = true; // Show dashboard button
   var _btnComments = true; // Show comments button
   var _btnReports = true; // Show reports button
+  var _btnReassignApp = false; // Show reassign to apps button
+  var _btnAddIAM = false; // Show add IAM button
   var _lastDropTime = 0; // Timestamp of last drag-and-drop to prevent accidental modal opens
   var _mondayGroupCache = {}; // Cache of created Monday groups: groupName -> groupId
   var _autoMigrateQueue = Promise.resolve(); // Serial queue for auto-migrations
@@ -389,6 +391,8 @@
       _btnDashboard = userData.btnDashboard !== false;
       _btnComments = userData.btnComments !== false;
       _btnReports = userData.btnReports !== false;
+      _btnReassignApp = !!userData.btnReassignApp;
+      _btnAddIAM = !!userData.btnAddIAM;
 
       // Set drag and drop permission from sub-group
       canDragDrop = !!userData.canDragDrop;
@@ -1667,6 +1671,7 @@
   const IAM_NAMES = ["Carlos Alberto Lopez Mata", "Crhistian Uziel Sanchez Alvarez", "Leyver Adair Vasquez Velasco"];
 
   function injectIamButton() {
+    if (!_btnAddIAM) return;
     if (document.getElementById(IAM_BTN_ID)) return;
     if (!isDetailView()) return;
     var ticketId = getDetailTicketId();
@@ -1866,6 +1871,7 @@
   const REASSIGN_APP_BTN_ID = "sp-reassign-app-btn";
 
   function injectReassignAppButton() {
+    if (!_btnReassignApp) return;
     if (document.getElementById(REASSIGN_APP_BTN_ID)) return;
     if (!isDetailView()) return;
     var ticketId = getDetailTicketId();
@@ -3064,10 +3070,6 @@
         '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario antes de cerrar (opcional)</label>' +
         '<textarea id="sp-take-close-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:60px;resize:vertical;box-sizing:border-box;" placeholder="Comentario de cierre..."></textarea>' +
       '</div>' +
-      '<div id="sp-take-migrate-section" style="display:none;margin-bottom:12px;">' +
-        '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Migrar a Monday</label>' +
-        '<select id="sp-take-group" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;">' + groupOpts + '</select>' +
-      '</div>' +
       '<div id="sp-take-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
       '<div style="display:flex;gap:8px;">' +
         '<button id="sp-take-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">✊ Tomar ticket</button>' +
@@ -3326,8 +3328,6 @@
       summaryHTML +
       '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario (opcional)</label>' +
       '<textarea id="sp-close-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:60px;resize:vertical;box-sizing:border-box;margin-bottom:12px;" placeholder="Escribe un comentario..."></textarea>' +
-      '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Migrar a Monday <span style="color:#D94040;">*</span></label>' +
-      '<select id="sp-close-group" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:12px;font-size:13px;">' + groupOpts + '</select>' +
       '<div id="sp-close-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
       '<div style="display:flex;gap:8px;">' +
         '<button id="sp-close-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">🔐 Cerrar ticket</button>' +
@@ -6522,15 +6522,22 @@
         var takeExtraDiv = document.getElementById("sp-qd-take-extra");
         var takeGroupSelect = document.getElementById("sp-qd-take-group");
 
-        // Load team members
-        var teamConfig = getTeamConfig();
-        teamConfig.profiles.forEach(function(p) {
-          var opt = document.createElement("option");
-          opt.value = p.profileId;
-          opt.textContent = p.profileFullName;
-          opt.dataset.email = p.email || "";
-          assignSelect.appendChild(opt);
-        });
+        // Load team members from the ticket's resolution group
+        var ticketGroupId = t.resolutionGroup?.id || getTeamConfig().resolutionGroupId;
+        fetch("https://macropayapi.supportplus.mx/tickets/web/active-profiles-by-resolution-group/" + ticketGroupId, {
+          headers: { accept: "application/json", authorization: "Bearer " + spToken }
+        }).then(function(r) { return r.json(); }).then(function(json) {
+          var profiles = json.data || json;
+          if (Array.isArray(profiles)) {
+            profiles.forEach(function(p) {
+              var opt = document.createElement("option");
+              opt.value = p.profileId;
+              opt.textContent = p.profileFullName;
+              opt.dataset.email = p.email || "";
+              assignSelect.appendChild(opt);
+            });
+          }
+        }).catch(function() {});
 
         // Toggle "Ticket realizado" extras
         takeDoneCheck.addEventListener("change", function() {

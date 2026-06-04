@@ -62,9 +62,11 @@ async function syncNotionData() {
       const btnDashboard = r.properties.BotonDasboard?.checkbox || false;
       const btnComments = r.properties.BotonComentarios?.checkbox || false;
       const btnReports = r.properties.BotonReportesExcel?.checkbox || false;
+      const btnReassignApp = r.properties.BotonReasignarAplicaciones?.checkbox || false;
+      const btnAddIAM = r.properties['BotonAñadirIAM']?.checkbox || false;
       const mondayFolderId = r.properties.monday_folder_id?.number ? String(r.properties.monday_folder_id.number) : "";
       const mondayWorkspaceId = r.properties.monday_workspace_id?.number ? String(r.properties.monday_workspace_id.number) : "";
-      rolesMap[r.id] = { name, groups: roleGroups, active: r.properties.Activo?.checkbox, canMigrate, btnDashboard, btnComments, btnReports, mondayFolderId, mondayWorkspaceId };
+      rolesMap[r.id] = { name, groups: roleGroups, active: r.properties.Activo?.checkbox, canMigrate, btnDashboard, btnComments, btnReports, btnReassignApp, btnAddIAM, mondayFolderId, mondayWorkspaceId };
     }
 
     // Build users list: email -> { name, role, groups[], profileId, active }
@@ -99,7 +101,7 @@ async function syncNotionData() {
       const mondayFolderId = (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].mondayFolderId : "";
       const mondayWorkspaceId = (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].mondayWorkspaceId : "";
 
-      usersMap[email] = { name: nombre, role: mappedRole, roleName: roleName, groups: finalGroups, profileId, active, canMigrate, btnDashboard: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnDashboard : false, btnComments: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnComments : false, btnReports: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnReports : false, mondayFolderId, mondayWorkspaceId, notionPageId: u.id };
+      usersMap[email] = { name: nombre, role: mappedRole, roleName: roleName, groups: finalGroups, profileId, active, canMigrate, btnDashboard: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnDashboard : false, btnComments: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnComments : false, btnReports: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnReports : false, btnReassignApp: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnReassignApp : false, btnAddIAM: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnAddIAM : false, mondayFolderId, mondayWorkspaceId, notionPageId: u.id };
     }
 
     // Check sub-groups for permissions (Drag And Drop)
