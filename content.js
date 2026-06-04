@@ -145,6 +145,9 @@
   var currentUserGroups = []; // Groups from Notion
   var canMigrateMonday = false; // Permission from Notion role
   var canDragDrop = false; // Permission from sub-group "Drag And Drop"
+  var _btnDashboard = true; // Show dashboard button
+  var _btnComments = true; // Show comments button
+  var _btnReports = true; // Show reports button
   var _lastDropTime = 0; // Timestamp of last drag-and-drop to prevent accidental modal opens
   var _mondayGroupCache = {}; // Cache of created Monday groups: groupName -> groupId
   var _autoMigrateQueue = Promise.resolve(); // Serial queue for auto-migrations
@@ -381,6 +384,11 @@
 
       // Set Monday migration permission
       canMigrateMonday = !!userData.canMigrate;
+
+      // Set button visibility permissions from role
+      _btnDashboard = userData.btnDashboard !== false;
+      _btnComments = userData.btnComments !== false;
+      _btnReports = userData.btnReports !== false;
 
       // Set drag and drop permission from sub-group
       canDragDrop = !!userData.canDragDrop;
@@ -1960,6 +1968,7 @@
   }
 
   function injectBulkButton() {
+    if (!canMigrateMonday) return;
     if (document.getElementById(BULK_BTN_ID)) return;
     let container = document.querySelector(".MuiBox-root .MuiStack-root");
     let insertMethod = "prepend";
@@ -3987,8 +3996,8 @@
     } catch(e) { return null; }
   }
 
-  function saveDashboardCache(data, from, to) {
-    localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify({ data: data, from: from, to: to, ts: Date.now() }));
+  function saveDashboardCache(data, from, to, groupId) {
+    localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify({ data: data, from: from, to: to, groupId: groupId || "", ts: Date.now() }));
   }
 
   function clearDashboardCache() {
@@ -4002,7 +4011,7 @@
     var todayDate = new Date().toDateString();
     if (cacheDate !== todayDate) { clearDashboardCache(); cached = null; }
   }
-  var dashboardData = cached ? cached.data : null;
+  var dashboardData = (cached && cached.data && cached.data.length) ? cached.data : null;
   var dashboardFrom = cached ? cached.from : "";
   var dashboardTo = cached ? cached.to : "";
 
@@ -4063,13 +4072,13 @@
 
   function injectUpdateButton() {
     if (document.getElementById("sp-update-btn")) return;
-    var dashBtn = document.getElementById(DASHBOARD_BTN_ID);
-    if (!dashBtn) return;
+    var refBtn = document.getElementById(DASHBOARD_BTN_ID) || document.getElementById(SEARCH_BTN_ID);
+    if (!refBtn) return;
     // Only show if there's a newer version
     if (!_latestVersion || _latestVersion === _currentVersion || !_latestZipUrl) return;
 
     var btn = createHeaderButton({ id: "sp-update-btn", icon: "📥", label: "Actualizar v" + _latestVersion, color: "#5D4037", onClick: showUpdateModal });
-    dashBtn.parentElement.insertBefore(btn, dashBtn);
+    refBtn.parentElement.insertBefore(btn, refBtn);
   }
 
   function showUpdateModal() {
@@ -4133,6 +4142,7 @@
   }
 
   function injectDashboardButton() {
+    if (!_btnDashboard) return;
     if (document.getElementById(DASHBOARD_BTN_ID)) return;
     var searchBtn = document.getElementById(SEARCH_BTN_ID);
     if (!searchBtn) return;
@@ -4156,26 +4166,63 @@
     var btn = document.getElementById(DASHBOARD_BTN_ID);
     if (!btn) return;
 
-    // If data already loaded, show modal directly
-    if (dashboardData) {
-      showDashboardModal();
+    // If user has multiple groups
+    if (currentUserGroups.length > 1) {
+      // If there's cached data, show it with a group selector at top
+      if (dashboardData && dashboardData.length) {
+        showDashboardModal();
+        return;
+      }
+      // No data - show group selection modal
+      var groupOpts = currentUserGroups.map(function(gId) {
+        var g = GROUP_INFO.find(function(gi) { return gi.id === gId; }) || { id: gId, name: "Grupo " + gId };
+        return '<option value="' + g.id + '">' + g.name + '</option>';
+      }).join("");
+      var m = createModal({
+        id: "sp-dashboard-group-modal",
+        title: "📊 Generar Dashboard",
+        content: '<p style="margin:0 0 12px;font-size:0.85rem;color:#555;">Selecciona el grupo del cual quieres generar el dashboard:</p>' +
+          '<select id="sp-dash-group-select" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.9rem;margin-bottom:12px;">' + groupOpts + '</select>' +
+          '<div style="background:#FFF3E0;border:1px solid #FF8F00;border-radius:6px;padding:10px;margin-bottom:12px;font-size:0.8rem;color:#E65100;">⚠️ La generación del dashboard puede tardar varios minutos. Puedes seguir trabajando con normalidad, se te avisará cuando esté listo.</div>' +
+          '<button id="sp-dash-group-confirm" style="width:100%;padding:10px;border:none;border-radius:6px;background:#00796B;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">Generar</button>',
+        options: { maxWidth: "400px" }
+      });
+      document.getElementById("sp-dash-group-confirm").addEventListener("click", function() {
+        var selectedGroup = document.getElementById("sp-dash-group-select").value;
+        m.close();
+        dashboardData = null;
+        generateDashboard(btn, parseInt(selectedGroup));
+      });
       return;
     }
 
-    // Load data in background
+    // Single group
+    if (dashboardData && dashboardData.length) {
+      showDashboardModal();
+      return;
+    }
+    generateDashboard(btn, getTeamConfig().resolutionGroupId);
+  }
+
+  async function generateDashboard(btn, groupId) {
+    // Ensure dates are initialized
+    if (!dashboardFrom || !dashboardTo) {
+      var now = new Date();
+      dashboardFrom = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-01T00:00";
+      dashboardTo = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + "T23:59";
+    }
     btn.disabled = true;
-    btn.textContent = "⏳ Creando dashboard...";
+    btn.innerHTML = '<span class="sp-btn-icon">⏳</span><span class="sp-btn-label"> Creando dashboard...</span>';
     btn.style.background = "#999";
-    showSuccessToast("📊 Generando dashboard, esto puede tardar un momento. Puedes seguir trabajando mientras tanto.");
 
     var spToken = getToken();
-    if (!spToken) { showErrorToast("No hay token"); btn.textContent = "📊 Dashboard"; btn.style.background = "#00796B"; btn.disabled = false; return; }
+    if (!spToken) { showErrorToast("No hay token"); btn.innerHTML = '<span class="sp-btn-icon">📊</span><span class="sp-btn-label"> Dashboard</span>'; btn.style.background = "#00796B"; btn.disabled = false; return; }
 
     var allTickets = [];
     var page = 0;
     try {
       while (true) {
-        var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?page=" + page + "&size=100&resolutionGroupId=" + getTeamConfig().resolutionGroupId;
+        var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?page=" + page + "&size=100&resolutionGroupId=" + groupId;
         if (dashboardFrom) url += "&initDate=" + dashboardFrom;
         if (dashboardTo) url += "&endDate=" + dashboardTo;
         var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
@@ -4184,21 +4231,21 @@
         var data = json.data || json;
         var tickets = data.content || [];
         tickets.forEach(function(t) { if (t.ticketStatusName === "Cerrado") allTickets.push(t); });
-        btn.textContent = "⏳ Cargando... " + allTickets.length + " tickets";
+        btn.innerHTML = '<span class="sp-btn-icon">⏳</span><span class="sp-btn-label"> ' + allTickets.length + ' tickets...</span>';
         if (page >= (data.totalPages || 1) - 1) break;
         page++;
       }
     } catch (err) {
       showErrorToast("Error: " + err.message);
-      btn.textContent = "📊 Dashboard";
+      btn.innerHTML = '<span class="sp-btn-icon">📊</span><span class="sp-btn-label"> Dashboard</span>';
       btn.style.background = "#00796B";
       btn.disabled = false;
       return;
     }
 
     dashboardData = allTickets;
-    saveDashboardCache(allTickets, dashboardFrom, dashboardTo);
-    btn.textContent = "📊 Ver dashboard";
+    saveDashboardCache(allTickets, dashboardFrom, dashboardTo, groupId);
+    btn.innerHTML = '<span class="sp-btn-icon">📊</span><span class="sp-btn-label"> Ver dashboard</span>';
     btn.style.background = "#00796B";
     btn.disabled = false;
     showSuccessToast("Dashboard listo: " + allTickets.length + " tickets cerrados");
@@ -4238,10 +4285,26 @@
     var existing = document.getElementById("sp-dashboard-modal");
     if (existing) existing.remove();
 
+    // Group selector for multi-group users
+    var groupSelectorHTML = "";
+    if (currentUserGroups.length > 1) {
+      var cached = loadDashboardCache();
+      var currentGroupId = cached?.groupId || currentUserGroups[0];
+      var gOpts = currentUserGroups.map(function(gId) {
+        var g = GROUP_INFO.find(function(gi) { return gi.id === gId; }) || { id: gId, name: "Grupo " + gId };
+        return '<option value="' + g.id + '"' + (String(g.id) === String(currentGroupId) ? ' selected' : '') + '>' + g.name + '</option>';
+      }).join("");
+      groupSelectorHTML = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">' +
+        '<label style="font-size:12px;white-space:nowrap;">Grupo:</label>' +
+        '<select id="sp-dash-group-change" style="flex:1;padding:5px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;">' + gOpts + '</select>' +
+      '</div>';
+    }
+
     var m = createModal({
       id: "sp-dashboard-modal",
       title: "📊 Tickets cerrados por analista",
-      content: '<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">' +
+      content: groupSelectorHTML +
+        '<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">' +
         '<label style="font-size:12px;">Desde:</label>' +
         '<input id="sp-dash-from" type="datetime-local" value="' + dashboardFrom + '" style="padding:5px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;">' +
         '<label style="font-size:12px;">Hasta:</label>' +
@@ -4255,15 +4318,38 @@
 
     document.getElementById("sp-dash-results").innerHTML = buildDashboardChart(dashboardData || []);
 
+    // Group change handler
+    var groupChangeEl = document.getElementById("sp-dash-group-change");
+    if (groupChangeEl) {
+      groupChangeEl.addEventListener("change", function() {
+        var newGroupId = parseInt(groupChangeEl.value);
+        // Check if there's cached data for this group
+        var cached = loadDashboardCache();
+        if (cached && cached.data && cached.data.length && String(cached.groupId) === String(newGroupId)) {
+          // Load from cache
+          dashboardData = cached.data;
+          dashboardFrom = cached.from || dashboardFrom;
+          dashboardTo = cached.to || dashboardTo;
+          document.getElementById("sp-dash-from").value = dashboardFrom;
+          document.getElementById("sp-dash-to").value = dashboardTo;
+          document.getElementById("sp-dash-results").innerHTML = buildDashboardChart(dashboardData);
+        } else {
+          // No cache for this group - show empty with message
+          dashboardData = null;
+          document.getElementById("sp-dash-results").innerHTML = '<div style="text-align:center;padding:40px;color:#888;">No hay datos para este grupo. Presiona <b>Regenerar</b> para generar el dashboard.</div>';
+        }
+      });
+    }
+
     document.getElementById("sp-dash-refresh").addEventListener("click", function() {
       dashboardFrom = document.getElementById("sp-dash-from").value;
       dashboardTo = document.getElementById("sp-dash-to").value;
       dashboardData = null;
       clearDashboardCache();
-      overlay.remove();
+      var selectedGroupId = groupChangeEl ? parseInt(groupChangeEl.value) : getTeamConfig().resolutionGroupId;
+      m.close();
       var btn = document.getElementById(DASHBOARD_BTN_ID);
-      if (btn) btn.textContent = "📊 Dashboard";
-      handleDashboardClick();
+      generateDashboard(btn, selectedGroupId);
     });
   }
 
@@ -4272,8 +4358,8 @@
   const SUBGRUPO_DB = "36c20e0684b9800db6afe60707a87df7";
   function injectWaterButton() {
     if (document.getElementById(WATER_BTN_ID)) return;
-    var dashBtn = document.getElementById(DASHBOARD_BTN_ID);
-    if (!dashBtn) return;
+    var refBtn = document.getElementById(DASHBOARD_BTN_ID) || document.getElementById(SEARCH_BTN_ID);
+    if (!refBtn) return;
     // Only show if user is in at least one sub-group
     chrome.storage.local.get("userEmail", function(r) {
       var email = (r.userEmail || "").toLowerCase();
@@ -4298,7 +4384,7 @@
           if (!found) return;
           if (document.getElementById(WATER_BTN_ID)) return;
           var btn = createHeaderButton({ id: WATER_BTN_ID, icon: "🏠", label: "DBA Info", color: "#0288D1", onClick: showWaterModal });
-          dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
+          refBtn.parentElement.insertBefore(btn, refBtn.nextSibling);
         });
       });
     });
@@ -4952,11 +5038,12 @@
   // --- Suggested Comments Button ---
   const SUGGESTED_BTN_ID = "sp-suggested-btn";
   function injectSuggestedCommentsButton() {
+    if (!_btnComments) return;
     if (document.getElementById(SUGGESTED_BTN_ID)) return;
-    var dashBtn = document.getElementById(DASHBOARD_BTN_ID);
-    if (!dashBtn) return;
+    var refBtn = document.getElementById(DASHBOARD_BTN_ID) || document.getElementById(SEARCH_BTN_ID);
+    if (!refBtn) return;
     var btn = createHeaderButton({ id: SUGGESTED_BTN_ID, icon: "💬", label: "Comentarios", color: "#00897B", onClick: showSuggestedCommentsModal });
-    dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
+    refBtn.parentElement.insertBefore(btn, refBtn.nextSibling);
   }
 
   function showSuggestedCommentsModal() {
@@ -5087,12 +5174,13 @@
   var reportGenerating = false;
 
   function injectReportButton() {
+    if (!_btnReports) return;
     if (document.getElementById(REPORT_BTN_ID)) return;
-    var dashBtn = document.getElementById(DASHBOARD_BTN_ID);
-    if (!dashBtn) return;
+    var refBtn = document.getElementById(DASHBOARD_BTN_ID) || document.getElementById(SEARCH_BTN_ID);
+    if (!refBtn) return;
 
     var btn = createHeaderButton({ id: REPORT_BTN_ID, icon: "📥", label: "Reporte Excel", color: "#1565C0", onClick: handleReportClick });
-    dashBtn.parentElement.insertBefore(btn, dashBtn.nextSibling);
+    refBtn.parentElement.insertBefore(btn, refBtn.nextSibling);
   }
 
   async function handleReportClick() {
@@ -5216,9 +5304,10 @@
   const MONDAY_STATS_BTN_ID = "sp-monday-stats-btn";
 
   function injectMondayStatsButton() {
+    if (!canMigrateMonday) return;
     if (document.getElementById(MONDAY_STATS_BTN_ID)) return;
-    var reportBtn = document.getElementById(REPORT_BTN_ID);
-    if (!reportBtn) return;
+    var refBtn = document.getElementById(REPORT_BTN_ID) || document.getElementById(DASHBOARD_BTN_ID) || document.getElementById(SEARCH_BTN_ID);
+    if (!refBtn) return;
 
     // Only show if Monday token is configured
     getMondayToken().then(function(token) {
@@ -5227,7 +5316,7 @@
         if (!boardId) return;
         if (document.getElementById(MONDAY_STATS_BTN_ID)) return;
         var btn = createHeaderButton({ id: MONDAY_STATS_BTN_ID, icon: "📈", label: "Monday Stats", color: "#1565C0", onClick: handleMondayStats });
-        reportBtn.parentElement.insertBefore(btn, reportBtn.nextSibling);
+        refBtn.parentElement.insertBefore(btn, refBtn.nextSibling);
       });
     });
   }
@@ -5884,7 +5973,7 @@
                 var bgColor = isMyComment ? "#e3f2fd" : "#f5f5f5";
                 var borderSide = isMyComment ? "border-right:3px solid #1976D2;" : "border-left:3px solid #90A4AE;";
                 return '<div style="display:flex;justify-content:' + align + ';margin-bottom:6px;">' +
-                  '<div class="sp-comment-bubble" style="max-width:80%;padding:6px 10px;background:' + bgColor + ';' + borderSide + 'border-radius:6px;font-size:0.85rem;">' +
+                  '<div class="sp-comment-bubble" style="width:100%;padding:6px 10px;background:' + bgColor + ';' + borderSide + 'border-radius:6px;font-size:0.85rem;">' +
                     '<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:2px;' + (isMyComment ? 'justify-content:flex-end;' : '') + '">' + '<span style="font-weight:600;font-size:0.8rem;">' + (c.fullName || "") + '</span>' + '<span style="color:#888;font-size:0.75rem;">' + cDate + '</span>' + addAttachBtn + '</div>' +
                     '<div style="color:#333;">' + cContent + '</div>' + cAttachHTML +
                   '</div></div>';
@@ -5922,6 +6011,9 @@
       }
       document.getElementById("sp-qd-close").addEventListener("click", closeQdModal);
       overlay.addEventListener("click", function(e) { if (e.target === overlay) closeQdModal(); });
+      document.addEventListener("keydown", function escHandler(e) {
+        if (e.key === "Escape" && document.getElementById("sp-quick-detail-modal")) { closeQdModal(); document.removeEventListener("keydown", escHandler); }
+      });
 
       // Auto-refresh comments every 30s
       _qdCommentsInterval = setInterval(function() {
@@ -5955,7 +6047,7 @@
               var bgColor = isMyComment ? "#e3f2fd" : "#f5f5f5";
               var borderSide = isMyComment ? "border-right:3px solid #1976D2;" : "border-left:3px solid #90A4AE;";
               return '<div style="display:flex;justify-content:' + align + ';margin-bottom:6px;">' +
-                '<div class="sp-comment-bubble" style="max-width:80%;padding:6px 10px;background:' + bgColor + ';' + borderSide + 'border-radius:6px;font-size:0.85rem;">' +
+                '<div class="sp-comment-bubble" style="width:100%;padding:6px 10px;background:' + bgColor + ';' + borderSide + 'border-radius:6px;font-size:0.85rem;">' +
                   '<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:2px;' + (isMyComment ? 'justify-content:flex-end;' : '') + '">' + '<span style="font-weight:600;font-size:0.8rem;">' + (c.fullName || "") + '</span>' + '<span style="color:#888;font-size:0.75rem;">' + cDate + '</span>' + addAttachBtn + '</div>' +
                   '<div style="color:#333;">' + cContent + '</div>' + cAttachHTML +
                 '</div></div>';
@@ -6093,7 +6185,7 @@
           if (noComments) noComments.remove();
           var attachLabel = uploadedFileNames.length ? ' <div style="margin-top:3px;">' + uploadedFileNames.map(function(n) { return '<span style="color:#1976D2;font-size:10px;">📎 ' + n + '</span>'; }).join(" ") + '</div>' : '';
           list.innerHTML += '<div style="display:flex;justify-content:flex-end;margin-bottom:6px;">' +
-            '<div style="max-width:80%;padding:6px 10px;background:#e3f2fd;border-right:3px solid #1976D2;border-radius:6px;font-size:0.85rem;">' +
+            '<div style="width:100%;padding:6px 10px;background:#e3f2fd;border-right:3px solid #1976D2;border-radius:6px;font-size:0.85rem;">' +
               '<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:2px;"><span style="font-weight:600;font-size:0.8rem;">' + myName.split(" ")[0] + '</span><span style="color:#888;font-size:0.75rem;">' + nowStr + '</span></div>' +
               '<div style="color:#333;">' + commentText + '</div>' + attachLabel +
             '</div></div>';
