@@ -132,6 +132,14 @@
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
+  // Deterministic color from string (same string = same color always)
+  function stringToColor(str) {
+    var hash = 0;
+    for (var i = 0; i < str.length; i++) { hash = str.charCodeAt(i) + ((hash << 5) - hash); }
+    var hue = Math.abs(hash) % 360;
+    return { bg: "hsl(" + hue + ",35%,90%)", border: "hsl(" + hue + ",45%,65%)", text: "hsl(" + hue + ",50%,30%)" };
+  }
+
   var currentUserRole = "usuario";
   var currentViewMode = null; // null = use own role's view
   var currentUserGroups = []; // Groups from Notion
@@ -377,8 +385,20 @@
       // Set drag and drop permission from sub-group
       canDragDrop = !!userData.canDragDrop;
 
-      return userData.role;
-    } catch(e) { return "usuario"; }
+      // Load user config from Notion (direct, not depending on background timing)
+      if (userData.notionPageId) {
+        chrome.runtime.sendMessage({ type: "notion-query", dbId: "37320e0684b9806b84ecc4aae906f645", body: { filter: { property: "Usuario", relation: { contains: userData.notionPageId } }, page_size: 1 } }, function(resp) {
+          if (resp && resp.success && resp.data.results && resp.data.results[0]) {
+            var cfgPage = resp.data.results[0];
+            var onlyWithTickets = cfgPage.properties.MostrarSoloConTickets?.checkbox || false;
+            var blacklistRels = cfgPage.properties.BlackList?.relation || [];
+            chrome.storage.local.set({ userConfig: { pageId: cfgPage.id, onlyWithTickets: onlyWithTickets, blacklist: blacklistRels.map(function(r) { return r.id; }) } });
+          }
+        });
+      }
+
+      return { role: userData.role, roleName: userData.roleName || userData.role };
+    } catch(e) { return { role: "usuario", roleName: "Usuario" }; }
   }
 
   // Resolve profileId from session name at startup (called once after teamArea is loaded)
@@ -412,14 +432,35 @@
     return el ? el.textContent.trim() : "";
   }
 
-  checkSession().then(function(role) {
-    if (role === null) { showAccessMessage("⚠️ Usuario no registrado en SupportPlus Tools. Solicite su alta con el administrador."); return; }
-    if (role === "inactive") { showAccessMessage("⚠️ Usuario inactivo en SupportPlus Tools. Solicite su reactivación con el administrador."); return; }
+  checkSession().then(function(result) {
+    if (result === null) { showAccessMessage("⚠️ Usuario no registrado en SupportPlus Tools. Solicite su alta con el administrador."); return; }
+    if (result === "inactive") { showAccessMessage("⚠️ Usuario inactivo en SupportPlus Tools. Solicite su reactivación con el administrador."); return; }
+    var role = result.role || result;
+    var roleName = result.roleName || role;
     currentUserRole = role;
     // Admin: restore saved view mode
     if (role === "admin") {
       currentViewMode = localStorage.getItem("sp_view_mode") || null;
     }
+    // Inject role label below user name in header
+    (function() {
+      var displayRole = roleName.charAt(0).toUpperCase() + roleName.slice(1);
+      var tries = 0;
+      var iv = setInterval(function() {
+        var wrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
+        if (!wrapper && tries < 20) { tries++; return; }
+        clearInterval(iv);
+        if (!wrapper || document.getElementById("sp-role-label")) return;
+        var nameEl = wrapper.querySelector("p");
+        if (!nameEl) return;
+        var roleLabel = document.createElement("span");
+        roleLabel.id = "sp-role-label";
+        roleLabel.textContent = displayRole;
+        roleLabel.style.cssText = "display:block;font-size:11px;color:#fff;opacity:0.6;font-weight:400;margin-top:2px;text-transform:uppercase;text-align:right;";
+        nameEl.appendChild(document.createElement("br"));
+        nameEl.appendChild(roleLabel);
+      }, 300);
+    })();
     initByRole();
   });
 
@@ -1000,12 +1041,14 @@
           if (countEl) countEl.textContent = "(" + tickets.length + ")";
 
           // Hide column if "only with tickets" is enabled and no tickets
-          var col = listEl.closest("[style*='border-radius:6px']");
-          chrome.storage.local.get("onlyWithTickets", function(cfg) {
-            if (cfg.onlyWithTickets && !tickets.length && col) {
-              col.style.display = "none";
-            }
-          });
+          if (!tickets.length) {
+            chrome.storage.local.get("userConfig", function(cfg) {
+              if (cfg.userConfig && cfg.userConfig.onlyWithTickets) {
+                var col = listEl.parentElement;
+                if (col) col.style.display = "none";
+              }
+            });
+          }
 
           if (!tickets.length) {
             listEl.innerHTML = '<div style="text-align:center;padding:6px;color:#aaa;font-size:10px;">Sin tickets</div>';
@@ -1332,18 +1375,17 @@
 
   // --- UI ---
   function createSyncedBadge(mondayItemId) {
-    const badge = document.createElement("span");
-    badge.className = SYNCED_CLASS;
-    badge.textContent = "✅ Migrado";
-    badge.title = "Ya migrado a Monday";
-    badge.style.cssText = "display:inline-block;padding:2px 8px;font-size:11px;border:1px solid #2E7D32;border-radius:4px;background:#E8F5E9;color:#2E7D32;font-weight:600;margin-left:6px;white-space:nowrap;cursor:pointer;line-height:normal;box-sizing:border-box;";
-    badge.addEventListener("mouseenter", () => { badge.textContent = "🔗 Monday"; });
-    badge.addEventListener("mouseleave", () => { badge.textContent = "✅ Migrado"; });
-    badge.addEventListener("click", (e) => {
-      e.stopPropagation(); e.preventDefault();
-      window.open(`https://macropay7.monday.com/boards/18402162782/pulses/${mondayItemId}`, "_blank");
-    });
-    return badge;
+    // Instead of a badge, we return a small link that sits next to the ticket button
+    // The green border is applied to the row's uniqueCode cell
+    const link = document.createElement("a");
+    link.className = SYNCED_CLASS;
+    link.href = "https://macropay7.monday.com/boards/18402162782/pulses/" + mondayItemId;
+    link.target = "_blank";
+    link.textContent = "↗";
+    link.title = "Ver en Monday";
+    link.style.cssText = "display:inline-flex;align-items:center;justify-content:center;width:0;opacity:0;overflow:hidden;font-size:11px;font-weight:700;color:#fff;background:#2E7D32;border-radius:0 4px 4px 0;text-decoration:none;transition:width 0.25s cubic-bezier(0.4,0,0.2,1),opacity 0.25s ease,padding 0.25s ease;padding:4px 0;margin-left:-1px;cursor:pointer;height:100%;box-sizing:border-box;vertical-align:middle;";
+    link.addEventListener("click", function(e) { e.stopPropagation(); });
+    return link;
   }
 
   function createCopyButton(text) {
@@ -2951,7 +2993,17 @@
       if ((status === "Asignado" || status === "En atención") && responsible && myName && responsible === myName) cell.appendChild(createCloseButton(id));
       if ((status === "Asignado" || status === "En atención") && responsible && myName && responsible !== myName) cell.appendChild(createStealButton(id, responsible));
       if (status === "Cerrado") {
-        if (code && synced[code]) cell.appendChild(createSyncedBadge(synced[code]));
+        if (code && synced[code]) {
+          // Green border on ticket button + expandable Monday link
+          var ticketBtn = cell.querySelector("p.MuiTypography-body1") || cell.querySelector("a") || cell;
+          if (ticketBtn) ticketBtn.style.cssText += ";border:2px solid #2E7D32;border-radius:4px;padding:2px 6px;";
+          var mondayLink = createSyncedBadge(synced[code]);
+          cell.appendChild(mondayLink);
+          // Hover on the cell expands the link
+          cell.addEventListener("mouseenter", function() { mondayLink.style.width = "24px"; mondayLink.style.opacity = "1"; mondayLink.style.padding = "4px 6px"; });
+          cell.addEventListener("mouseleave", function() { mondayLink.style.width = "0"; mondayLink.style.opacity = "0"; mondayLink.style.padding = "4px 0"; });
+          row.style.borderLeft = "3px solid #2E7D32";
+        }
         else {
           // Check if ticket date matches board
           var dateCell = cell.closest("tr")?.querySelector("td:nth-child(2)");
@@ -3755,8 +3807,8 @@
       var onlyWithTicketsEl = document.getElementById("sp-cfg-only-with-tickets");
 
       // Load user config
-      chrome.storage.local.get(["onlyWithTickets"], function(cfg) {
-        if (cfg.onlyWithTickets) onlyWithTicketsEl.checked = true;
+      chrome.storage.local.get(["userConfig"], function(cfg) {
+        if (cfg.userConfig && cfg.userConfig.onlyWithTickets) onlyWithTicketsEl.checked = true;
       });
 
       function loadMembersForConfig(groupId) {
@@ -3840,7 +3892,7 @@
         var boardName = document.getElementById("sp-cfg-board-search").value.trim();
         var area = document.getElementById("sp-cfg-area").value;
         var onlyWithTickets = onlyWithTicketsEl.checked;
-        var saveData = { mondayToken: token, mondayBoardId: boardId, mondayBoardName: boardName, teamArea: area, onlyWithTickets: onlyWithTickets };
+        var saveData = { mondayToken: token, mondayBoardId: boardId, mondayBoardName: boardName, teamArea: area };
         // Save visible members (checked ones) as blacklist (unchecked = blacklisted)
         var memberChecks = membersDiv.querySelectorAll('input[data-pid]');
         var blacklistIds = [];
@@ -3878,12 +3930,21 @@
             if (notionPageId) {
               // Update existing
               chrome.runtime.sendMessage({ type: "notion-update", pageId: notionPageId, body: { properties: props } });
-            } else if (userNotionId) {
-              // Create new
-              chrome.runtime.sendMessage({ type: "notion-create", body: {
-                parent: { database_id: "37320e0684b9806b84ecc4aae906f645" },
-                properties: Object.assign({ "Nombre": { title: [{ text: { content: email } }] }, "Usuario": { relation: [{ id: userNotionId }] } }, props)
-              }});
+            } else {
+              // Search if config already exists for this user before creating
+              chrome.runtime.sendMessage({ type: "notion-query", dbId: "37320e0684b9806b84ecc4aae906f645", body: { filter: { property: "Nombre", title: { equals: email } }, page_size: 1 } }, function(searchResp) {
+                if (searchResp && searchResp.success && searchResp.data.results && searchResp.data.results.length) {
+                  // Found existing - update it
+                  var existingId = searchResp.data.results[0].id;
+                  chrome.runtime.sendMessage({ type: "notion-update", pageId: existingId, body: { properties: props } });
+                } else if (userNotionId) {
+                  // Create new
+                  chrome.runtime.sendMessage({ type: "notion-create", body: {
+                    parent: { database_id: "37320e0684b9806b84ecc4aae906f645" },
+                    properties: Object.assign({ "Nombre": { title: [{ text: { content: email } }] }, "Usuario": { relation: [{ id: userNotionId }] } }, props)
+                  }});
+                }
+              });
             }
             // Save locally too
             saveData.userConfig = { pageId: notionPageId, onlyWithTickets: onlyWithTickets, blacklist: blacklistIds };
@@ -4401,15 +4462,17 @@
         }
       });
 
-      // Get all unique members from all sub-groups the user can see
-      var memberIds = {};
-      if (sgAgua && userInAgua) sgAgua.members.forEach(function(id) { memberIds[id] = true; });
-      if (sgChesco && userInChesco) sgChesco.members.forEach(function(id) { memberIds[id] = true; });
-      if (sgCumple && userInCumple) sgCumple.members.forEach(function(id) { memberIds[id] = true; });
+      // Get all unique members respecting the order from the water sub-group
+      var orderedMemberIds = [];
+      var seenIds = {};
+      // First: use the water sub-group order as primary
+      if (sgAgua && userInAgua) sgAgua.members.forEach(function(id) { if (!seenIds[id]) { orderedMemberIds.push(id); seenIds[id] = true; } });
+      // Then add members from other sub-groups that aren't already in the list
+      if (sgChesco && userInChesco) sgChesco.members.forEach(function(id) { if (!seenIds[id]) { orderedMemberIds.push(id); seenIds[id] = true; } });
+      if (sgCumple && userInCumple) sgCumple.members.forEach(function(id) { if (!seenIds[id]) { orderedMemberIds.push(id); seenIds[id] = true; } });
 
-      // Build user list from members
-      var users = Object.keys(memberIds).map(function(id) { return allUserPages[id]; }).filter(Boolean);
-      users.sort(function(a, b) { return a.nombre.localeCompare(b.nombre); });
+      // Build user list from members in order
+      var users = orderedMemberIds.map(function(id) { return allUserPages[id]; }).filter(Boolean);
 
       // Build table
       var overlay = document.createElement("div");
@@ -5760,12 +5823,12 @@
             var closeHTML = '<div style="margin-bottom:8px;">' +
               '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">' +
                 '<button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🔒 Cerrar</button>' +
+                (holderEmail && holderEmail.toLowerCase() !== getLoggedUserEmail().toLowerCase() ? '<button id="sp-qd-steal-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#C62828;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🤚 Tomar</button>' : '') +
               '</div>' +
               '<div id="sp-qd-close-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:0.9rem;">' +
                 '<label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label>' +
                 '<div style="display:flex;gap:4px;align-items:flex-start;"><textarea id="sp-qd-close-comment" placeholder="Comentario de cierre..." style="flex:1;padding:5px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea><label style="padding:6px 8px;border:1px solid #ddd;border-radius:4px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-close-attach" type="file" multiple style="display:none;"></label></div>' +
                 '<div id="sp-qd-close-attach-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;"></div>' +
-                (holderEmail && holderEmail.toLowerCase() !== getLoggedUserEmail().toLowerCase() ? '<label style="display:flex;align-items:center;gap:4px;margin-bottom:6px;font-size:0.85rem;cursor:pointer;color:#D94040;"><input type="checkbox" id="sp-qd-steal-check"> Robar ticket (autoasignarme antes de cerrar)</label>' : '') +
                 '<div style="display:flex;gap:6px;"><button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">Confirmar</button><button id="sp-qd-close-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:0.9rem;font-weight:600;">Cancelar</button></div>' +
                 '<div id="sp-qd-close-suggested" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;"></div>' +
               '</div>' +
@@ -5814,11 +5877,17 @@
                   cAttachHTML += '</div>';
                 }
                 var myName = getLoggedUserName();
-                var isMyComment = c.fullName === myName;
+                var myEmail = getLoggedUserEmail();
+                var isMyComment = (c.email && myEmail && c.email.toLowerCase() === myEmail.toLowerCase()) || c.fullName === myName;
                 var addAttachBtn = isMyComment ? ' <label class="sp-qd-add-attach" data-comment-id="' + c.id + '" style="cursor:pointer;font-size:12px;opacity:0.6;margin-left:4px;" title="Adjuntar evidencia">📎<input type="file" multiple style="display:none;"></label>' : '';
-                return '<div style="padding:5px 8px;background:#f9f9f9;border-left:3px solid #1976D2;border-radius:4px;font-size:0.9rem;margin-bottom:4px;">' +
-                  '<div style="display:flex;justify-content:space-between;align-items:center;"><b>' + (c.fullName || "") + '</b><span style="color:#888;font-size:0.8rem;">' + cDate + addAttachBtn + '</span></div>' +
-                  '<div style="color:#555;margin-top:2px;">' + cContent + '</div>' + cAttachHTML + '</div>';
+                var align = isMyComment ? "flex-end" : "flex-start";
+                var bgColor = isMyComment ? "#e3f2fd" : "#f5f5f5";
+                var borderSide = isMyComment ? "border-right:3px solid #1976D2;" : "border-left:3px solid #90A4AE;";
+                return '<div style="display:flex;justify-content:' + align + ';margin-bottom:6px;">' +
+                  '<div class="sp-comment-bubble" style="max-width:80%;padding:6px 10px;background:' + bgColor + ';' + borderSide + 'border-radius:6px;font-size:0.85rem;">' +
+                    '<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:2px;' + (isMyComment ? 'justify-content:flex-end;' : '') + '">' + '<span style="font-weight:600;font-size:0.8rem;">' + (c.fullName || "") + '</span>' + '<span style="color:#888;font-size:0.75rem;">' + cDate + '</span>' + addAttachBtn + '</div>' +
+                    '<div style="color:#333;">' + cContent + '</div>' + cAttachHTML +
+                  '</div></div>';
               }).join("") : '<div style="color:#aaa;font-size:0.9rem;padding:4px;">Sin comentarios</div>') +
             '</div>' +
             // Add comment form (hide if closed, unless DBA)
@@ -5871,7 +5940,8 @@
               var cDate = c.createdAt ? c.createdAt.replace("T", " ").substring(0, 16) : "";
               var cContent = (c.content || "").replace(/<script[^>]*>.*?<\/script>/gi, "");
               var myName = getLoggedUserName();
-              var isMyComment = c.fullName === myName;
+              var myEmail = getLoggedUserEmail();
+              var isMyComment = (c.email && myEmail && c.email.toLowerCase() === myEmail.toLowerCase()) || c.fullName === myName;
               var cAttachHTML = "";
               if (c.attachments && c.attachments.length) {
                 cAttachHTML = '<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;">';
@@ -5881,9 +5951,14 @@
                 cAttachHTML += '</div>';
               }
               var addAttachBtn = isMyComment ? ' <label class="sp-qd-add-attach" data-comment-id="' + c.id + '" style="cursor:pointer;font-size:12px;opacity:0.6;margin-left:4px;" title="Adjuntar evidencia">📎<input type="file" multiple style="display:none;"></label>' : '';
-              return '<div style="padding:5px 8px;background:#f9f9f9;border-left:3px solid #1976D2;border-radius:4px;font-size:0.9rem;margin-bottom:4px;">' +
-                '<div style="display:flex;justify-content:space-between;align-items:center;"><b>' + (c.fullName || "") + '</b><span style="color:#888;font-size:0.8rem;">' + cDate + addAttachBtn + '</span></div>' +
-                '<div style="color:#555;margin-top:2px;">' + cContent + '</div>' + cAttachHTML + '</div>';
+              var align = isMyComment ? "flex-end" : "flex-start";
+              var bgColor = isMyComment ? "#e3f2fd" : "#f5f5f5";
+              var borderSide = isMyComment ? "border-right:3px solid #1976D2;" : "border-left:3px solid #90A4AE;";
+              return '<div style="display:flex;justify-content:' + align + ';margin-bottom:6px;">' +
+                '<div class="sp-comment-bubble" style="max-width:80%;padding:6px 10px;background:' + bgColor + ';' + borderSide + 'border-radius:6px;font-size:0.85rem;">' +
+                  '<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:2px;' + (isMyComment ? 'justify-content:flex-end;' : '') + '">' + '<span style="font-weight:600;font-size:0.8rem;">' + (c.fullName || "") + '</span>' + '<span style="color:#888;font-size:0.75rem;">' + cDate + '</span>' + addAttachBtn + '</div>' +
+                  '<div style="color:#333;">' + cContent + '</div>' + cAttachHTML +
+                '</div></div>';
             }).join("");
             list.innerHTML = html || '<div style="color:#aaa;font-size:0.9rem;padding:4px;">Sin comentarios</div>';
           }).catch(function() {});
@@ -5894,6 +5969,8 @@
       if (actionsContainer) {
         var closeBtn = document.getElementById("sp-qd-close-btn");
         if (closeBtn) { closeBtn.style.padding = "5px 10px"; closeBtn.style.fontSize = "11px"; actionsContainer.appendChild(closeBtn); }
+        var stealBtn = document.getElementById("sp-qd-steal-btn");
+        if (stealBtn) { stealBtn.style.padding = "5px 10px"; stealBtn.style.fontSize = "11px"; actionsContainer.appendChild(stealBtn); }
         var takeBtn = document.getElementById("sp-qd-take-btn");
         if (takeBtn) { takeBtn.style.padding = "5px 10px"; actionsContainer.appendChild(takeBtn); }
         var migrateBtn = document.getElementById("sp-qd-migrate-btn");
@@ -6015,9 +6092,11 @@
           var noComments = list.querySelector('[style*="color:#aaa"]');
           if (noComments) noComments.remove();
           var attachLabel = uploadedFileNames.length ? ' <div style="margin-top:3px;">' + uploadedFileNames.map(function(n) { return '<span style="color:#1976D2;font-size:10px;">📎 ' + n + '</span>'; }).join(" ") + '</div>' : '';
-          list.innerHTML += '<div style="padding:5px 8px;background:#e3f2fd;border-left:3px solid #1976D2;border-radius:4px;font-size:11px;margin-bottom:4px;">' +
-            '<div style="display:flex;justify-content:space-between;"><b>' + myName + '</b><span style="color:#888;font-size:10px;">' + nowStr + '</span></div>' +
-            '<div style="color:#555;margin-top:2px;">' + commentText + '</div>' + attachLabel + '</div>';
+          list.innerHTML += '<div style="display:flex;justify-content:flex-end;margin-bottom:6px;">' +
+            '<div style="max-width:80%;padding:6px 10px;background:#e3f2fd;border-right:3px solid #1976D2;border-radius:6px;font-size:0.85rem;">' +
+              '<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:2px;"><span style="font-weight:600;font-size:0.8rem;">' + myName.split(" ")[0] + '</span><span style="color:#888;font-size:0.75rem;">' + nowStr + '</span></div>' +
+              '<div style="color:#333;">' + commentText + '</div>' + attachLabel +
+            '</div></div>';
           list.scrollTop = list.scrollHeight;
           input.value = "";
           pendingFiles = [];
@@ -6126,7 +6205,7 @@
               var chip = document.createElement("button");
               chip.textContent = c.text.substring(0, 40) + (c.text.length > 40 ? "..." : "");
               chip.title = c.text;
-              chip.style.cssText = "padding:3px 8px;font-size:10px;border:1px solid #90CAF9;border-radius:12px;background:#E3F2FD;color:#1565C0;cursor:pointer;white-space:nowrap;";
+              var colors = stringToColor(c.text); chip.style.cssText = "padding:3px 8px;font-size:0.8rem;border:1px solid " + colors.border + ";border-radius:12px;background:" + colors.bg + ";color:" + colors.text + ";cursor:pointer;white-space:nowrap;";
               chip.addEventListener("click", function() {
                 var takeComment = document.getElementById("sp-qd-take-comment");
                 var takeCloseComment = document.getElementById("sp-qd-take-close-comment");
@@ -6156,7 +6235,7 @@
       overlay.querySelectorAll(".sp-qd-add-attach").forEach(function(label) {
         var fileInput = label.querySelector("input[type=file]");
         var commentId = label.dataset.commentId;
-        var commentDiv = label.closest("div[style*='border-left']");
+        var commentDiv = label.closest(".sp-comment-bubble");
 
         // Make comment clickable to select it for paste
         if (commentDiv) {
@@ -6165,8 +6244,7 @@
             if (e.target.tagName === "INPUT" || e.target.tagName === "LABEL" || e.target.tagName === "BUTTON") return;
             // Deselect others
             overlay.querySelectorAll("[data-sp-selected-comment]").forEach(function(el) {
-              el.style.border = "";
-              el.style.background = "#f9f9f9";
+              el.style.outline = "";
               el.removeAttribute("data-sp-selected-comment");
             });
             // Remove existing paste preview
@@ -6179,8 +6257,7 @@
             }
             _selectedCommentId = commentId;
             commentDiv.setAttribute("data-sp-selected-comment", "1");
-            commentDiv.style.border = "2px solid #1976D2";
-            commentDiv.style.background = "#e3f2fd";
+            commentDiv.style.outline = "2px solid #1976D2";
           });
         }
 
@@ -6677,6 +6754,30 @@
           for (var i = 0; i < items.length; i++) { if (items[i].type.indexOf("image") !== -1) { var f = items[i].getAsFile(); if (f) { closePendingFiles.push(new File([f], "clipboard_" + Date.now() + ".png", { type: f.type })); renderCloseFiles(); } e.preventDefault(); break; } }
         }); }
 
+        // Steal/Take button (when ticket assigned to someone else)
+        var stealBtnEl = document.getElementById("sp-qd-steal-btn");
+        if (stealBtnEl) {
+          stealBtnEl.addEventListener("click", async function() {
+            stealBtnEl.disabled = true;
+            stealBtnEl.textContent = "⏳ Tomando...";
+            try {
+              var myProfId = await getMyProfileId();
+              if (!myProfId) throw new Error("No se pudo obtener tu perfil");
+              await fetch(SP_API + "/reassign/" + ticketId, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                body: JSON.stringify({ resolutionGroupId: getTeamConfig().resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId } }),
+              });
+              showSuccessToast("Ticket tomado");
+              showQuickDetailModal(ticketId);
+            } catch(e) {
+              showErrorToast("Error: " + e.message);
+              stealBtnEl.textContent = "🤚 Tomar";
+              stealBtnEl.disabled = false;
+            }
+          });
+        }
+
         var closeConfirmBtn = document.getElementById("sp-qd-close-confirm");
         if (closeConfirmBtn) {
           closeConfirmBtn.addEventListener("click", async function() {
@@ -6718,18 +6819,6 @@
                     method: "PUT",
                     headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
                     body: JSON.stringify({ resolutionGroupId: getTeamConfig().resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId } }),
-                  });
-                }
-              }
-              // Steal: if checkbox is marked, reassign to me before closing
-              var stealCheck = document.getElementById("sp-qd-steal-check");
-              if (stealCheck && stealCheck.checked) {
-                var stealProfId = await getMyProfileId();
-                if (stealProfId) {
-                  await fetch(SP_API + "/reassign/" + ticketId, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                    body: JSON.stringify({ resolutionGroupId: getTeamConfig().resolutionGroupId, serviceId: null, responsibleProfileId: stealProfId, resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId } }),
                   });
                 }
               }
@@ -6850,7 +6939,7 @@
             var isText = /\.(txt|sql|csv|json|xml|log|md|yml|yaml|ini|conf|sh|bat|ps1|py|js|ts|html|css|env)$/i.test(fileName);
             var contentHTML = '';
             if (isImage) {
-              contentHTML = '<img src="' + url + '" style="max-width:90vw;max-height:80vh;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">';
+              contentHTML = '<img src="' + url + '" style="max-width:90vw;max-height:80vh;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:block;margin:0 auto;">';
             } else if (isPdf) {
               contentHTML = '<iframe src="' + url + '" style="width:90vw;height:85vh;border:none;border-radius:8px;"></iframe>';
             } else if (isText) {
@@ -6902,7 +6991,7 @@
             } else {
               contentHTML = '<div style="background:#fff;padding:24px;border-radius:8px;text-align:center;"><p style="margin:0 0 12px;font-size:14px;">No se puede previsualizar: <b>' + fileName + '</b></p><a href="' + url + '" download="' + fileName + '" style="padding:8px 16px;background:#1976D2;color:#fff;border-radius:6px;text-decoration:none;font-size:13px;">📥 Descargar</a></div>';
             }
-            fileModal.innerHTML = '<div class="sp-file-content" style="transform:scale(0.85) translateY(20px);opacity:0;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1),opacity 0.3s ease;"><div style="display:flex;justify-content:flex-end;width:90vw;margin-bottom:8px;gap:8px;">' + (isText ? '<button id="sp-file-copy-text" style="padding:6px 14px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">📋 Copiar</button>' : '') + '<a id="sp-file-download" href="' + url + '" download="' + fileName + '" style="padding:6px 14px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:13px;text-decoration:none;">📥 Descargar</a><button id="sp-file-close" style="padding:6px 14px;border:none;border-radius:6px;background:rgba(255,255,255,0.9);cursor:pointer;font-size:13px;">✕ Cerrar</button></div>' + contentHTML + '</div>';
+            fileModal.innerHTML = '<div class="sp-file-content" style="transform:scale(0.85) translateY(20px);opacity:0;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1),opacity 0.3s ease;display:flex;flex-direction:column;align-items:center;"><div style="display:flex;justify-content:flex-end;width:90vw;margin-bottom:8px;gap:8px;">' + (isText ? '<button id="sp-file-copy-text" style="padding:6px 14px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">📋 Copiar</button>' : '') + '<a id="sp-file-download" href="' + url + '" download="' + fileName + '" style="padding:6px 14px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:13px;text-decoration:none;">📥 Descargar</a><button id="sp-file-close" style="padding:6px 14px;border:none;border-radius:6px;background:rgba(255,255,255,0.9);cursor:pointer;font-size:13px;">✕ Cerrar</button></div>' + contentHTML + '</div>';
             document.body.appendChild(fileModal);
             // Trigger animation
             requestAnimationFrame(function() {
@@ -7577,7 +7666,7 @@
               var chip = document.createElement("button");
               chip.textContent = c.text.substring(0, 40) + (c.text.length > 40 ? "..." : "");
               chip.title = c.text;
-              chip.style.cssText = "padding:3px 8px;font-size:10px;border:1px solid #90CAF9;border-radius:12px;background:#E3F2FD;color:#1565C0;cursor:pointer;white-space:nowrap;";
+              var colors = stringToColor(c.text); chip.style.cssText = "padding:3px 8px;font-size:0.8rem;border:1px solid " + colors.border + ";border-radius:12px;background:" + colors.bg + ";color:" + colors.text + ";cursor:pointer;white-space:nowrap;";
               chip.addEventListener("click", function() {
                 if (commentInputEl) { commentInputEl.value = c.text; commentInputEl.focus(); }
               });

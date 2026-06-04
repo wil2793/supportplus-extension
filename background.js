@@ -96,7 +96,7 @@ async function syncNotionData() {
       const mondayFolderId = (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].mondayFolderId : "";
       const mondayWorkspaceId = (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].mondayWorkspaceId : "";
 
-      usersMap[email] = { name: nombre, role: mappedRole, groups: finalGroups, profileId, active, canMigrate, mondayFolderId, mondayWorkspaceId, notionPageId: u.id };
+      usersMap[email] = { name: nombre, role: mappedRole, roleName: roleName, groups: finalGroups, profileId, active, canMigrate, mondayFolderId, mondayWorkspaceId, notionPageId: u.id };
     }
 
     // Check sub-groups for permissions (Drag And Drop)
