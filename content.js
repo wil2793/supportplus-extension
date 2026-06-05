@@ -373,7 +373,20 @@
 
       // Find user in Notion data
       var userData = notionData[email];
-      if (!userData) return null; // Not in Notion = no access
+      if (!userData) {
+        // Auto-create user in Notion with Activo = false
+        try {
+          chrome.runtime.sendMessage({ type: "notion-create", body: {
+            parent: { database_id: "36620e0684b98051a190e51d38d97288" },
+            properties: {
+              "Nombre": { title: [{ text: { content: sessionUserName || email } }] },
+              "Correo": { rich_text: [{ text: { content: email } }] },
+              "Activo": { checkbox: false }
+            }
+          }});
+        } catch(e) {}
+        return "inactive";
+      }
       if (!userData.active) return "inactive";
 
       // Set profileId
@@ -6666,7 +6679,7 @@
                 var res = await fetch(SP_API + "/reassign/" + ticketId, {
                   method: "PUT",
                   headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                  body: JSON.stringify({ resolutionGroupId: teamConfig.resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: teamConfig.resolutionGroupLabel, value: teamConfig.resolutionGroupId } }),
+                  body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id || 19, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id || 19 } }),
                 });
                 if (!res.ok) throw new Error("HTTP " + res.status);
                 // Post comment separately
@@ -6696,7 +6709,7 @@
                 var res = await fetch(SP_API + "/reassign/" + ticketId, {
                   method: "PUT",
                   headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                  body: JSON.stringify({ resolutionGroupId: teamConfig.resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: teamConfig.resolutionGroupLabel, value: teamConfig.resolutionGroupId }, ticketCommentRequest: { internal: false, content: comment } }),
+                  body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id || 19, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id || 19 }, ticketCommentRequest: { internal: false, content: comment } }),
                 });
                 if (!res.ok) throw new Error("HTTP " + res.status);
                 var json2 = await res.json();
@@ -6769,7 +6782,7 @@
             var res = await fetch(SP_API + "/reassign/" + ticketId, {
               method: "PUT",
               headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-              body: JSON.stringify({ resolutionGroupId: teamConfig.resolutionGroupId, serviceId: null, responsibleProfileId: parseInt(selectedId), resolutionGroup: { label: teamConfig.resolutionGroupLabel, value: teamConfig.resolutionGroupId }, ticketCommentRequest: { internal: false, content: comment } }),
+              body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id || 19, serviceId: null, responsibleProfileId: parseInt(selectedId), resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id || 19 }, ticketCommentRequest: { internal: false, content: comment } }),
             });
             if (!res.ok) throw new Error("HTTP " + res.status);
             var json2 = await res.json();
@@ -6871,7 +6884,7 @@
               await fetch(SP_API + "/reassign/" + ticketId, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                body: JSON.stringify({ resolutionGroupId: getTeamConfig().resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId } }),
+                body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id || 19, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id || 19 } }),
               });
               showSuccessToast("Ticket tomado");
               showQuickDetailModal(ticketId);
@@ -6923,7 +6936,7 @@
                   await fetch(SP_API + "/reassign/" + ticketId, {
                     method: "PUT",
                     headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                    body: JSON.stringify({ resolutionGroupId: getTeamConfig().resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId } }),
+                    body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id || 19, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id || 19 } }),
                   });
                 }
               }
