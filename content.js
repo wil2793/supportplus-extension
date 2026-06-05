@@ -5992,7 +5992,7 @@
                 var bgColor = isMyComment ? "#e3f2fd" : "#f5f5f5";
                 var borderSide = isMyComment ? "border-right:3px solid #1976D2;" : "border-left:3px solid #90A4AE;";
                 return '<div style="display:flex;justify-content:' + align + ';margin-bottom:6px;">' +
-                  '<div class="sp-comment-bubble" style="width:100%;padding:6px 10px;background:' + bgColor + ';' + borderSide + 'border-radius:6px;font-size:0.85rem;">' +
+                  '<div class="sp-comment-bubble" style="max-width:85%;padding:6px 10px;background:' + bgColor + ';' + borderSide + 'border-radius:6px;font-size:0.85rem;">' +
                     '<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:2px;' + (isMyComment ? 'justify-content:flex-end;' : '') + '">' + '<span style="font-weight:600;font-size:0.8rem;">' + (c.fullName || "") + '</span>' + '<span style="color:#888;font-size:0.75rem;">' + cDate + '</span>' + addAttachBtn + '</div>' +
                     '<div style="color:#333;">' + cContent + '</div>' + cAttachHTML +
                   '</div></div>';
@@ -6066,7 +6066,7 @@
               var bgColor = isMyComment ? "#e3f2fd" : "#f5f5f5";
               var borderSide = isMyComment ? "border-right:3px solid #1976D2;" : "border-left:3px solid #90A4AE;";
               return '<div style="display:flex;justify-content:' + align + ';margin-bottom:6px;">' +
-                '<div class="sp-comment-bubble" style="width:100%;padding:6px 10px;background:' + bgColor + ';' + borderSide + 'border-radius:6px;font-size:0.85rem;">' +
+                '<div class="sp-comment-bubble" style="max-width:85%;padding:6px 10px;background:' + bgColor + ';' + borderSide + 'border-radius:6px;font-size:0.85rem;">' +
                   '<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:2px;' + (isMyComment ? 'justify-content:flex-end;' : '') + '">' + '<span style="font-weight:600;font-size:0.8rem;">' + (c.fullName || "") + '</span>' + '<span style="color:#888;font-size:0.75rem;">' + cDate + '</span>' + addAttachBtn + '</div>' +
                   '<div style="color:#333;">' + cContent + '</div>' + cAttachHTML +
                 '</div></div>';
@@ -6204,7 +6204,7 @@
           if (noComments) noComments.remove();
           var attachLabel = uploadedFileNames.length ? ' <div style="margin-top:3px;">' + uploadedFileNames.map(function(n) { return '<span style="color:#1976D2;font-size:10px;">📎 ' + n + '</span>'; }).join(" ") + '</div>' : '';
           list.innerHTML += '<div style="display:flex;justify-content:flex-end;margin-bottom:6px;">' +
-            '<div style="width:100%;padding:6px 10px;background:#e3f2fd;border-right:3px solid #1976D2;border-radius:6px;font-size:0.85rem;">' +
+            '<div style="max-width:85%;padding:6px 10px;background:#e3f2fd;border-right:3px solid #1976D2;border-radius:6px;font-size:0.85rem;">' +
               '<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:2px;"><span style="font-weight:600;font-size:0.8rem;">' + myName.split(" ")[0] + '</span><span style="color:#888;font-size:0.75rem;">' + nowStr + '</span></div>' +
               '<div style="color:#333;">' + commentText + '</div>' + attachLabel +
             '</div></div>';
