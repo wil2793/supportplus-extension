@@ -398,6 +398,7 @@
       // Set groups
       if (userData.groups && userData.groups.length > 0) {
         currentUserGroups = userData.groups;
+        if (!currentTeamArea) currentTeamArea = String(userData.groups[0]);
       }
 
       // Set Monday migration permission
@@ -1575,7 +1576,7 @@
       // Show migrate button if ticket belongs to my area, the other area, or gerente
       var myArea = getTeamConfig();
       var isOtherKnownArea = Object.values(TEAM_AREAS).some(function(a) { return a.resolutionGroupId === ticketGroupId; });
-      var canShowMigrate = !ticketGroupId || ticketGroupId === myArea.resolutionGroupId || isOtherKnownArea || isGerente();
+      var canShowMigrate = !ticketGroupId || ticketGroupId === myArea.resolutionGroupId || isOtherKnownArea || isMultiGroup();
       if (canShowMigrate) {
       const btn = document.createElement("button");
       btn.id = DETAIL_BTN_ID;
@@ -1595,7 +1596,7 @@
     } else if (isAssigned || isWaiting) {
       // Show buttons only if ticket belongs to my area (or gerente)
       var myArea3 = getTeamConfig();
-      var ticketBelongsToMe3 = !ticketGroupId || ticketGroupId === myArea3.resolutionGroupId || isGerente();
+      var ticketBelongsToMe3 = !ticketGroupId || ticketGroupId === myArea3.resolutionGroupId || isMultiGroup();
       if (ticketBelongsToMe3) {
       const myName = getLoggedUserName();
       const chip4 = container.querySelector(".MuiChip-root");
@@ -1640,7 +1641,7 @@
     // Show close button independently for non-closed tickets (even if migrated)
     if (!isClosed && !container.querySelector(".sp-detail-close-btn")) {
       var myAreaClose = getTeamConfig();
-      var canClose = !ticketGroupId || ticketGroupId === myAreaClose.resolutionGroupId || isGerente();
+      var canClose = !ticketGroupId || ticketGroupId === myAreaClose.resolutionGroupId || isMultiGroup();
       if (canClose) {
         const closeBtnIndep = document.createElement("button");
         closeBtnIndep.className = "sp-detail-close-btn";
@@ -1666,7 +1667,7 @@
     // Show reopen button independently for closed tickets (even if migrated)
     if (isClosed && !container.querySelector(".sp-reopen-btn")) {
       var myAreaReopen = getTeamConfig();
-      var canReopen = !ticketGroupId || ticketGroupId === myAreaReopen.resolutionGroupId || isGerente();
+      var canReopen = !ticketGroupId || ticketGroupId === myAreaReopen.resolutionGroupId || isMultiGroup();
       if (canReopen) {
         const reopenBtn = document.createElement("button");
         reopenBtn.className = "sp-reopen-btn";
@@ -2203,21 +2204,19 @@
     };
   });
 
-  var currentTeamArea = "19"; // default (DBA)
-  const GERENTE_NAME = "Rickey Oswaldo Ehuan Vargas";
-
-  function isGerente() {
-    return getLoggedUserName() === GERENTE_NAME;
+  var currentTeamArea = ""; // Set dynamically from user's groups
+  
+  function isMultiGroup() {
+    return currentUserGroups.length > 1;
   }
 
   function getTeamConfig() {
-    return TEAM_AREAS[currentTeamArea] || TEAM_AREAS["19"];
+    return TEAM_AREAS[currentTeamArea] || TEAM_AREAS[currentUserGroups[0]] || { resolutionGroupId: currentUserGroups[0] || 0, resolutionGroupLabel: "", profiles: [] };
   }
 
   // Returns all areas if gerente, otherwise just the configured one
   function getActiveAreas() {
-    if (isGerente()) return [TEAM_AREAS["19"], TEAM_AREAS["22"]].filter(Boolean);
-    return [getTeamConfig()];
+    return currentUserGroups.map(function(gId) { return TEAM_AREAS[gId]; }).filter(Boolean);
   }
 
   function loadTeamArea() {
@@ -2225,10 +2224,7 @@
       try {
         chrome.storage.local.get("teamArea", function(result) {
           var val = result.teamArea || "";
-          // Migrate legacy values
-          if (val === "dba") val = "19";
-          if (val === "aplicaciones") val = "22";
-          currentTeamArea = val;
+          if (val) currentTeamArea = val;
           // Resolve profileId in background (non-blocking)
           resolveSessionProfileId();
           resolve();
@@ -6679,7 +6675,7 @@
                 var res = await fetch(SP_API + "/reassign/" + ticketId, {
                   method: "PUT",
                   headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                  body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id || 19, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id || 19 } }),
+                  body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id } }),
                 });
                 if (!res.ok) throw new Error("HTTP " + res.status);
                 // Post comment separately
@@ -6709,7 +6705,7 @@
                 var res = await fetch(SP_API + "/reassign/" + ticketId, {
                   method: "PUT",
                   headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                  body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id || 19, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id || 19 }, ticketCommentRequest: { internal: false, content: comment } }),
+                  body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id }, ticketCommentRequest: { internal: false, content: comment } }),
                 });
                 if (!res.ok) throw new Error("HTTP " + res.status);
                 var json2 = await res.json();
@@ -6782,7 +6778,7 @@
             var res = await fetch(SP_API + "/reassign/" + ticketId, {
               method: "PUT",
               headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-              body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id || 19, serviceId: null, responsibleProfileId: parseInt(selectedId), resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id || 19 }, ticketCommentRequest: { internal: false, content: comment } }),
+              body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id, serviceId: null, responsibleProfileId: parseInt(selectedId), resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id }, ticketCommentRequest: { internal: false, content: comment } }),
             });
             if (!res.ok) throw new Error("HTTP " + res.status);
             var json2 = await res.json();
@@ -6884,7 +6880,7 @@
               await fetch(SP_API + "/reassign/" + ticketId, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id || 19, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id || 19 } }),
+                body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id } }),
               });
               showSuccessToast("Ticket tomado");
               showQuickDetailModal(ticketId);
@@ -6936,7 +6932,7 @@
                   await fetch(SP_API + "/reassign/" + ticketId, {
                     method: "PUT",
                     headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                    body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id || 19, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id || 19 } }),
+                    body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id } }),
                   });
                 }
               }
@@ -7266,7 +7262,7 @@
       // Inject take button for "En espera" tickets
       var rowGroupCell = row.querySelector('[data-field="resolutionGroupName"]');
       var rowGroupName = rowGroupCell ? rowGroupCell.textContent.trim() : "";
-      var rowBelongsToMe = !rowGroupName || rowGroupName === getTeamConfig().resolutionGroupLabel || isGerente();
+      var rowBelongsToMe = !rowGroupName || rowGroupName === getTeamConfig().resolutionGroupLabel || isMultiGroup();
 
       if (statusText === "En espera" && !row.querySelector("." + TAKE_BTN_CLASS) && rowBelongsToMe) {
         container.appendChild(createTakeButton(ticketId));
