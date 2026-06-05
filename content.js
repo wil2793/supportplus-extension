@@ -148,8 +148,11 @@
   var _btnDashboard = true; // Show dashboard button
   var _btnComments = true; // Show comments button
   var _btnReports = true; // Show reports button
-  var _btnReassignApp = false; // Show reassign to apps button
-  var _btnAddIAM = false; // Show add IAM button
+  var _btnReassignApp = false; // Show reassign to apps button (from sub-group)
+  var _btnAddIAM = false; // Show add IAM button (from sub-group)
+  var _canShowLabels = false; // Show labels/tags (from sub-group)
+  var _canReopenTickets = false; // Show reopen button (from sub-group)
+  var _canCommentClosed = false; // Allow commenting on closed tickets (from sub-group)
   var _lastDropTime = 0; // Timestamp of last drag-and-drop to prevent accidental modal opens
   var _mondayGroupCache = {}; // Cache of created Monday groups: groupName -> groupId
   var _autoMigrateQueue = Promise.resolve(); // Serial queue for auto-migrations
@@ -391,8 +394,11 @@
       _btnDashboard = userData.btnDashboard !== false;
       _btnComments = userData.btnComments !== false;
       _btnReports = userData.btnReports !== false;
-      _btnReassignApp = !!userData.btnReassignApp;
-      _btnAddIAM = !!userData.btnAddIAM;
+      _btnReassignApp = !!userData.canReassignApp;
+      _btnAddIAM = !!userData.canAddIAM;
+      _canShowLabels = !!userData.canShowLabels;
+      _canReopenTickets = !!userData.canReopenTickets;
+      _canCommentClosed = !!userData.canCommentClosed;
 
       // Set drag and drop permission from sub-group
       canDragDrop = !!userData.canDragDrop;
@@ -1823,7 +1829,7 @@
     container.id = DETAIL_DETECTIONS_ID;
     container.style.cssText = "margin-bottom:12px;";
 
-    if (slMatches.length) {
+    if (slMatches.length && _canShowLabels) {
       var slDiv = document.createElement("div");
       slDiv.style.cssText = "padding:8px 10px;background:#E3F2FD;border-radius:6px;margin-bottom:8px;";
       slDiv.innerHTML = '<b style="font-size:12px;color:#1976D2;">SL/PR detectadas:</b> ';
@@ -1851,7 +1857,7 @@
       container.appendChild(userDiv);
     }
 
-    if (dbMatches.length) {
+    if (dbMatches.length && _canShowLabels) {
       var dbDiv = document.createElement("div");
       dbDiv.style.cssText = "padding:8px 10px;background:#E8F5E9;border-radius:6px;margin-bottom:8px;";
       dbDiv.innerHTML = '<b style="font-size:12px;color:#2E7D32;">🗄️ Objetos de BD detectados:</b> ';
@@ -2893,7 +2899,7 @@
 
     // SL and users outside the card
     var slHTML = "";
-    if (slMatches.length) {
+    if (slMatches.length && _canShowLabels) {
       slHTML = '<div style="margin-bottom:8px;padding:8px 10px;background:#E3F2FD;border-radius:6px;border-left:4px solid #1976D2;">' +
         '<b style="font-size:11px;color:#1976D2;">📋 SL/PR detectadas:</b> ';
       slMatches.forEach(function(sl) {
@@ -2928,7 +2934,7 @@
     dbMatches = dbMatches.filter(function(v) { var low = v.toLowerCase(); if (dbSeen[low]) return false; dbSeen[low] = true; return true; });
 
     var dbHTML = "";
-    if (dbMatches.length) {
+    if (dbMatches.length && _canShowLabels) {
       dbHTML = '<div style="margin-bottom:8px;padding:8px 10px;background:#E8F5E9;border-radius:6px;border-left:4px solid #2E7D32;">' +
         '<b style="font-size:11px;color:#2E7D32;">🗄️ Objetos de BD:</b> ';
       dbMatches.forEach(function(obj) {
@@ -5929,7 +5935,7 @@
             '<button id="sp-qd-migrate-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🙂 Migrar a Monday</button>' +
           '</div>' : '') +
           // Reopen row (if closed) - no select, reopen assigns to current holder
-          (statusName === "Cerrado" ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
+          (statusName === "Cerrado" && _canReopenTickets ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
             '<button id="sp-qd-reopen-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#FF8F00;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🔓 Reabrir</button>' +
           '</div>' : '') +
           // People row
@@ -5979,8 +5985,8 @@
                   '</div></div>';
               }).join("") : '<div style="color:#aaa;font-size:0.9rem;padding:4px;">Sin comentarios</div>') +
             '</div>' +
-            // Add comment form (hide if closed, unless DBA)
-            (statusName !== "Cerrado" || getTeamConfig().resolutionGroupId === 19 ? (
+            // Add comment form (hide if closed, unless in "Comentar con ticket cerrado" sub-group)
+            (statusName !== "Cerrado" || _canCommentClosed ? (
             '<div id="sp-qd-comment-section">' +
             '<div style="display:flex;gap:6px;margin-top:8px;align-items:center;">' +
               '<textarea id="sp-qd-comment-input" placeholder="Escribe un comentario..." style="flex:1;padding:6px 10px;font-size:12px;border:1px solid #ddd;border-radius:6px;outline:none;min-height:36px;resize:vertical;font-family:system-ui;"></textarea>' +

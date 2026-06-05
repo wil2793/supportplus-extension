@@ -62,11 +62,9 @@ async function syncNotionData() {
       const btnDashboard = r.properties.BotonDasboard?.checkbox || false;
       const btnComments = r.properties.BotonComentarios?.checkbox || false;
       const btnReports = r.properties.BotonReportesExcel?.checkbox || false;
-      const btnReassignApp = r.properties.BotonReasignarAplicaciones?.checkbox || false;
-      const btnAddIAM = r.properties['BotonAñadirIAM']?.checkbox || false;
       const mondayFolderId = r.properties.monday_folder_id?.number ? String(r.properties.monday_folder_id.number) : "";
       const mondayWorkspaceId = r.properties.monday_workspace_id?.number ? String(r.properties.monday_workspace_id.number) : "";
-      rolesMap[r.id] = { name, groups: roleGroups, active: r.properties.Activo?.checkbox, canMigrate, btnDashboard, btnComments, btnReports, btnReassignApp, btnAddIAM, mondayFolderId, mondayWorkspaceId };
+      rolesMap[r.id] = { name, groups: roleGroups, active: r.properties.Activo?.checkbox, canMigrate, btnDashboard, btnComments, btnReports, mondayFolderId, mondayWorkspaceId };
     }
 
     // Build users list: email -> { name, role, groups[], profileId, active }
@@ -101,20 +99,35 @@ async function syncNotionData() {
       const mondayFolderId = (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].mondayFolderId : "";
       const mondayWorkspaceId = (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].mondayWorkspaceId : "";
 
-      usersMap[email] = { name: nombre, role: mappedRole, roleName: roleName, groups: finalGroups, profileId, active, canMigrate, btnDashboard: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnDashboard : false, btnComments: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnComments : false, btnReports: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnReports : false, btnReassignApp: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnReassignApp : false, btnAddIAM: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnAddIAM : false, mondayFolderId, mondayWorkspaceId, notionPageId: u.id };
+      usersMap[email] = { name: nombre, role: mappedRole, roleName: roleName, groups: finalGroups, profileId, active, canMigrate, btnDashboard: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnDashboard : false, btnComments: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnComments : false, btnReports: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnReports : false, mondayFolderId, mondayWorkspaceId, notionPageId: u.id };
     }
 
-    // Check sub-groups for permissions (Drag And Drop)
+    // Check sub-groups for permissions
     const SUBGRUPO_DB = "36c20e0684b9800db6afe60707a87df7";
     const subGroups = await notionQueryAll(SUBGRUPO_DB);
     const dragDropGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("drag"));
     const dragDropMembers = dragDropGroup ? (dragDropGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
+    const reassignAppGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("migrar apli"));
+    const reassignAppMembers = reassignAppGroup ? (reassignAppGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
+    const iamGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("iamcito"));
+    const iamMembers = iamGroup ? (iamGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
+    const labelsGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("etiquetas"));
+    const labelsMembers = labelsGroup ? (labelsGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
+    const reopenGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("reabrir"));
+    const reopenMembers = reopenGroup ? (reopenGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
+    const commentClosedGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("comentar con ticket cerrado"));
+    const commentClosedMembers = commentClosedGroup ? (commentClosedGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
 
-    // Mark users who can drag and drop
+    // Mark users with sub-group permissions
     for (const u of users) {
       const email = (u.properties.Correo?.rich_text?.[0]?.plain_text || u.properties.Correo?.title?.[0]?.plain_text || "").toLowerCase();
       if (email && usersMap[email]) {
         usersMap[email].canDragDrop = dragDropMembers.includes(u.id);
+        usersMap[email].canReassignApp = reassignAppMembers.includes(u.id);
+        usersMap[email].canAddIAM = iamMembers.includes(u.id);
+        usersMap[email].canShowLabels = labelsMembers.includes(u.id);
+        usersMap[email].canReopenTickets = reopenMembers.includes(u.id);
+        usersMap[email].canCommentClosed = commentClosedMembers.includes(u.id);
       }
     }
 
