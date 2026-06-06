@@ -56,7 +56,8 @@ async function syncNotionData() {
     // Build roles map: pageId -> { name, groups[] }
     const rolesMap = {};
     for (const r of roles) {
-      const name = (r.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase();
+      const name = (r.properties.Nombre?.title?.[0]?.plain_text || "");
+      const nameLower = name.toLowerCase();
       const roleGroups = (r.properties.MSP_cat_Grupos?.relation || []).map(rel => groupsMap[rel.id]).filter(Boolean);
       const canMigrate = r.properties.PuedeMigrarMonday?.checkbox || false;
       const btnDashboard = r.properties.BotonDasboard?.checkbox || false;
@@ -221,6 +222,8 @@ async function syncNotionData() {
 
 // Sync on install/update
 chrome.runtime.onInstalled.addListener((details) => {
+  // Clear old data to force fresh sync
+  chrome.storage.local.remove("notionUsers");
   syncNotionData();
   // Notify open tabs about the update
   if (details.reason === "update") {
