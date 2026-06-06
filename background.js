@@ -46,11 +46,16 @@ async function syncNotionData() {
     // 3. Get all groups
     const groups = await notionQueryAll(NOTION_GROUPS_DB);
 
-    // Build groups map: pageId -> groupId (number)
+    // Build groups map: pageId -> groupId (number) and groupId -> name
     const groupsMap = {};
+    const groupNamesMap = {}; // groupId (number) -> group name
     for (const g of groups) {
       const idSP = g.properties.IdSupportPlus?.title?.[0]?.plain_text || g.properties.IdSupportPlus?.rich_text?.[0]?.plain_text;
-      if (idSP) groupsMap[g.id] = parseInt(idSP);
+      const groupName = g.properties.Grupo?.title?.[0]?.plain_text || g.properties.Nombre?.title?.[0]?.plain_text || g.properties.Grupo?.rich_text?.[0]?.plain_text || "";
+      if (idSP) {
+        groupsMap[g.id] = parseInt(idSP);
+        if (groupName) groupNamesMap[parseInt(idSP)] = groupName;
+      }
     }
 
     // Build roles map: pageId -> { name, groups[] }
@@ -213,7 +218,7 @@ async function syncNotionData() {
     }
 
     // Save to storage
-    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, suggestedComments, mondayToken: mondayTokenFromNotion, mondayWorkspaceId, mondayFolderId, latestVersion, latestZipUrl, allVersions, userConfig, notionSyncTime: Date.now() });
+    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, groupNames: groupNamesMap, suggestedComments, mondayToken: mondayTokenFromNotion, mondayWorkspaceId, mondayFolderId, latestVersion, latestZipUrl, allVersions, userConfig, notionSyncTime: Date.now() });
     console.log("[SP Background] Notion synced:", Object.keys(usersMap).length, "users,", rolesList.length, "roles,", commentsRaw.length, "comments, monday token:", mondayTokenFromNotion ? "OK" : "MISSING", "latest version:", latestVersion, "versions:", allVersions.length);
   } catch (e) {
     console.error("[SP Background] Notion sync error:", e);

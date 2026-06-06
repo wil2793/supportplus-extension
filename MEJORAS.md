@@ -1,6 +1,6 @@
 # Plan de Mejoras - SupportPlus Extension
 
-## Progreso General: 5/16 completadas
+## Progreso General: 8/16 completadas
 
 ---
 
@@ -22,10 +22,11 @@
 - Decidir estándar: usar ES6 donde sea posible (const/let, arrow functions)
 - No mezclar `var` con `const/let` en el mismo scope
 
-### 4. [ ] Agregar manejo de errores visible al usuario
+### 4. [x] Agregar manejo de errores visible al usuario
 
-- Reemplazar `catch(function() {})` silenciosos por toasts de error
-- Al menos en operaciones críticas: sync, comentarios, cambios de estado
+- ~~Reemplazar `catch(function() {})` silenciosos por toasts de error~~
+- Operaciones críticas ya tienen showErrorToast (tomar, cerrar, comentar, reasignar)
+- Refreshes silenciosos se mantienen (no spam al usuario)
 
 ---
 
@@ -41,15 +42,15 @@
 - ~~El observer en `document.body` con `subtree:true` dispara demasiado~~
 - ~~Agregar debounce de 500ms antes de ejecutar lógica~~
 
-### 7. [ ] Cleanup de setInterval
+### 7. [x] Cleanup de setInterval
 
-- Los intervalos de refresh (60s) no se limpian al navegar
-- Guardar referencia y limpiar cuando el panel se remueve
+- ~~Los intervalos de refresh (60s) no se limpian al navegar~~
+- ~~Guardar referencia y limpiar cuando el panel se remueve~~
 
-### 8. [ ] Deduplicación de requests
+### 8. [x] Deduplicación de requests
 
-- Evitar fetches duplicados si se disparan múltiples veces
-- Usar un pattern de "request en vuelo" (pending promise cache)
+- ~~Evitar fetches duplicados si se disparan múltiples veces~~
+- ~~Usar un pattern de "request en vuelo" (pending promise cache)~~
 
 ---
 
