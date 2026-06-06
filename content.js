@@ -1,6 +1,12 @@
 (function () {
   console.log("[SP] Extension loading...");
 
+  // Reference components from components.js (loaded before this script)
+  var createModal = window.createModal;
+  var createHeaderButton = window.createHeaderButton;
+  var esc = window.esc;
+  var stringToColor = window.stringToColor;
+
   // Version check against Notion
   var _currentVersion = chrome.runtime.getManifest().version;
   var _versionBlocked = false;
@@ -29,7 +35,7 @@
         var downloadBtn = zipUrl ? '<button id="sp-blocker-download" style="margin-top:10px;padding:8px 16px;background:#1976D2;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">📥 Descargar v' + latest + '</button>' : '';
         blocker.innerHTML = '<div style="background:#fff;padding:30px;border-radius:12px;text-align:center;max-width:400px;font-family:system-ui;"><h2 style="margin:0 0 12px;color:#D32F2F;">⚠️ Actualización requerida</h2><p style="margin:0 0 8px;font-size:14px;">Tu versión (<b>' + _currentVersion + '</b>) está muy desactualizada.<br>La versión actual es <b>' + latest + '</b>.</p><p style="margin:0;font-size:13px;color:#555;">Actualiza la extensión para continuar usando SupportPlus Tools.</p>' + downloadBtn + '</div>';
         document.body.appendChild(blocker);
-        if (zipUrl) document.getElementById("sp-blocker-download").addEventListener("click", function() { downloadZip(zipUrl, latest); });
+        if (zipUrl) document.getElementById("sp-blocker-download").addEventListener("click", function(e) { downloadZip(zipUrl, latest, e); });
       } else {
         // Show update button in header (injected later)
         var btn = document.getElementById("sp-update-btn");
@@ -37,8 +43,8 @@
       }
     });
   }
-  function downloadZip(url, version) {
-    var btn = event && event.target ? event.target : null;
+  function downloadZip(url, version, e) {
+    var btn = e && e.target ? e.target : null;
     if (btn) { btn.textContent = "⏳ Descargando..."; btn.disabled = true; }
     fetch(url).then(function(r) { return r.blob(); }).then(function(blob) {
       var a = document.createElement("a");
@@ -224,10 +230,21 @@
         chrome.storage.local.get("notionUsers", function(r) { resolve(r.notionUsers || null); });
       });
 
-      // Always trigger a background re-sync (non-blocking)
-      try { chrome.runtime.sendMessage({ type: "sync-notion" }); } catch(e) {}
+      // Always trigger a background re-sync and WAIT for it to complete (with timeout)
+      try {
+        var syncResult = await Promise.race([
+          new Promise(function(resolve) {
+            chrome.runtime.sendMessage({ type: "sync-notion" }, function(resp) { resolve(resp); });
+          }),
+          new Promise(function(resolve) { setTimeout(function() { resolve({ timeout: true }); }, 15000); })
+        ]);
+        // Re-read after sync completes
+        notionData = await new Promise(function(resolve) {
+          chrome.storage.local.get("notionUsers", function(r) { resolve(r.notionUsers || null); });
+        });
+      } catch(e) {}
 
-      // If no Notion data yet, wait for sync
+      // If no Notion data yet, wait and retry
       if (!notionData) {
         await new Promise(function(r) { setTimeout(r, 3000); });
         notionData = await new Promise(function(resolve) {
@@ -284,15 +301,19 @@
       // Set drag and drop permission from sub-group
       canDragDrop = !!userData.canDragDrop;
 
-      // Load user config from Notion (direct, not depending on background timing)
+      // Load user config from Notion (await to ensure blacklist is ready)
       if (userData.notionPageId) {
-        chrome.runtime.sendMessage({ type: "notion-query", dbId: "37320e0684b9806b84ecc4aae906f645", body: { filter: { property: "Usuario", relation: { contains: userData.notionPageId } }, page_size: 1 } }, function(resp) {
-          if (resp && resp.success && resp.data.results && resp.data.results[0]) {
-            var cfgPage = resp.data.results[0];
-            var onlyWithTickets = cfgPage.properties.MostrarSoloConTickets?.checkbox || false;
-            var blacklistRels = cfgPage.properties.BlackList?.relation || [];
-            chrome.storage.local.set({ userConfig: { pageId: cfgPage.id, onlyWithTickets: onlyWithTickets, blacklist: blacklistRels.map(function(r) { return r.id; }) } });
-          }
+        await new Promise(function(resolve) {
+          chrome.runtime.sendMessage({ type: "notion-query", dbId: "37320e0684b9806b84ecc4aae906f645", body: { filter: { property: "Usuario", relation: { contains: userData.notionPageId } }, page_size: 1 } }, function(resp) {
+            if (resp && resp.success && resp.data.results && resp.data.results[0]) {
+              var cfgPage = resp.data.results[0];
+              var onlyWithTickets = cfgPage.properties.MostrarSoloConTickets?.checkbox || false;
+              var blacklistRels = cfgPage.properties.BlackList?.relation || [];
+              chrome.storage.local.set({ userConfig: { pageId: cfgPage.id, onlyWithTickets: onlyWithTickets, blacklist: blacklistRels.map(function(r) { return r.id; }) } }, resolve);
+            } else {
+              resolve();
+            }
+          });
         });
       }
 
@@ -336,6 +357,36 @@
     if (result === "inactive") { showAccessMessage("⚠️ Usuario inactivo en SupportPlus Tools. Solicite su reactivación con el administrador."); return; }
     currentUserRole = result.role || result;
     initByRole();
+
+    // Inject role label (independent, after everything loads)
+    chrome.storage.local.get("userEmail", function(r) {
+      var email = (r.userEmail || "").toLowerCase();
+      if (!email) return;
+      chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b98051a190e51d38d97288", body: { filter: { property: "Correo", rich_text: { equals: email } }, page_size: 1 } }, function(resp) {
+        if (!resp || !resp.success || !resp.data.results || !resp.data.results[0]) return;
+        var rolRel = resp.data.results[0].properties.Rol?.relation || [];
+        if (!rolRel.length) return;
+        chrome.runtime.sendMessage({ type: "notion-page", pageId: rolRel[0].id }, function(roleResp) {
+          if (!roleResp || !roleResp.success) return;
+          var rn = roleResp.data?.properties?.Nombre?.title?.[0]?.plain_text || "";
+          if (!rn) return;
+          var iv = setInterval(function() {
+            var wrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
+            if (!wrapper) return;
+            clearInterval(iv);
+            if (document.getElementById("sp-role-label")) return;
+            var nameEl = wrapper.querySelector("p");
+            if (!nameEl) return;
+            var rl = document.createElement("span");
+            rl.id = "sp-role-label";
+            rl.textContent = rn;
+            rl.style.cssText = "display:block;font-size:11px;color:#fff;opacity:0.6;font-weight:400;margin-top:2px;text-transform:uppercase;text-align:right;";
+            nameEl.appendChild(document.createElement("br"));
+            nameEl.appendChild(rl);
+          }, 300);
+        });
+      });
+    });
   });
 
   function showAccessMessage(text) {
@@ -405,15 +456,19 @@
       loadManagerPanel(grid, groups, canDrag);
     }, 500);
 
-    // Observer to re-inject when navigating back
+    // Observer to re-inject when navigating back (debounced)
+    var mgrDebounceTimer = null;
     var mgrObserver = new MutationObserver(function() {
-      // Remove panel if not on the right page
-      if (!window.location.pathname.includes("/dashboard/tickets-mesa")) {
-        var existing = document.getElementById("sp-manager-panel");
-        if (existing) { existing.remove(); mgrLoading = false; }
-        return;
-      }
-      tryInject();
+      if (mgrDebounceTimer) clearTimeout(mgrDebounceTimer);
+      mgrDebounceTimer = setTimeout(function() {
+        // Remove panel if not on the right page
+        if (!window.location.pathname.includes("/dashboard/tickets-mesa")) {
+          var existing = document.getElementById("sp-manager-panel");
+          if (existing) { existing.remove(); mgrLoading = false; }
+          return;
+        }
+        tryInject();
+      }, 500);
     });
     mgrObserver.observe(document.body, { childList: true, subtree: true });
   }
@@ -698,8 +753,8 @@
       var profiles = json.data || json;
       if (!Array.isArray(profiles)) { container.innerHTML = '<div style="color:#888;font-size:11px;">Sin miembros</div>'; return; }
 
-      // Filter out users that are inactive in Notion
-      chrome.storage.local.get(["notionUsers", "visibleByGroup"], function(stored) {
+      // Filter out users that are inactive in Notion and apply blacklist from Notion
+      chrome.storage.local.get(["notionUsers", "userConfig"], function(stored) {
         var notionUsers = stored.notionUsers || {};
         profiles = profiles.filter(function(p) {
           var found = Object.values(notionUsers).find(function(u) { return u.profileId === p.profileId; });
@@ -707,13 +762,22 @@
           return true;
         });
 
-        // Filter by visible members (from config checkboxes)
-        var visibleByGroup = stored.visibleByGroup || {};
-        var visibleIds = visibleByGroup[String(groupId)];
-        if (visibleIds && visibleIds.length > 0) {
-          profiles = profiles.filter(function(p) {
-            return visibleIds.includes(p.profileId);
+        // Filter by blacklist from Notion (userConfig.blacklist contains Notion page IDs)
+        var userCfg = stored.userConfig || {};
+        var blacklistNotionIds = userCfg.blacklist || [];
+        if (blacklistNotionIds.length > 0) {
+          // Convert blacklist Notion page IDs to profileIds
+          var blacklistedProfileIds = [];
+          Object.values(notionUsers).forEach(function(u) {
+            if (blacklistNotionIds.includes(u.notionPageId) && u.profileId) {
+              blacklistedProfileIds.push(u.profileId);
+            }
           });
+          if (blacklistedProfileIds.length > 0) {
+            profiles = profiles.filter(function(p) {
+              return !blacklistedProfileIds.includes(p.profileId);
+            });
+          }
         }
 
         renderGroupDetail(groupId, container, profiles, spToken, canDrag);
@@ -2001,14 +2065,6 @@
 
   // Load profiles dynamically for a group
   var profilesCache = {};
-  var visibleByGroup = {}; // { groupId: [profileId1, profileId2, ...] } — only visible members
-
-  // Load visible members from storage
-  try {
-    chrome.storage.local.get("visibleByGroup", function(result) {
-      visibleByGroup = result.visibleByGroup || {};
-    });
-  } catch(e) {}
 
   function loadProfilesForGroup(groupId) {
     if (profilesCache[groupId]) return Promise.resolve(profilesCache[groupId]);
@@ -2019,17 +2075,31 @@
     }).then(function(r) { return r.json(); }).then(function(json) {
       var profiles = json.data || json;
       if (!Array.isArray(profiles)) profiles = [];
-      // Filter by visible members (if configured for this group)
-      var visibleForGroup = visibleByGroup[String(groupId)];
-      if (visibleForGroup && Array.isArray(visibleForGroup) && visibleForGroup.length > 0) {
-        profiles = profiles.filter(function(p) {
-          var id = p.profileId || p.id;
-          return visibleForGroup.includes(id);
+      // Filter by blacklist from Notion userConfig
+      return new Promise(function(resolve) {
+        chrome.storage.local.get(["userConfig", "notionUsers"], function(stored) {
+          var userCfg = stored.userConfig || {};
+          var notionUsers = stored.notionUsers || {};
+          var blacklistNotionIds = userCfg.blacklist || [];
+          if (blacklistNotionIds.length > 0) {
+            var blacklistedProfileIds = [];
+            Object.values(notionUsers).forEach(function(u) {
+              if (blacklistNotionIds.includes(u.notionPageId) && u.profileId) {
+                blacklistedProfileIds.push(u.profileId);
+              }
+            });
+            if (blacklistedProfileIds.length > 0) {
+              profiles = profiles.filter(function(p) {
+                var id = p.profileId || p.id;
+                return !blacklistedProfileIds.includes(id);
+              });
+            }
+          }
+          profilesCache[groupId] = profiles;
+          if (TEAM_AREAS[groupId]) TEAM_AREAS[groupId].profiles = profiles;
+          resolve(profiles);
         });
-      }
-      profilesCache[groupId] = profiles;
-      if (TEAM_AREAS[groupId]) TEAM_AREAS[groupId].profiles = profiles;
-      return profiles;
+      });
     }).catch(function() { return []; });
   }
 
@@ -3531,7 +3601,7 @@
     if (existing) existing.remove();
 
     // Load current values
-    chrome.storage.local.get(["mondayToken", "mondayBoardId", "mondayBoardName", "teamArea", "ignoredEmails", "visibleByGroup", "myProfileId"], function(stored) {
+    chrome.storage.local.get(["mondayToken", "mondayBoardId", "mondayBoardName", "teamArea", "ignoredEmails", "myProfileId"], function(stored) {
       var currentToken = stored.mondayToken || "";
       var currentBoardId = stored.mondayBoardId || "";
       var currentBoardName = stored.mondayBoardName || "";
@@ -3593,7 +3663,6 @@
 
       // Members checkboxes
       var membersDiv = document.getElementById("sp-cfg-members");
-      var excludedMembers = stored.visibleByGroup || {};
       var onlyWithTicketsEl = document.getElementById("sp-cfg-only-with-tickets");
 
       // Load user config
@@ -3611,15 +3680,26 @@
         }).then(function(r) { return r.json(); }).then(function(json) {
           var profiles = json.data || json;
           if (!Array.isArray(profiles) || !profiles.length) { membersDiv.innerHTML = '<div style="color:#888;font-size:11px;">Sin miembros</div>'; return; }
-          var visibleList = excludedMembers[String(groupId)];
-          var hasConfig = visibleList && Array.isArray(visibleList) && visibleList.length > 0;
-          membersDiv.innerHTML = '<div style="font-size:10px;color:#888;margin-bottom:4px;">Desmarca los que no quieras ver:</div>';
-          profiles.forEach(function(p) {
-            var isVisible = !hasConfig || visibleList.includes(p.profileId);
-            var label = document.createElement("label");
-            label.style.cssText = "display:flex;align-items:center;gap:4px;font-size:11px;padding:2px 0;cursor:pointer;";
-            label.innerHTML = '<input type="checkbox" data-pid="' + p.profileId + '"' + (isVisible ? ' checked' : '') + '> ' + p.profileFullName;
-            membersDiv.appendChild(label);
+          // Read blacklist from Notion (userConfig.blacklist = Notion page IDs of blacklisted users)
+          chrome.storage.local.get(["userConfig", "notionUsers"], function(cfgData) {
+            var userCfg = cfgData.userConfig || {};
+            var notionUsers = cfgData.notionUsers || {};
+            var blacklistNotionIds = userCfg.blacklist || [];
+            // Convert Notion page IDs to profileIds
+            var blacklistedProfileIds = [];
+            Object.values(notionUsers).forEach(function(u) {
+              if (blacklistNotionIds.includes(u.notionPageId) && u.profileId) {
+                blacklistedProfileIds.push(u.profileId);
+              }
+            });
+            membersDiv.innerHTML = '<div style="font-size:10px;color:#888;margin-bottom:4px;">Desmarca los que no quieras ver:</div>';
+            profiles.forEach(function(p) {
+              var isVisible = !blacklistedProfileIds.includes(p.profileId);
+              var label = document.createElement("label");
+              label.style.cssText = "display:flex;align-items:center;gap:4px;font-size:11px;padding:2px 0;cursor:pointer;";
+              label.innerHTML = '<input type="checkbox" data-pid="' + p.profileId + '"' + (isVisible ? ' checked' : '') + '> ' + p.profileFullName;
+              membersDiv.appendChild(label);
+            });
           });
         }).catch(function() { membersDiv.innerHTML = '<div style="color:#D94040;font-size:11px;">Error</div>'; });
       }
@@ -3683,72 +3763,61 @@
         var area = document.getElementById("sp-cfg-area").value;
         var onlyWithTickets = onlyWithTicketsEl.checked;
         var saveData = { mondayToken: token, mondayBoardId: boardId, mondayBoardName: boardName, teamArea: area };
-        // Save visible members (checked ones) as blacklist (unchecked = blacklisted)
+        // Collect blacklisted profileIds (unchecked = blacklisted)
         var memberChecks = membersDiv.querySelectorAll('input[data-pid]');
-        var blacklistIds = [];
+        var blacklistProfileIds = [];
         if (memberChecks.length && area) {
-          var visible = [];
           memberChecks.forEach(function(cb) {
-            if (cb.checked) visible.push(parseInt(cb.dataset.pid));
-            else blacklistIds.push(parseInt(cb.dataset.pid));
+            if (!cb.checked) blacklistProfileIds.push(parseInt(cb.dataset.pid));
           });
-          var vbg = excludedMembers;
-          vbg[String(area)] = visible;
-          saveData.visibleByGroup = vbg;
         }
         // Save to Notion user config
-        chrome.storage.local.get(["userConfig"], function(cfg) {
-          var userCfg = cfg.userConfig || {};
+        chrome.storage.local.get(["userConfig", "notionUsers", "userEmail"], function(nd) {
+          var userCfg = nd.userConfig || {};
           var notionPageId = userCfg.pageId;
-          var notionToken = null;
-          chrome.storage.local.get(["notionUsers", "userEmail"], function(nd) {
-            var email = (nd.userEmail || "").toLowerCase();
-            var users = nd.notionUsers || {};
-            var user = users[email];
-            var userNotionId = user?.notionPageId || "";
-            // Build blacklist relations
-            var blacklistRelations = blacklistIds.map(function(pid) {
-              // Find Notion page ID for this profile
-              var found = null;
-              Object.values(users).forEach(function(u) { if (u.profileId === pid && u.notionPageId) found = u.notionPageId; });
-              return found ? { id: found } : null;
-            }).filter(Boolean);
-            var props = {
-              "MostrarSoloConTickets": { checkbox: onlyWithTickets },
-              "BlackList": { relation: blacklistRelations }
-            };
-            if (notionPageId) {
-              // Update existing
-              chrome.runtime.sendMessage({ type: "notion-update", pageId: notionPageId, body: { properties: props } });
-            } else {
-              // Search if config already exists for this user before creating
-              chrome.runtime.sendMessage({ type: "notion-query", dbId: "37320e0684b9806b84ecc4aae906f645", body: { filter: { property: "Nombre", title: { equals: email } }, page_size: 1 } }, function(searchResp) {
-                if (searchResp && searchResp.success && searchResp.data.results && searchResp.data.results.length) {
-                  // Found existing - update it
-                  var existingId = searchResp.data.results[0].id;
-                  chrome.runtime.sendMessage({ type: "notion-update", pageId: existingId, body: { properties: props } });
-                } else if (userNotionId) {
-                  // Create new
-                  chrome.runtime.sendMessage({ type: "notion-create", body: {
-                    parent: { database_id: "37320e0684b9806b84ecc4aae906f645" },
-                    properties: Object.assign({ "Nombre": { title: [{ text: { content: email } }] }, "Usuario": { relation: [{ id: userNotionId }] } }, props)
-                  }});
-                }
-              });
-            }
-            // Save locally too
-            saveData.userConfig = { pageId: notionPageId, onlyWithTickets: onlyWithTickets, blacklist: blacklistIds };
-            chrome.storage.local.set(saveData, function() {
-              overlay.remove();
-              showSuccessToast("Configuración guardada");
-              currentTeamArea = area;
-              profilesCache = {};
-              if (saveData.visibleByGroup) visibleByGroup = saveData.visibleByGroup;
-              var panel = document.getElementById(TEAM_PANEL_ID);
-              if (panel) panel.remove();
-              teamPanelLoading = false;
-              loadTeamPanel();
+          var email = (nd.userEmail || "").toLowerCase();
+          var users = nd.notionUsers || {};
+          var user = users[email];
+          var userNotionId = user?.notionPageId || "";
+          // Build blacklist relations (convert profileIds to Notion page IDs)
+          var blacklistRelations = blacklistProfileIds.map(function(pid) {
+            var found = null;
+            Object.values(users).forEach(function(u) { if (u.profileId === pid && u.notionPageId) found = u.notionPageId; });
+            return found ? { id: found } : null;
+          }).filter(Boolean);
+          var props = {
+            "MostrarSoloConTickets": { checkbox: onlyWithTickets },
+            "BlackList": { relation: blacklistRelations }
+          };
+          if (notionPageId) {
+            // Update existing
+            chrome.runtime.sendMessage({ type: "notion-update", pageId: notionPageId, body: { properties: props } });
+          } else {
+            // Search if config already exists for this user before creating
+            chrome.runtime.sendMessage({ type: "notion-query", dbId: "37320e0684b9806b84ecc4aae906f645", body: { filter: { property: "Nombre", title: { equals: email } }, page_size: 1 } }, function(searchResp) {
+              if (searchResp && searchResp.success && searchResp.data.results && searchResp.data.results.length) {
+                var existingId = searchResp.data.results[0].id;
+                chrome.runtime.sendMessage({ type: "notion-update", pageId: existingId, body: { properties: props } });
+              } else if (userNotionId) {
+                chrome.runtime.sendMessage({ type: "notion-create", body: {
+                  parent: { database_id: "37320e0684b9806b84ecc4aae906f645" },
+                  properties: Object.assign({ "Nombre": { title: [{ text: { content: email } }] }, "Usuario": { relation: [{ id: userNotionId }] } }, props)
+                }});
+              }
             });
+          }
+          // Save blacklist locally as Notion page IDs for immediate use
+          var blacklistNotionIds = blacklistRelations.map(function(r) { return r.id; });
+          saveData.userConfig = { pageId: notionPageId, onlyWithTickets: onlyWithTickets, blacklist: blacklistNotionIds };
+          chrome.storage.local.set(saveData, function() {
+            overlay.remove();
+            showSuccessToast("Configuración guardada");
+            currentTeamArea = area;
+            profilesCache = {};
+            var panel = document.getElementById(TEAM_PANEL_ID);
+            if (panel) panel.remove();
+            teamPanelLoading = false;
+            loadTeamPanel();
           });
         });
       });
@@ -5592,6 +5661,22 @@
       var priorityName = t.incidentPriority?.name || "";
       var serviceName = t.service?.name || "";
       var groupName = t.resolutionGroup?.name || "";
+
+      // Resolve subgroup permissions from Notion data (in case checkSession hasn't completed for this script instance)
+      var _canCommentClosedResolved = _canCommentClosed;
+      var _canReopenTicketsResolved = _canReopenTickets;
+      if (!_canCommentClosedResolved || !_canReopenTicketsResolved) {
+        var permData = await new Promise(function(resolve) {
+          chrome.storage.local.get(["notionUsers", "userEmail"], function(r) { resolve(r); });
+        });
+        var permEmail = (permData.userEmail || "").toLowerCase();
+        var permUsers = permData.notionUsers || {};
+        var permUser = permUsers[permEmail];
+        if (permUser) {
+          _canCommentClosedResolved = !!permUser.canCommentClosed;
+          _canReopenTicketsResolved = !!permUser.canReopenTickets;
+        }
+      }
       var reportType = t.reportType?.name || "";
       var createdAt = t.createdAt ? t.createdAt.replace("T", " ").substring(0, 16) : "";
       var updatedAt = t.updatedAt ? t.updatedAt.replace("T", " ").substring(0, 16) : "";
@@ -5710,7 +5795,7 @@
             '<button id="sp-qd-migrate-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🙂 Migrar a Monday</button>' +
           '</div>' : '') +
           // Reopen row (if closed) - no select, reopen assigns to current holder
-          (statusName === "Cerrado" && _canReopenTickets ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
+          (statusName === "Cerrado" && _canReopenTicketsResolved ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
             '<button id="sp-qd-reopen-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#FF8F00;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🔓 Reabrir</button>' +
           '</div>' : '') +
           // People row
@@ -5733,7 +5818,7 @@
           // Comments section
           '<div style="margin-top:8px;border-top:1px solid #eee;padding-top:8px;">' +
             '<b style="font-size:12px;">💬 Comentarios (' + comments.length + ')</b>' +
-            '<div id="sp-qd-comments-list" style="max-height:150px;overflow-y:auto;margin-top:6px;">' +
+            '<div id="sp-qd-comments-list" style="max-height:250px;overflow-y:auto;margin-top:6px;display:flex;flex-direction:column-reverse;">' +
               (comments.length ? comments.map(function(c) {
                 var cDate = c.createdAt ? c.createdAt.replace("T", " ").substring(0, 16) : "";
                 var cContent = (c.content || "").replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
@@ -5761,7 +5846,7 @@
               }).join("") : '<div style="color:#aaa;font-size:0.9rem;padding:4px;">Sin comentarios</div>') +
             '</div>' +
             // Add comment form (hide if closed, unless in "Comentar con ticket cerrado" sub-group)
-            (statusName !== "Cerrado" || _canCommentClosed ? (
+            (statusName !== "Cerrado" || _canCommentClosedResolved ? (
             '<div id="sp-qd-comment-section">' +
             '<div style="display:flex;gap:6px;margin-top:8px;align-items:center;">' +
               '<textarea id="sp-qd-comment-input" placeholder="Escribe un comentario..." style="flex:1;padding:6px 10px;font-size:12px;border:1px solid #ddd;border-radius:6px;outline:none;min-height:36px;resize:vertical;font-family:system-ui;"></textarea>' +

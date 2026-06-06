@@ -69,10 +69,10 @@ async function syncNotionData() {
     }
 
     // Build users list: email -> { name, role, groups[], profileId, active }
-    const usersMap = {};
+    const usersMap = Object.create(null);
     for (const u of users) {
       const email = (u.properties.Correo?.rich_text?.[0]?.plain_text || u.properties.Correo?.title?.[0]?.plain_text || "").toLowerCase();
-      if (!email) continue;
+      if (!email || email === "__proto__" || email === "constructor" || email === "prototype") continue;
       const nombre = u.properties.Nombre?.title?.[0]?.plain_text || "";
       const active = u.properties.Activo?.checkbox || false;
       const profileId = u.properties["Id Support Plus"]?.number || null;
@@ -222,8 +222,6 @@ async function syncNotionData() {
 
 // Sync on install/update
 chrome.runtime.onInstalled.addListener((details) => {
-  // Clear old data to force fresh sync
-  chrome.storage.local.remove("notionUsers");
   syncNotionData();
   // Notify open tabs about the update
   if (details.reason === "update") {

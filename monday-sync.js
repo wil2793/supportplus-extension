@@ -112,8 +112,8 @@
   // Run on load (15s delay)
   setTimeout(runSync, 15000);
 
-  // Run every 60 seconds
-  setInterval(runSync, 60000);
+  // Run every 5 minutes
+  setInterval(runSync, 300000);
 
   // Run on focus
   document.addEventListener("visibilitychange", function() {
