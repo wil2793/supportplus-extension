@@ -87,19 +87,15 @@ async function syncNotionData() {
         roleGroups = rolesMap[rolPageId].groups;
       }
 
-      // Map role name to code role
-      const roleNameMap = { "administrador": "admin", "gerente dba": "gerente", "gerente": "gerente", "director": "director", "ceo": "ceo", "usuario dba": "usuario", "usuario": "usuario" };
-      const mappedRole = roleNameMap[roleName] || "usuario";
-
-      // Groups: always use role's groups (they define what the user can see)
-      const finalGroups = roleGroups.length > 0 ? roleGroups : userGroups;
+      // Groups: merge role groups + user groups (union, no duplicates)
+      const finalGroups = [...new Set([...roleGroups, ...userGroups])];
 
       // Can migrate Monday
       const canMigrate = (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].canMigrate : false;
       const mondayFolderId = (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].mondayFolderId : "";
       const mondayWorkspaceId = (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].mondayWorkspaceId : "";
 
-      usersMap[email] = { name: nombre, role: mappedRole, roleName: roleName, groups: finalGroups, profileId, active, canMigrate, btnDashboard: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnDashboard : false, btnComments: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnComments : false, btnReports: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnReports : false, mondayFolderId, mondayWorkspaceId, notionPageId: u.id };
+      usersMap[email] = { name: nombre, role: "usuario", roleName: roleName, groups: finalGroups, profileId, active, canMigrate, btnDashboard: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnDashboard : false, btnComments: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnComments : false, btnReports: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnReports : false, mondayFolderId, mondayWorkspaceId, notionPageId: u.id };
     }
 
     // Check sub-groups for permissions

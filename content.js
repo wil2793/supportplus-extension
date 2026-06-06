@@ -141,7 +141,6 @@
   }
 
   var currentUserRole = "usuario";
-  var currentViewMode = null; // null = use own role's view
   var currentUserGroups = []; // Groups from Notion
   var canMigrateMonday = false; // Permission from Notion role
   var canDragDrop = false; // Permission from sub-group "Drag And Drop"
@@ -326,9 +325,7 @@
     } catch(e) { console.log("[SP] Monday status update failed:", e.message); }
   }
 
-  function getActiveViewMode() {
-    return currentViewMode || currentUserRole;
-  }
+
 
   // --- Session check ---
   var sessionUserName = ""; // Full name from session API, cached globally
@@ -470,10 +467,6 @@
     var role = result.role || result;
     var roleName = result.roleName || role;
     currentUserRole = role;
-    // Admin: restore saved view mode
-    if (role === "admin") {
-      currentViewMode = localStorage.getItem("sp_view_mode") || null;
-    }
     // Inject role label below user name in header
     (function() {
       var displayRole = roleName.charAt(0).toUpperCase() + roleName.slice(1);
@@ -519,81 +512,12 @@
         hasMondayConfig = !!r.mondayBoardId && canMigrateMonday;
       });
     } catch(e) {}
-    var viewMode = getActiveViewMode();
-    // If admin is simulating another view, load that role's groups
-    if (currentUserRole === "admin" && currentViewMode && currentViewMode !== "admin") {
-      chrome.storage.local.get("notionRolesGroups", function(r) {
-        var rolesGroups = r.notionRolesGroups || {};
-        // Find groups for the simulated role (match by key)
-        var roleGroups = rolesGroups[currentViewMode] || [];
-        // Try partial match if exact not found (e.g. "gerente" matches "gerente dba")
-        if (!roleGroups.length) {
-          Object.keys(rolesGroups).forEach(function(key) {
-            if (key.includes(currentViewMode) && rolesGroups[key].length > 0) {
-              roleGroups = rolesGroups[key];
-            }
-          });
-        }
-        if (roleGroups.length > 0) currentUserGroups = roleGroups;
-        initExtension();
-        if (currentUserGroups.length > 1) {
-          initManagerView(viewMode);
-        }
-        injectViewSwitcher();
-      });
-      return;
-    }
     // Always init extension (for config, buttons, etc.)
     initExtension();
     // Always show manager view (unified) - groups determine if filter/counter shows
     if (currentUserGroups.length > 0) {
-      initManagerView(getActiveViewMode());
+      initManagerView();
     }
-    // Admin gets the view switcher
-    if (currentUserRole === "admin") injectViewSwitcher();
-  }
-
-  // --- View switcher (admin only) ---
-  function injectViewSwitcher() {
-    var attempts = 0;
-    var interval = setInterval(function() {
-      var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
-      if (!userWrapper && attempts < 30) { attempts++; return; }
-      clearInterval(interval);
-      if (!userWrapper) return;
-      if (document.getElementById("sp-view-switcher")) return;
-
-      var select = document.createElement("select");
-      select.id = "sp-view-switcher";
-      select.style.cssText = "padding:4px 8px;font-size:11px;border:1px solid rgba(255,255,255,0.3);border-radius:4px;background:rgba(30,30,30,0.9);color:#fff;margin-right:8px;cursor:pointer;";
-      // Default option
-      select.innerHTML = '<option value="" style="background:#222;color:#fff;"' + (!currentViewMode ? " selected" : "") + '>👤 Mi vista (Admin)</option>';
-      // Load roles from Notion storage
-      chrome.storage.local.get("notionRoles", function(r) {
-        var rolesList = r.notionRoles || [];
-        var roleIcons = { "ceo": "🏛️", "director": "👔", "gerente dba": "🏢", "gerente": "🏢", "usuario dba": "🧑‍💻", "usuario": "🧑‍💻" };
-        rolesList.forEach(function(roleName) {
-          var roleKey = roleName.toLowerCase();
-          var icon = roleIcons[roleKey] || "👁️";
-          var opt = document.createElement("option");
-          opt.value = roleKey;
-          opt.textContent = icon + " " + roleName;
-          opt.style.cssText = "background:#222;color:#fff;";
-          if (currentViewMode === roleKey) opt.selected = true;
-          select.appendChild(opt);
-        });
-      });
-      select.addEventListener("change", function() {
-        var val = select.value;
-        if (val) {
-          localStorage.setItem("sp_view_mode", val);
-        } else {
-          localStorage.removeItem("sp_view_mode");
-        }
-        window.location.reload();
-      });
-      userWrapper.parentElement.insertBefore(select, userWrapper);
-    }, 500);
   }
 
   // --- Global config modal reference ---
@@ -602,17 +526,10 @@
   document.addEventListener("sp-open-config", function() { if (_showConfigModal) _showConfigModal(); });
   document.addEventListener("sp-open-ticket", function(e) { if (e.detail && e.detail.ticketId && _showQuickDetailModal) _showQuickDetailModal(e.detail.ticketId); });
 
-  // --- Manager view (director / gerente) ---
-  function initManagerView(viewMode) {
-    // Groups come from Notion (currentUserGroups)
-    var groups;
-    if (currentUserGroups.length > 0) {
-      groups = currentUserGroups;
-    } else if (viewMode === "ceo") {
-      groups = GROUP_INFO.map(function(g) { return g.id; });
-    } else {
-      groups = [19]; // fallback
-    }
+  // --- Manager view ---
+  function initManagerView() {
+    var groups = currentUserGroups.length > 0 ? currentUserGroups : [];
+    if (!groups.length) return;
     var canDrag = canDragDrop;
     var mgrLoading = false;
 
