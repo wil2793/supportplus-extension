@@ -1,197 +1,146 @@
-# 📋 SupportPlus Ticket Exporter
+# SupportPlus Tools - Chrome/Edge Extension
 
-Extensión de Chrome (Manifest V3) que conecta la plataforma **SupportPlus** de Macropay con **Monday.com**, permitiendo migrar tickets de soporte con un click.
+Extensión de productividad para la gestión de tickets en [SupportPlus](https://macropay.supportplus.mx) con integración a Monday.com y configuración centralizada en Notion.
 
----
+Desarrollado por el equipo de **Bases de Datos (DBA)** - Macropay.
 
-## 📁 Estructura del proyecto
-
-```
-├── manifest.json      → Configuración de la extensión de Chrome
-├── popup.html         → Interfaz del popup (ventana emergente)
-├── popup.js           → Lógica del popup (guardar token, exportar CSV)
-├── content.js         → Script inyectado en SupportPlus (migración a Monday)
-├── icon.png           → Ícono principal
-├── icon16/48/128.png  → Íconos en distintos tamaños
-```
-
----
-
-## 🔧 Archivo por archivo
-
-### `manifest.json` — Configuración de la extensión
-
-Define las reglas de la extensión para Chrome:
-
-- **manifest_version: 3** → Usa el formato más reciente de extensiones de Chrome.
-- **permissions:**
-  - `activeTab` → Accede a la pestaña activa cuando el usuario interactúa.
-  - `scripting` → Permite inyectar scripts en páginas web.
-  - `storage` → Guarda datos localmente (el token de Monday).
-- **host_permissions** → Solo puede comunicarse con:
-  - `macropay.supportplus.mx` (frontend de SupportPlus)
-  - `macropayapi.supportplus.mx` (API de SupportPlus)
-  - `api.monday.com` (API de Monday)
-- **content_scripts** → Inyecta `content.js` automáticamente en cualquier página de `macropay.supportplus.mx` cuando termina de cargar (`document_idle`).
-- **action** → Configura el popup que aparece al hacer click en el ícono de la extensión.
-
----
-
-### `popup.html` — Interfaz del popup
-
-Es la ventanita que aparece al hacer click en el ícono de la extensión. Contiene:
-
-1. Un campo de texto tipo `password` para pegar el **API Token de Monday.com**.
-2. Un enlace directo a la página de Monday donde se genera el token.
-3. Un botón "Guardar Token" que almacena el token en `chrome.storage.local`.
-
-El diseño es minimalista: 320px de ancho, botones con bordes redondeados y color rojizo (#D94040) como identidad visual.
-
----
-
-### `popup.js` — Lógica del popup
-
-Maneja dos funcionalidades principales:
-
-#### 1. Guardar/cargar el token de Monday
-
-- Al abrir el popup, lee el token guardado en `chrome.storage.local` y lo muestra.
-- Al hacer click en "Guardar Token", valida que no esté vacío y lo guarda.
-
-#### 2. Exportar tickets a CSV (función `exportTickets`)
-
-- Se inyecta en la página de SupportPlus usando `chrome.scripting.executeScript`.
-- Lee el token de autenticación de SupportPlus desde `localStorage`.
-- Llama a la API de SupportPlus paginando de 100 en 100 tickets.
-- Muestra un overlay de progreso en la página mientras descarga.
-- Genera un archivo CSV con columnas como: id, código único, asunto, descripción, responsable, estado, prioridad, fecha de creación, etc.
-- Descarga automáticamente el CSV con nombre `supportplus_tickets_YYYY-MM-DD.csv`.
-
----
-
-### `content.js` — Script de contenido (el corazón de la extensión)
-
-Se inyecta automáticamente en `macropay.supportplus.mx`. Es el archivo más complejo y maneja toda la integración con Monday.com.
-
-#### Constantes y configuración
-
-- **APIs:** URLs de SupportPlus y Monday.com.
-- **PRIORITY_MAP:** Mapea prioridades de SupportPlus (crítico, alto, medio, bajo) a índices de Monday.
-- **Grupos de servicio:** Clasifica tickets en DEV, QA, PROD o GIT según el ID del servicio asociado al ticket.
-  - `DEV_IDS`, `QA_IDS`, `PROD_IDS` → Sets con IDs de servicios.
-  - `GROUP_MAP` → Mapea cada categoría al ID de grupo en Monday.
-- **MONTH_NAMES:** Nombres de meses en español para construir nombres de boards como `"Tickets DBA - Marzo - 2026"`.
-
-#### Sistema de caché (`localStorage`)
-
-- Guarda un mapa `{ ticketId: mondayItemId }` en `localStorage` con TTL de 30 minutos.
-- Evita consultar Monday repetidamente para saber qué tickets ya fueron migrados.
-- Funciones: `getCache()`, `setCache()`, `addToCache()`.
-
-#### Comunicación con Monday (`mondayQuery`)
-
-- Función genérica que hace peticiones GraphQL a la API de Monday.
-- Usa el token guardado en `chrome.storage.local`.
-- Maneja errores HTTP y errores de la API de Monday.
-
-#### Sincronización (`fetchSyncedTickets`)
-
-- Al cargar la página, consulta todos los boards de Monday que empiecen con "Tickets DBA".
-- Recorre todos los items de cada board, leyendo la columna `link_mknkdctz` (que contiene el link al ticket de SupportPlus).
-- Extrae el ID del ticket de la URL y construye el mapa de tickets ya sincronizados.
-- Usa paginación con cursores para manejar boards con muchos items.
-
-#### Resolución de grupo (`resolveGroup`)
-
-- Recorre recursivamente el árbol de servicios del ticket.
-- Si algún ID coincide con DEV, QA o PROD, asigna ese grupo.
-- Si no coincide con ninguno, va al grupo GIT (por defecto).
-
-#### Resolución de board (`dateToBoardName`)
-
-- Toma la fecha de creación del ticket (formato `DD/MM/YYYY`).
-- Genera el nombre del board destino: `"Tickets DBA - {Mes} - {Año}"`.
-
-#### Inyección de botones en la UI (`injectButtons`)
-
-- Recorre las filas de la tabla MUI DataGrid de SupportPlus.
-- Para cada ticket con estado "Cerrado":
-  - Si ya está sincronizado → muestra un badge ✅ que al hacer click abre el item en Monday.
-  - Si no está sincronizado → muestra un botón morado "📋 Monday" para migrarlo.
-- También inyecta un botón "🚀 Migrar todos" en la barra superior.
-
-#### Migración individual (`handleMondayClick` → `showMondayModal`)
-
-Al hacer click en "📋 Monday" de un ticket:
-
-1. Obtiene los datos completos del ticket desde la API de SupportPlus.
-2. Consulta los boards disponibles en Monday.
-3. Muestra un modal con:
-   - Resumen del ticket (folio, asunto, grupo, persona asignada, descripción).
-   - Selector de board (preselecciona el board del mes correspondiente).
-   - Botón "🚀 Crear en Monday".
-4. Al confirmar, crea el item en Monday con:
-   - Nombre: `"{código} - {asunto}"`.
-   - Descripción, persona asignada, estado, prioridad, fechas y link al ticket original.
-5. Actualiza la caché y reemplaza el botón por el badge ✅.
-
-#### Migración masiva (`handleBulkMigrate`)
-
-Al hacer click en "🚀 Migrar todos":
-
-1. Identifica todos los tickets cerrados visibles que no estén sincronizados.
-2. Pide confirmación al usuario.
-3. Muestra un overlay con barra de progreso y log en tiempo real.
-4. Para cada ticket:
-   - Obtiene datos de la API de SupportPlus.
-   - Resuelve el board por fecha y el grupo por servicio.
-   - Resuelve la persona asignada (busca el email del holder en los usuarios de Monday).
-   - Crea el item en Monday con todos los campos mapeados.
-   - Actualiza la UI y la caché.
-5. Al terminar, muestra el resumen: X migrados, Y errores.
-
-#### Observer (MutationObserver)
-
-- Observa cambios en el DOM de la página.
-- Cada vez que la tabla se actualiza (paginación, filtros, etc.), reinyecta los botones con un debounce de 200ms.
-
----
-
-## 🔄 Flujo general
+## Arquitectura
 
 ```
-Usuario abre macropay.supportplus.mx
-        │
-        ▼
-content.js se inyecta automáticamente
-        │
-        ▼
-Sincroniza tickets ya migrados desde Monday (caché 30 min)
-        │
-        ▼
-Inyecta botones en cada fila de ticket cerrado
-        │
-        ├── ✅ Ya migrado → Badge clickeable que abre Monday
-        │
-        └── 📋 Monday → Botón para migrar individualmente
-                │
-                ▼
-        Modal de confirmación → Crea item en Monday vía GraphQL
+manifest.json          → Manifest V3, content scripts + service worker
+config.js              → Constantes centralizadas (IDs, mapeos, GROUP_INFO)
+components.js          → Componentes UI reutilizables (modals, buttons, toasts)
+content.js             → Lógica principal (~7000 líneas, IIFE monolítico)
+monday-sync.js         → Auto-sync de tickets SP → Monday (cada 5 min)
+background.js          → Service worker: proxy Notion API + sync de datos
+popup.html/popup.js    → Popup informativo (solo muestra versión)
 ```
 
----
+## Flujo de Datos
 
-## ⚙️ Requisitos
+```
+Notion (fuente de verdad)
+  ↓ background.js sincroniza al iniciar/instalar + on-demand via sendMessage
+chrome.storage.local (cache reactivo, como useState)
+  ↓ content.js lee al cargar (estado inicial inmediato)
+Variables en memoria (_userConfig, _canCommentClosed, etc.)
+  ↓ se usan para renderizar UI
+```
 
-- Google Chrome (o navegador basado en Chromium).
-- Cuenta activa en `macropay.supportplus.mx` (para el token de autenticación).
-- API Token de Monday.com (se configura desde el popup de la extensión).
+### Patrón de estado (como useState)
 
-## 🚀 Instalación
+1. Al cargar el script → lee del storage inmediatamente (valor inicial)
+2. `checkSession()` → dispara `sync-notion` al background → espera → lee storage fresco → asigna en memoria → persiste de vuelta
+3. Funciones como `loadManagerGroupDetail` leen de memoria, con fallback a storage
 
-1. Abre `chrome://extensions/` en Chrome.
-2. Activa "Modo desarrollador" (esquina superior derecha).
-3. Click en "Cargar extensión sin empaquetar".
-4. Selecciona la carpeta de este proyecto.
-5. Abre el popup de la extensión y pega tu token de Monday.
-6. Navega a `macropay.supportplus.mx` y los botones aparecerán automáticamente.
+Este patrón existe porque la SPA de SupportPlus re-inyecta el content script al navegar, y la segunda instancia no completa `checkSession()` a tiempo.
+
+## Bases de Datos en Notion
+
+| DB                       | ID                                 | Propósito                                                            |
+| ------------------------ | ---------------------------------- | -------------------------------------------------------------------- |
+| MSP_Usuarios             | `36620e0684b98051a190e51d38d97288` | Usuarios, correo, rol, grupos, activo                                |
+| MSP_cat_Roles            | `36720e0684b9807aba20c1c3d0536c09` | Roles con permisos (PuedeMigrarMonday, botones)                      |
+| MSP_cat_Grupos           | `36620e0684b9800e9a57df46019a03e0` | Grupos SP con IdSupportPlus, EtiquetaMonday, workspace/folder Monday |
+| MSP_ComentariosSugeridos | `36920e0684b980a19fdbd27302a65feb` | Comentarios sugeridos por grupo (CRUD, borrado lógico)               |
+| MSP_Config               | `36b20e0684b9807aa115df0bb6b36517` | Config global (token_monday)                                         |
+| MSP_UserConfig           | `37320e0684b9806b84ecc4aae906f645` | Config por usuario (blacklist, MostrarSoloConTickets)                |
+| MSP_SubGrupo             | `36c20e0684b9800db6afe60707a87df7` | Sub-grupos de permisos granulares                                    |
+| MSP_Versiones            | `36f20e0684b98004b283ec713d3cde8a` | Historial de versiones + zip descargable                             |
+| DBA_cat_Productos        | `36c20e0684b980b7984bc6c5751a1057` | Productos DBA (garrafones, chesco)                                   |
+| DBA_LogInfo              | `36c20e0684b98030b292c088101e8184` | Log de consumo DBA                                                   |
+
+## Permisos (Sub-grupos en Notion)
+
+Los permisos granulares se definen en `MSP_SubGrupo`. La relación `MSP_Usuarios` indica quién pertenece. Se buscan por nombre con `.includes()`:
+
+| Sub-grupo                         | Variable            | Controla                      |
+| --------------------------------- | ------------------- | ----------------------------- |
+| Drag And Drop                     | `canDragDrop`       | Reasignar tickets arrastrando |
+| Mostrar boton migrar aplicaciones | `_btnReassignApp`   | Botón reasignar a Apps        |
+| Mostrar boton IAMcito             | `_btnAddIAM`        | Botón IAM                     |
+| Mostrar etiquetas                 | `_canShowLabels`    | Tags SL/BD en tickets         |
+| Reabrir tickets                   | `_canReopenTickets` | Botón reabrir ticket cerrado  |
+| Comentar con ticket cerrado       | `_canCommentClosed` | Campo comentario en cerrados  |
+| Mostrar botón de rechazar         | `_canRejectTickets` | Botón rechazar ticket         |
+
+## Monday.com
+
+### Configuración por Grupo
+
+La migración a Monday se controla desde `MSP_cat_Grupos`:
+
+- `monday_workspace_id` — workspace de Monday
+- `monday_folder_id` — folder dentro del workspace
+- `EtiquetaMonday` — prefijo del board (ej: "Tickets DBA")
+
+El nombre del board se construye: `{EtiquetaMonday} - {Mes} - {Año}`
+
+Si un grupo NO tiene estos campos, no se muestra nada de Monday para ese grupo.
+
+### Permiso de migración
+
+El rol del usuario debe tener `PuedeMigrarMonday = true` para ver opciones de Monday.
+
+### Status mapping (SP → Monday)
+
+```javascript
+STATUS_MAP: {
+  "cerrado": 1,       // Monday "Listo"
+  "asignado": 0,      // Monday "En Proceso"
+  "en atención": 0,   // Monday "En Proceso"
+  "en espera": 5,     // Monday "No iniciado"
+  "estancado": 2      // Monday "Estancado"
+}
+```
+
+### SP_STATUSES (IDs fijos, no cambian)
+
+```javascript
+SP_STATUSES: {
+  ASIGNADO: 1, EN_VALIDACION: 2, EN_ATENCION: 3,
+  POR_APROBADOR: 4, POR_EJECUTAR: 5, POR_REVISAR: 6,
+  EN_APLICACIONES: 7, POR_CONFIRMAR: 8, CERRADO: 9,
+  RECHAZADO: 10, CANCELADO: 11, REABIERTO: 35
+}
+```
+
+## Proceso de Subir Versión
+
+Cuando se dice "sube versión":
+
+1. Bump version en `manifest.json`
+2. `git add + commit + push` (branch `feature/initial`)
+3. Generar zip: `tar -a -cf releases/vX.Y.Z.zip [archivos]`
+4. Push del zip
+5. Crear entrada en tabla Versiones de Notion con:
+   - Version (title)
+   - Camios (rich_text) — descripción corta y técnica
+   - Activo: **false** (el dueño decide cuándo activar)
+   - Archivo zip (external URL al raw de GitHub)
+
+## Vistas
+
+La vista es unificada para todos los roles:
+
+- **1 grupo** → sin filtro ni contador, directo los recuadros por persona
+- **2+ grupos** → filtro de grupos + tablero de contadores + colapsables
+
+Los grupos que ve cada usuario vienen del **rol** en Notion (`MSP_cat_Roles.MSP_cat_Grupos`).
+
+## Decisiones Técnicas
+
+- **No usar React/bundler** por ahora — todo es vanilla JS en IIFEs
+- **Storage como cache reactivo** — la fuente de verdad es Notion, storage es el "estado"
+- **Toasts y modals** en `components.js` como globals (`window.*`)
+- **Token de Notion** en base64 en `background.js` (ofuscación mínima, no seguridad real)
+- **Token de Monday** en tabla `MSP_Config` de Notion (no hardcodeado)
+- **GROUP_INFO** se carga dinámicamente de Notion con fallback al array en `config.js`
+
+## Roadmap (ver MEJORAS.md)
+
+Pendientes:
+
+- Dividir `content.js` completamente (requiere bundler)
+- Mover token de Notion a proxy backend serverless
+- Migrar a React (futuro lejano)
