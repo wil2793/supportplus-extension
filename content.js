@@ -943,46 +943,11 @@
 
   function initExtension() {
   _showQuickDetailModal = showQuickDetailModal;
-  // --- Toast helpers ---
-  function ensureToastStyles() {
-    if (!document.getElementById("sp-toast-style")) {
-      var s = document.createElement("style");
-      s.id = "sp-toast-style";
-      s.textContent = "@keyframes sp-toast-in{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}@keyframes sp-toast-out{from{opacity:1}to{opacity:0;transform:translateX(-50%) translateY(-10px)}}@keyframes sp-spin{to{transform:rotate(360deg)}}";
-      document.head.appendChild(s);
-    }
-  }
-  function showLoadingToast(text) {
-    ensureToastStyles();
-    var existing = document.getElementById("sp-loading-toast");
-    if (existing) existing.remove();
-    var toast = document.createElement("div");
-    toast.id = "sp-loading-toast";
-    toast.style.cssText = "position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:100000;background:#333;color:#fff;padding:12px 20px;border-radius:8px;font-family:system-ui;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.2);display:flex;align-items:center;gap:8px;animation:sp-toast-in 0.3s ease;";
-    toast.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> ' + text;
-    document.body.appendChild(toast);
-    return toast;
-  }
-  function showSuccessToast(text) {
-    ensureToastStyles();
-    var existing = document.getElementById("sp-loading-toast");
-    if (existing) existing.remove();
-    var toast = document.createElement("div");
-    toast.style.cssText = "position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:100000;background:#2E7D32;color:#fff;padding:12px 20px;border-radius:8px;font-family:system-ui;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.2);display:flex;align-items:center;gap:8px;animation:sp-toast-in 0.3s ease;";
-    toast.textContent = text;
-    document.body.appendChild(toast);
-    setTimeout(function() { toast.style.animation = "sp-toast-out 0.3s ease forwards"; setTimeout(function() { toast.remove(); }, 300); }, 3000);
-  }
-  function showErrorToast(text) {
-    ensureToastStyles();
-    var existing = document.getElementById("sp-loading-toast");
-    if (existing) existing.remove();
-    var toast = document.createElement("div");
-    toast.style.cssText = "position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:100000;background:#D94040;color:#fff;padding:12px 20px;border-radius:8px;font-family:system-ui;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.2);display:flex;align-items:center;gap:8px;animation:sp-toast-in 0.3s ease;";
-    toast.textContent = text;
-    document.body.appendChild(toast);
-    setTimeout(function() { toast.style.animation = "sp-toast-out 0.3s ease forwards"; setTimeout(function() { toast.remove(); }, 4000); }, 4000);
-  }
+  // --- Toast helpers (from components.js window globals) ---
+  const ensureToastStyles = window.ensureToastStyles;
+  const showLoadingToast = window.showLoadingToast;
+  const showSuccessToast = window.showSuccessToast;
+  const showErrorToast = window.showErrorToast;
 
   const SP_API = window.SP_CONFIG.SP_API;
   const MONDAY_API = "https://api.monday.com/v2";

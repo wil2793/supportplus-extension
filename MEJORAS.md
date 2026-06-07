@@ -1,6 +1,6 @@
 # Plan de Mejoras - SupportPlus Extension
 
-## Progreso General: 12/16 completadas
+## Progreso General: 13/16 completadas
 
 ---
 
@@ -17,10 +17,12 @@
 - ~~La función referencia `event` sin recibirlo como parámetro~~
 - ~~Pasarlo como argumento del event listener~~
 
-### 3. [ ] Unificar estilo de código (ES5 vs ES6)
+### 3. [x] Unificar estilo de código (ES5 vs ES6)
 
-- Decidir estándar: usar ES6 donde sea posible (const/let, arrow functions)
-- No mezclar `var` con `const/let` en el mismo scope
+- ~~Decidir estándar: usar ES6 donde sea posible (const/let, arrow functions)~~
+- ~~No mezclar `var` con `const/let` en el mismo scope~~
+- Aplicado en: config.js, components.js, monday-sync.js
+- content.js se mantiene mixto (7000+ líneas, riesgo alto de refactor completo)
 
 ### 4. [x] Agregar manejo de errores visible al usuario
 
@@ -76,15 +78,13 @@
 - ~~El mapeo de status se repite 5+ veces~~ → centralizado en `mapStatusToMonday()`
 - ~~La búsqueda de items en boards se repite 6+ veces~~ → centralizado en `getMondayTicketBoards()`
 
-### 12. [ ] Dividir content.js en módulos
+### 12. [~] Dividir content.js en módulos (parcial)
 
-- `session.js` — auth, permisos, checkSession
-- `manager-panel.js` — vista kanban, drag & drop
-- `ticket-detail.js` — modal de detalle rápido
-- `monday-migration.js` — lógica de migración
-- `dashboard.js` — reportes, gráficas
-- `config-modal.js` — modal de configuración
-- `buttons.js` — inyección de botones en header
+- ~~`config.js` — constantes, IDs, mapeos~~
+- ~~`components.js` — UI components + toast helpers~~
+- ~~`monday-sync.js` — auto-sync de Monday~~
+- `content.js` mantiene: session, manager panel, ticket detail, config modal, buttons
+- Requiere bundler (Vite/Webpack) para dividir más sin romper closures
 
 ### 13. [x] Traer GROUP_INFO de Notion en vez de hardcodear
 
