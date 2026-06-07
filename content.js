@@ -93,6 +93,7 @@
   var _canShowLabels = false; // Show labels/tags (from sub-group)
   var _canReopenTickets = false; // Show reopen button (from sub-group)
   var _canCommentClosed = false; // Allow commenting on closed tickets (from sub-group)
+  var _canRejectTickets = false; // Show reject button (from sub-group)
   var _lastDropTime = 0; // Timestamp of last drag-and-drop to prevent accidental modal opens
   var _mondayGroupCache = {}; // Cache of created Monday groups: groupName -> groupId
   var _autoMigrateQueue = Promise.resolve(); // Serial queue for auto-migrations
@@ -109,6 +110,7 @@
         _canShowLabels = r.subgroupPerms.canShowLabels || false;
         _canReopenTickets = r.subgroupPerms.canReopenTickets || false;
         _canCommentClosed = r.subgroupPerms.canCommentClosed || false;
+        _canRejectTickets = r.subgroupPerms.canRejectTickets || false;
       } else if (r.notionUsers && r.userEmail) {
         // Fallback: read directly from notionUsers (set by background sync)
         var u = r.notionUsers[(r.userEmail || "").toLowerCase()];
@@ -119,6 +121,7 @@
           _canShowLabels = !!u.canShowLabels;
           _canReopenTickets = !!u.canReopenTickets;
           _canCommentClosed = !!u.canCommentClosed;
+          _canRejectTickets = !!u.canRejectTickets;
         }
       }
       if (r.userConfig) _userConfig = r.userConfig;
@@ -247,6 +250,7 @@
       _canShowLabels = !!userData.canShowLabels;
       _canReopenTickets = !!userData.canReopenTickets;
       _canCommentClosed = !!userData.canCommentClosed;
+      _canRejectTickets = !!userData.canRejectTickets;
       canDragDrop = !!userData.canDragDrop;
 
       // Set user config
@@ -257,7 +261,7 @@
         chrome.storage.local.set({
           userEmail: email,
           myProfileId: sessionProfileId,
-          subgroupPerms: { canDragDrop: canDragDrop, canReassignApp: _btnReassignApp, canAddIAM: _btnAddIAM, canShowLabels: _canShowLabels, canReopenTickets: _canReopenTickets, canCommentClosed: _canCommentClosed }
+          subgroupPerms: { canDragDrop: canDragDrop, canReassignApp: _btnReassignApp, canAddIAM: _btnAddIAM, canShowLabels: _canShowLabels, canReopenTickets: _canReopenTickets, canCommentClosed: _canCommentClosed, canRejectTickets: _canRejectTickets }
         });
       } catch(e) {}
 
@@ -749,7 +753,7 @@
       profiles.forEach(function(p) {
         var col = document.createElement("div");
         col.style.cssText = "min-width:160px;max-width:200px;border:1px solid #ddd;border-radius:6px;overflow:hidden;flex-shrink:0;";
-        col.innerHTML = '<div style="background:#2196F3;color:#fff;padding:4px 8px;font-size:10px;font-weight:700;text-align:center;">' + p.profileFullName.split(" ")[0] + ' <span class="sp-mgr-pcount">(...)</span></div>' +
+        col.innerHTML = '<div style="background:#2196F3;color:#fff;padding:4px 8px;font-size:10px;font-weight:700;text-align:center;">' + esc(p.profileFullName.split(" ")[0]) + ' <span class="sp-mgr-pcount">(...)</span></div>' +
           '<div class="sp-mgr-ptickets" data-profile-id="' + p.profileId + '" data-group-id="' + groupId + '" style="padding:3px;max-height:180px;overflow-y:auto;background:#fafafa;min-height:25px;"></div>';
         container.appendChild(col);
       });
@@ -2105,7 +2109,7 @@
           var col = document.createElement("div");
           col.id = "sp-team-col-" + p.profileId;
           col.style.cssText = "min-width:180px;max-width:220px;border:2px solid " + borderColor + ";border-radius:8px;overflow:hidden;flex-shrink:0;";
-          col.innerHTML = '<div class="sp-team-header" data-profile-id="' + p.profileId + '" style="background:' + headerBg + ';color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">' + firstName + ' <span class="sp-team-count" style="opacity:0.7;">(...)</span></div>' +
+          col.innerHTML = '<div class="sp-team-header" data-profile-id="' + p.profileId + '" style="background:' + headerBg + ';color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">' + esc(firstName) + ' <span class="sp-team-count" style="opacity:0.7;">(...)</span></div>' +
             '<div class="sp-team-tickets" data-profile-id="' + p.profileId + '" data-area-group="' + area.resolutionGroupId + '" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>';
           containerDiv.appendChild(col);
         });
@@ -3623,7 +3627,7 @@
                 var isVisible = !blacklistedProfileIds.includes(p.profileId);
                 var label = document.createElement("label");
                 label.style.cssText = "display:flex;align-items:center;gap:4px;font-size:11px;padding:2px 0;cursor:pointer;";
-                label.innerHTML = '<input type="checkbox" data-pid="' + p.profileId + '"' + (isVisible ? ' checked' : '') + '> ' + p.profileFullName;
+                label.innerHTML = '<input type="checkbox" data-pid="' + p.profileId + '"' + (isVisible ? ' checked' : '') + '> ' + esc(p.profileFullName);
                 membersDiv.appendChild(label);
               });
             });
@@ -3632,7 +3636,7 @@
             profiles.forEach(function(p) {
               var label = document.createElement("label");
               label.style.cssText = "display:flex;align-items:center;gap:4px;font-size:11px;padding:2px 0;cursor:pointer;";
-              label.innerHTML = '<input type="checkbox" data-pid="' + p.profileId + '" checked> ' + p.profileFullName;
+              label.innerHTML = '<input type="checkbox" data-pid="' + p.profileId + '" checked> ' + esc(p.profileFullName);
               membersDiv.appendChild(label);
             });
           }
@@ -5675,6 +5679,7 @@
           (statusName === "En espera" ? '<div style="margin-bottom:8px;">' +
             '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">' +
               '<button id="sp-qd-take-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🤚 Tomar</button>' +
+              (_canRejectTickets ? '<button id="sp-qd-reject-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D32F2F;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">❌ Rechazar</button>' : '') +
               '<select id="sp-qd-assign-select" style="flex:1;padding:6px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:6px;"><option value="">-- Asignar a --</option></select>' +
             '</div>' +
             '<div id="sp-qd-take-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:0.9rem;">' +
@@ -5852,6 +5857,8 @@
         if (stealBtn) { stealBtn.style.padding = "5px 10px"; stealBtn.style.fontSize = "11px"; actionsContainer.appendChild(stealBtn); }
         var takeBtn = document.getElementById("sp-qd-take-btn");
         if (takeBtn) { takeBtn.style.padding = "5px 10px"; actionsContainer.appendChild(takeBtn); }
+        var rejectBtn = document.getElementById("sp-qd-reject-btn");
+        if (rejectBtn) { rejectBtn.style.padding = "5px 10px"; rejectBtn.style.fontSize = "11px"; actionsContainer.appendChild(rejectBtn); }
         var migrateBtn = document.getElementById("sp-qd-migrate-btn");
         if (migrateBtn) { migrateBtn.style.padding = "5px 10px"; migrateBtn.style.fontSize = "11px"; actionsContainer.appendChild(migrateBtn); }
         var reopenBtn = document.getElementById("sp-qd-reopen-btn");
@@ -5900,7 +5907,7 @@
         pendingFiles.forEach(function(f, idx) {
           var chip = document.createElement("span");
           chip.style.cssText = "display:inline-flex;align-items:center;gap:3px;padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:4px;font-size:10px;color:#1976D2;";
-          chip.innerHTML = '📎 ' + f.name + ' <span data-idx="' + idx + '" style="cursor:pointer;color:#D94040;font-weight:700;margin-left:2px;">✕</span>';
+          chip.innerHTML = '📎 ' + esc(f.name) + ' <span data-idx="' + idx + '" style="cursor:pointer;color:#D94040;font-weight:700;margin-left:2px;">✕</span>';
           chip.querySelector("[data-idx]").addEventListener("click", function() {
             pendingFiles.splice(idx, 1);
             renderPendingFiles();
@@ -6366,6 +6373,41 @@
           takeBtn.style.background = "#0D47A1";
           takeBtn.disabled = true;
         });
+
+        // Reject button - change status to Rechazado directly
+        var rejectBtn = document.getElementById("sp-qd-reject-btn");
+        if (rejectBtn) {
+          rejectBtn.addEventListener("click", async function() {
+            if (!confirm("¿Rechazar este ticket?")) return;
+            rejectBtn.disabled = true;
+            rejectBtn.textContent = "⏳...";
+            try {
+              // Get available next statuses and find "Rechazado"
+              var statusRes = await fetch("https://macropayapi.supportplus.mx/ticket-status/next-status-options/" + (t.ticketStatus?.id || 7), {
+                headers: { accept: "application/json", authorization: "Bearer " + spToken }
+              });
+              var statusJson = await statusRes.json();
+              var options = statusJson.data || [];
+              var rejectOption = options.find(function(o) { return (o.nextStatus?.name || "").toLowerCase().includes("rechaz"); });
+              if (!rejectOption) throw new Error("No se encontró el estatus Rechazado");
+              var rejectStatusId = rejectOption.nextStatus.id;
+              // Change status
+              var res = await fetch(SP_API + "/change-status/" + ticketId, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                body: JSON.stringify({ nextTicketStatusId: rejectStatusId, ticketCommentRequest: null })
+              });
+              if (!res.ok) throw new Error("HTTP " + res.status);
+              showSuccessToast("Ticket rechazado");
+              overlay.remove();
+              showQuickDetailModal(ticketId);
+            } catch(err) {
+              showErrorToast("Error: " + err.message);
+              rejectBtn.disabled = false;
+              rejectBtn.textContent = "❌ Rechazar";
+            }
+          });
+        }
 
         // Cancel button - restore original state
         var takeCancelBtn = document.getElementById("sp-qd-take-cancel");

@@ -1,6 +1,6 @@
 # Plan de Mejoras - SupportPlus Extension
 
-## Progreso General: 13/16 completadas
+## Progreso General: 14/16 completadas
 
 ---
 
@@ -102,11 +102,13 @@
 - ~~Validar que emails usados como keys no sean `__proto__`, `constructor`, etc.~~
 - ~~Usar `Object.create(null)` para mapas o validar con `hasOwnProperty`~~
 
-### 15. [ ] Sanitizar innerHTML consistentemente
+### 15. [x] Sanitizar innerHTML consistentemente
 
-- Auditar todos los puntos donde se usa innerHTML con data remota
-- Asegurar que `esc()` se aplique en todos los campos de usuario
-- Para description (que permite HTML), usar un sanitizer como DOMPurify
+- ~~Auditar todos los puntos donde se usa innerHTML con data remota~~
+- ~~Asegurar que `esc()` se aplique en todos los campos de usuario~~
+- profileFullName, fileName sanitizados en todas las ocurrencias
+- description del ticket mantiene HTML (viene de WYSIWYG) con strip de `<script>`
+- Para sanitización completa de HTML se recomienda DOMPurify (futuro)
 
 ### 16. [ ] Mover token de Notion a un proxy backend
 

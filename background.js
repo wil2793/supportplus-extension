@@ -119,6 +119,8 @@ async function syncNotionData() {
     const reopenMembers = reopenGroup ? (reopenGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
     const commentClosedGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("comentar con ticket cerrado"));
     const commentClosedMembers = commentClosedGroup ? (commentClosedGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
+    const rejectGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("rechazar"));
+    const rejectMembers = rejectGroup ? (rejectGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
 
     // Mark users with sub-group permissions
     for (const u of users) {
@@ -130,6 +132,7 @@ async function syncNotionData() {
         usersMap[email].canShowLabels = labelsMembers.includes(u.id);
         usersMap[email].canReopenTickets = reopenMembers.includes(u.id);
         usersMap[email].canCommentClosed = commentClosedMembers.includes(u.id);
+        usersMap[email].canRejectTickets = rejectMembers.includes(u.id);
       }
     }
 
