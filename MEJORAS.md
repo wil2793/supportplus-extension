@@ -1,6 +1,6 @@
 # Plan de Mejoras - SupportPlus Extension
 
-## Progreso General: 8/16 completadas
+## Progreso General: 9/16 completadas
 
 ---
 
@@ -56,12 +56,13 @@
 
 ## 🟠 Prioridad Alta (Arquitectura)
 
-### 9. [ ] Extraer constantes a un archivo `config.js`
+### 9. [x] Extraer constantes a un archivo `config.js`
 
-- IDs de Notion databases
-- IDs de Monday (workspace, columns)
-- Mapeos de status
-- GROUP_INFO
+- ~~IDs de Notion databases~~
+- ~~IDs de Monday (workspace, columns)~~
+- ~~Mapeos de status~~
+- ~~GROUP_INFO~~
+- Monday workspace ID ahora viene del rol en Notion (dinámico por usuario)
 
 ### 10. [ ] Crear `utils.js` con funciones compartidas
 

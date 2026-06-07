@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SupportPlus Ticket Exporter",
-  "version": "5.3.6",
+  "version": "5.3.7",
   "description": "SupportPlus → Monday.com: Migra tickets con un click. Desarrollado por el equipo de Base de Datos (DBA).",
   "permissions": ["activeTab", "scripting", "storage", "tabs"],
   "background": {
@@ -24,7 +24,7 @@
   "content_scripts": [
     {
       "matches": ["https://macropay.supportplus.mx/*"],
-      "js": ["components.js", "content.js", "monday-sync.js"],
+      "js": ["config.js", "components.js", "content.js", "monday-sync.js"],
       "run_at": "document_idle"
     }
   ]

@@ -69,68 +69,7 @@
   hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } } .MuiDataGrid-cell[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; } .MuiDataGrid-columnHeader[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; }";
   document.head.appendChild(hideBackdrop);
 
-  const GROUP_INFO = [
-    { id: 9, name: "Mesa de Ayuda" },
-    { id: 10, name: "Soporte a Tiendas" },
-    { id: 11, name: "Soporte Tecnico" },
-    { id: 12, name: "Infraestructura IAM" },
-    { id: 14, name: "SAP ABAP" },
-    { id: 15, name: "SAP BASIS" },
-    { id: 16, name: "SAP Funcional (Datos maestros)" },
-    { id: 18, name: "Infraestructura (Cloud/ Servidores)" },
-    { id: 19, name: "Infraestructura DBA" },
-    { id: 20, name: "Infraestructura DevOps" },
-    { id: 21, name: "Central de Monitoreo" },
-    { id: 22, name: "Aplicaciones- Liberacion e Implementacion" },
-    { id: 23, name: "Problemas" },
-    { id: 24, name: "Ciberseguridad" },
-    { id: 25, name: "Herramienta de Gestion" },
-    { id: 26, name: "SAP Funcional (Modulo Banking - CML)" },
-    { id: 27, name: "SAP Funcional (Modulo Compras)" },
-    { id: 28, name: "SAP Funcional (Modulo Finanzas)" },
-    { id: 29, name: "SAP Funcional (Modulo Garantias)" },
-    { id: 30, name: "SAP Funcional (Modulo Logistico y Distribucion)" },
-    { id: 31, name: "SAP Funcional (Modulo Presupuestos)" },
-    { id: 32, name: "SAP Funcional (Modulo Comercial)" },
-    { id: 33, name: "Salesforce Comunicaciones" },
-    { id: 34, name: "Salesforce Funcional" },
-    { id: 51, name: "Soporte Redes y Telecomunicaciones" },
-    { id: 52, name: "Telefonia movil" },
-    { id: 53, name: "Soporte Aplicativos y Sistemas (general)" },
-    { id: 55, name: "Control Auditoria" },
-    { id: 56, name: "Control Cadena Suministro" },
-    { id: 57, name: "Control Cambaceo" },
-    { id: 58, name: "Control Capital Humano" },
-    { id: 59, name: "Centro de Servicios" },
-    { id: 60, name: "Control CIAB" },
-    { id: 61, name: "Control Cobranza" },
-    { id: 62, name: "Control Comercial" },
-    { id: 64, name: "Control Compras Internas" },
-    { id: 65, name: "Control Cons/Mntto" },
-    { id: 66, name: "Control Control Interno" },
-    { id: 67, name: "Control Experiencia Cliente" },
-    { id: 68, name: "Control Finanzas" },
-    { id: 69, name: "Control Innovacion Crediticia" },
-    { id: 70, name: "Control Juridico" },
-    { id: 71, name: "Control Mercadotecnia" },
-    { id: 72, name: "Control MNVO" },
-    { id: 73, name: "Control Tiendas" },
-    { id: 74, name: "control Transformacion Digital" },
-    { id: 76, name: "Presupuestos TD" },
-    { id: 77, name: "Activo Fijo" },
-    { id: 78, name: "Mobile" },
-    { id: 79, name: "Control Productos Prendarios" },
-    { id: 80, name: "Categoría de inicio" },
-    { id: 83, name: "Soporte office 365" },
-    { id: 84, name: "Desarrollo" },
-    { id: 85, name: "PMO" },
-    { id: 86, name: "Desarrollo Organizacional" },
-    { id: 87, name: "CANCELAR PR" },
-    { id: 88, name: "Soporte a Tiendas - Interno" },
-    { id: 89, name: "Viaticos" },
-    { id: 90, name: "Compras Tecnologia" },
-    { id: 91, name: "Compras Internas" }
-  ];
+  const GROUP_INFO = window.SP_CONFIG.GROUP_INFO;
 
   var currentUserRole = "usuario";
   var currentUserGroups = []; // Groups from Notion
@@ -183,8 +122,7 @@
       if (!mondayToken || !analystEmail) return;
       var code = uniqueCode || String(ticketId);
       // Search across all ticket boards
-      var boardsRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
-      var ticketBoards = (boardsRes.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
+      var ticketBoards = await getMondayTicketBoards(mondayToken);
       var mondayItemId = null, foundBoardId = null;
       for (var b of ticketBoards) {
         var itemRes = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: code });
@@ -208,8 +146,7 @@
       if (!mondayToken) return;
       var code = uniqueCode || String(ticketId);
       // Search across all ticket boards in workspace
-      var searchRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
-      var ticketBoards = (searchRes.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
+      var ticketBoards = await getMondayTicketBoards(mondayToken);
       // Search for the item in each board
       var mondayItemId = null, foundBoardId = null;
       for (var b of ticketBoards) {
@@ -1041,7 +978,7 @@
     setTimeout(function() { toast.style.animation = "sp-toast-out 0.3s ease forwards"; setTimeout(function() { toast.remove(); }, 4000); }, 4000);
   }
 
-  const SP_API = "https://macropayapi.supportplus.mx/tickets/web";
+  const SP_API = window.SP_CONFIG.SP_API;
   const MONDAY_API = "https://api.monday.com/v2";
   const BTN_CLASS = "sp-monday-btn";
   const SYNCED_CLASS = "sp-monday-synced";
@@ -1054,14 +991,9 @@
   const CACHE_KEY = "sp_monday_synced";
   const CACHE_TTL = 1000 * 60 * 30;
 
-  const PRIORITY_MAP = { critico: 10, alto: 110, medio: 109, bajo: 7 };
-  const DEV_IDS = new Set([965, 2877]);
-  const QA_IDS = new Set([2787, 2878, 396]);
-  const PROD_IDS = new Set([2786, 2879, 395]);
-  const GROUP_MAP = { DEV: "topics", QA: "group_title", PROD: "grupo_nuevo__1", SS: "grupo_nuevo895__1" };
-  const GROUP_LABELS = { [GROUP_MAP.DEV]: "DEV", [GROUP_MAP.QA]: "QA", [GROUP_MAP.PROD]: "PROD", [GROUP_MAP.SS]: "Shared Services" };
+  const PRIORITY_MAP = window.SP_CONFIG.PRIORITY_MAP;
 
-  const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  const MONTH_NAMES = window.SP_CONFIG.MONTH_NAMES;
 
   // Extract month (0-indexed) and year from board name like "Tickets DBA - Abril - 2026"
   function parseBoardDate(boardName) {
@@ -1092,7 +1024,7 @@
   function getMondayToken() {
     if (_mondayTokenCache) return Promise.resolve(_mondayTokenCache);
     return new Promise(function(resolve) {
-      chrome.runtime.sendMessage({ type: "notion-query", dbId: "36b20e0684b9807aa115df0bb6b36517", body: { filter: { property: "Nombre", title: { equals: "token_monday" } }, page_size: 1 } }, function(resp) {
+      chrome.runtime.sendMessage({ type: "notion-query", dbId: window.SP_CONFIG.NOTION_CONFIG_DB, body: { filter: { property: "Nombre", title: { equals: "token_monday" } }, page_size: 1 } }, function(resp) {
         if (resp && resp.success && resp.data.results && resp.data.results[0]) {
           _mondayTokenCache = resp.data.results[0].properties.Valor?.rich_text?.[0]?.plain_text || "";
         }
@@ -1100,16 +1032,38 @@
       });
     });
   }
+  var _mondayWorkspaceCache = "";
+  function getMondayWorkspaceId() {
+    if (_mondayWorkspaceCache) return Promise.resolve(_mondayWorkspaceCache);
+    return new Promise(function(resolve) {
+      chrome.storage.local.get(["notionUsers", "userEmail"], function(r) {
+        var email = (r.userEmail || "").toLowerCase();
+        var users = r.notionUsers || {};
+        var user = users[email];
+        _mondayWorkspaceCache = user?.mondayWorkspaceId || "";
+        resolve(_mondayWorkspaceCache);
+      });
+    });
+  }
   var _mondayBoardsCache = {}; // month -> boardId
+
+  // Get all ticket boards for the user's workspace
+  async function getMondayTicketBoards(mondayToken) {
+    var wsId = await getMondayWorkspaceId();
+    if (!wsId) return [];
+    var boardsData = await mondayQuery(mondayToken, '{ boards(workspace_ids: [' + wsId + '], limit: 50) { id name } }', {});
+    return (boardsData.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
+  }
+
   async function getMondayBoardForMonth(year, month) {
     var key = year + "-" + String(month + 1).padStart(2, "0");
     if (_mondayBoardsCache[key]) return _mondayBoardsCache[key];
     var mondayToken = await getMondayToken();
     if (!mondayToken) return null;
-    var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    var meses = window.SP_CONFIG.MONTH_NAMES;
     var boardName = "Tickets DBA - " + meses[month] + " - " + year;
-    var searchRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
-    var board = (searchRes.boards || []).find(function(b) { return b.name.trim().toLowerCase() === boardName.trim().toLowerCase(); });
+    var boards = await getMondayTicketBoards(mondayToken);
+    var board = boards.find(function(b) { return b.name.trim().toLowerCase() === boardName.trim().toLowerCase(); });
     if (board) { _mondayBoardsCache[key] = board.id; return board.id; }
     return null;
   }
@@ -1118,23 +1072,6 @@
     // Returns current month board (for auto-migrate new tickets)
     var now = new Date();
     return getMondayBoardForMonth(now.getFullYear(), now.getMonth());
-  }
-
-  function collectServiceIds(node) {
-    const ids = [node.id];
-    for (const c of node.children || []) ids.push(...collectServiceIds(c));
-    return ids;
-  }
-
-  function resolveGroup(serviceNode) {
-    const ids = collectServiceIds(serviceNode);
-    console.log("[SP Monday] Service IDs:", ids, "| Service name:", serviceNode.name);
-    for (const id of ids) {
-      if (DEV_IDS.has(id)) return GROUP_MAP.DEV;
-      if (QA_IDS.has(id)) return GROUP_MAP.QA;
-      if (PROD_IDS.has(id)) return GROUP_MAP.PROD;
-    }
-    return GROUP_MAP.SS;
   }
 
   // Parse "19/03/2026 - 17:51" → board name "Tickets DBA - Marzo - 2026"
@@ -1182,10 +1119,8 @@
     if (!mondayToken) return {};
     try {
       // Always search ALL ticket boards
-      const boardsData = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
-      const boardIds = (boardsData.boards || [])
-        .filter((b) => b.name.includes("Tickets DBA") && !b.name.includes("Subelementos"))
-        .map((b) => b.id);
+      const ticketBoards = await getMondayTicketBoards(mondayToken);
+      const boardIds = ticketBoards.map((b) => b.id);
       if (!boardIds.length) return {};
       const synced = {};
       for (const boardId of boardIds) {
@@ -1876,7 +1811,8 @@
         }
 
         // Get boards and users
-        var boardsData = await mFetch('{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
+        var wsId = await getMondayWorkspaceId();
+        var boardsData = await mFetch('{ boards(workspace_ids: [' + wsId + '], limit: 50) { id name } }', {});
         var ticketBoards = (boardsData.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
         var usersData = await mFetch('{ users(limit:500) { id email } }', {});
         var mondayUsersMap = {};
@@ -4237,7 +4173,7 @@
 
   // --- Water Role Button ---
   const WATER_BTN_ID = "sp-water-btn";
-  const SUBGRUPO_DB = "36c20e0684b9800db6afe60707a87df7";
+  const SUBGRUPO_DB = window.SP_CONFIG.NOTION_SUBGRUPO_DB;
   function injectWaterButton() {
     if (document.getElementById(WATER_BTN_ID)) return;
     var refBtn = document.getElementById(DASHBOARD_BTN_ID) || document.getElementById(SEARCH_BTN_ID);
@@ -5661,7 +5597,8 @@
           }
 
           // Find ticket in Monday boards
-          var boardsData = await mFetch('{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
+          var wsId2 = await getMondayWorkspaceId();
+          var boardsData = await mFetch('{ boards(workspace_ids: [' + wsId2 + '], limit: 50) { id name } }', {});
           var ticketBoards = (boardsData.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
           for (var b of ticketBoards) {
             var itemData = await mFetch('query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: t.uniqueCode });
@@ -7071,8 +7008,7 @@
             var spStatus = (ticket.ticketStatusName || "").toLowerCase();
             var holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
             // Find in Monday
-            var boardsRes = await mondayQuery(mondayToken, '{ boards(workspace_ids: [9956268], limit: 50) { id name } }', {});
-            var ticketBoards = (boardsRes.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
+            var ticketBoards = await getMondayTicketBoards(mondayToken);
             for (var b of ticketBoards) {
               var itemRes = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: ticket.uniqueCode });
               var items = itemRes.items_page_by_column_values?.items || [];
@@ -7390,8 +7326,7 @@
 
     const url = `${BASE_URL}/${ticketId}`;
     const desc = (ticket.description || "").replace(/<[^>]*>/g, "");
-    const groupId = ticket.service ? resolveGroup(ticket.service) : GROUP_MAP.SS;
-    const groupLabel = GROUP_LABELS[groupId] || groupId;
+    const creatorGroup = ticket.ticketInfo?.departmentName || ticket.resolutionGroup?.name || "Sin grupo";
     const holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
     const holderName = ticket.ticketHolder?.ticketHolderLog?.fullName || "Sin asignar";
 
