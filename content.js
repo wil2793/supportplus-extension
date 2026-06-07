@@ -69,24 +69,36 @@
   hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } } .MuiDataGrid-cell[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; } .MuiDataGrid-columnHeader[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; }";
   document.head.appendChild(hideBackdrop);
 
-  // Colorear filas por estatus (inmediato, sin esperar Notion)
-  const statusStyles = document.createElement("style");
-  statusStyles.textContent = [
-    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Asignado"]) { background: rgba(33,150,243,0.18) !important; }',
-    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="En validación"]) { background: rgba(156,39,176,0.18) !important; }',
-    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="En atención"]) { background: rgba(255,152,0,0.18) !important; }',
-    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Por aprobador"]) { background: rgba(121,85,72,0.18) !important; }',
-    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Por ejecutar"]) { background: rgba(0,150,136,0.18) !important; }',
-    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Por revisar"]) { background: rgba(63,81,181,0.18) !important; }',
-    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="En aplicaciones"]) { background: rgba(233,30,99,0.18) !important; }',
-    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Por confirmar"]) { background: rgba(255,193,7,0.20) !important; }',
-    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Cerrado"]) { background: rgba(76,175,80,0.18) !important; }',
-    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Rechazado"]) { background: rgba(244,67,54,0.18) !important; }',
-    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Cancelado"]) { background: rgba(158,158,158,0.20) !important; }',
-    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Reabierto"]) { background: rgba(255,87,34,0.18) !important; }',
-    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="En espera"]) { background: rgba(255,235,59,0.20) !important; }'
-  ].join('\n');
-  document.head.appendChild(statusStyles);
+  // Colorear filas por estatus (inmediato, sin esperar Notion - usa MutationObserver ligero)
+  const STATUS_BG_COLORS = {
+    "Asignado": "rgba(33,150,243,0.18)",
+    "En validación": "rgba(156,39,176,0.18)",
+    "En atención": "rgba(255,152,0,0.18)",
+    "Por aprobador": "rgba(121,85,72,0.18)",
+    "Por ejecutar": "rgba(0,150,136,0.18)",
+    "Por revisar": "rgba(63,81,181,0.18)",
+    "En aplicaciones": "rgba(233,30,99,0.18)",
+    "Por confirmar": "rgba(255,193,7,0.20)",
+    "Cerrado": "rgba(76,175,80,0.18)",
+    "Rechazado": "rgba(244,67,54,0.18)",
+    "Cancelado": "rgba(158,158,158,0.20)",
+    "Reabierto": "rgba(255,87,34,0.18)",
+    "En espera": "rgba(255,235,59,0.20)"
+  };
+  function colorRowsImmediate() {
+    document.querySelectorAll('.MuiDataGrid-row').forEach(function(row) {
+      if (row.dataset.spColored) return;
+      var cell = row.querySelector('[data-field="ticketStatusName"]');
+      if (!cell) return;
+      var status = cell.textContent.trim();
+      var color = STATUS_BG_COLORS[status];
+      if (color) { row.style.backgroundColor = color; row.dataset.spColored = "1"; }
+    });
+  }
+  var _colorObserver = new MutationObserver(colorRowsImmediate);
+  _colorObserver.observe(document.body, { childList: true, subtree: true });
+  // Also run on load
+  colorRowsImmediate();
 
   // GROUP_INFO: loaded from Notion (groupNames in storage), fallback to config
   var GROUP_INFO = window.SP_CONFIG.GROUP_INFO;
@@ -834,7 +846,9 @@
           }
 
           // Move ticket visually immediately (optimistic UI)
+          var srcZoneRef = src ? src.closest(".sp-mgr-ptickets") : null;
           if (src) {
+            src._srcZone = srcZoneRef;
             src.style.opacity = "0.5";
             src.style.border = "1px dashed #1976D2";
           }
@@ -850,15 +864,37 @@
             if (!res.ok) throw new Error("HTTP " + res.status);
             var json2 = await res.json();
             if (json2.success) {
-              // Remove the ticket from source immediately
-              if (src) src.remove();
-              // Refresh after a short delay
-              setTimeout(function() {
-                container.innerHTML = "";
-                loadManagerGroupDetail(parseInt(targetGroupId), container, spToken, canDrag);
-              }, 300);
+              // Move ticket to target column visually (no reload)
+              if (src) {
+                src.style.opacity = "1";
+                src.style.border = "1px solid #eee";
+                var targetZone = container.querySelector('.sp-mgr-ptickets[data-profile-id="' + targetProfileId + '"]');
+                if (targetZone) {
+                  // Remove "Sin tickets" placeholder if present
+                  var placeholder = targetZone.querySelector('div[style*="color:#aaa"]');
+                  if (placeholder) placeholder.remove();
+                  targetZone.appendChild(src);
+                }
+                // Update source count
+                var srcZone = src._srcZone;
+                if (srcZone) {
+                  var srcCount = srcZone.querySelectorAll(".sp-mgr-ticket").length;
+                  var srcCountEl = srcZone.previousElementSibling?.querySelector(".sp-mgr-pcount");
+                  if (srcCountEl) srcCountEl.textContent = "(" + srcCount + ")";
+                  if (!srcCount) srcZone.innerHTML = '<div style="text-align:center;padding:6px;color:#aaa;font-size:10px;">Sin tickets</div>';
+                }
+                // Update target count
+                if (targetZone) {
+                  var tgtCount = targetZone.querySelectorAll(".sp-mgr-ticket").length;
+                  var tgtCountEl = targetZone.previousElementSibling?.querySelector(".sp-mgr-pcount");
+                  if (tgtCountEl) tgtCountEl.textContent = "(" + tgtCount + ")";
+                }
+              }
             }
-          } catch(err) {}
+          } catch(err) {
+            // Revert visual on error
+            if (src) { src.style.opacity = "1"; src.style.border = "1px solid #eee"; }
+          }
         });
       }
 
@@ -968,6 +1004,15 @@
 
   function initExtension() {
   _showQuickDetailModal = showQuickDetailModal;
+
+  // Inject basic buttons immediately (no permission check needed)
+  setTimeout(function() {
+    injectConfigButton();
+    injectSearchButton();
+    injectQuickSearch();
+    injectUpdateButton();
+  }, 500);
+
   // --- Toast helpers (from components.js window globals) ---
   const ensureToastStyles = window.ensureToastStyles;
   const showLoadingToast = window.showLoadingToast;
@@ -5637,7 +5682,7 @@
         attachments.forEach(function(a) {
           var fileName = a.file?.name || "archivo";
           var fileId = a.file?.id || "";
-          attachHTML += '<button class="sp-qd-download" data-file-id="' + fileId + '" data-file-name="' + fileName.replace(/"/g, '&quot;') + '" style="padding:4px 8px;background:#e3f2fd;border:1px solid #1976D2;border-radius:4px;font-size:11px;cursor:pointer;color:#1976D2;">📎 ' + fileName + '</button>';
+          attachHTML += '<button class="sp-qd-download" data-file-id="' + fileId + '" data-file-name="' + fileName.replace(/"/g, '&quot;') + '" style="padding:4px 8px;background:#e3f2fd;border:1px solid #1976D2;border-radius:4px;font-size:11px;cursor:pointer;color:#1976D2;">📎 ' + esc(fileName) + '</button>';
         });
         attachHTML += '</div></div>';
       }
@@ -5773,7 +5818,7 @@
                 if (cAttachments.length) {
                   cAttachHTML = '<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;">';
                   cAttachments.forEach(function(a) {
-                    cAttachHTML += '<button class="sp-qd-download" data-file-id="' + a.id + '" data-file-name="' + (a.name || "archivo").replace(/"/g, '&quot;') + '" style="padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:3px;font-size:0.8rem;cursor:pointer;color:#1976D2;">📎 ' + (a.name || "archivo") + '</button>';
+                    cAttachHTML += '<button class="sp-qd-download" data-file-id="' + a.id + '" data-file-name="' + (a.name || "archivo").replace(/"/g, '&quot;') + '" style="padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:3px;font-size:0.8rem;cursor:pointer;color:#1976D2;">📎 ' + esc(a.name || "archivo") + '</button>';
                   });
                   cAttachHTML += '</div>';
                 }
@@ -5822,6 +5867,7 @@
         overlay.style.background = "rgba(0,0,0,0)";
         setTimeout(function() { overlay.remove(); }, 250);
       }
+
       document.getElementById("sp-qd-close").addEventListener("click", closeQdModal);
       overlay.addEventListener("click", function(e) { if (e.target === overlay) closeQdModal(); });
       document.addEventListener("keydown", function escHandler(e) {
@@ -5851,7 +5897,7 @@
               if (c.attachments && c.attachments.length) {
                 cAttachHTML = '<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;">';
                 c.attachments.forEach(function(a) {
-                  cAttachHTML += '<button class="sp-qd-download" data-file-id="' + a.id + '" data-file-name="' + (a.name || "archivo").replace(/"/g, '&quot;') + '" style="padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:3px;font-size:0.8rem;cursor:pointer;color:#1976D2;">📎 ' + (a.name || "archivo") + '</button>';
+                  cAttachHTML += '<button class="sp-qd-download" data-file-id="' + a.id + '" data-file-name="' + (a.name || "archivo").replace(/"/g, '&quot;') + '" style="padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:3px;font-size:0.8rem;cursor:pointer;color:#1976D2;">📎 ' + esc(a.name || "archivo") + '</button>';
                 });
                 cAttachHTML += '</div>';
               }
@@ -5885,6 +5931,18 @@
         if (migrateBtn) { migrateBtn.style.padding = "5px 10px"; migrateBtn.style.fontSize = "11px"; actionsContainer.appendChild(migrateBtn); }
         var reopenBtn = document.getElementById("sp-qd-reopen-btn");
         if (reopenBtn) { reopenBtn.style.padding = "5px 10px"; reopenBtn.style.fontSize = "11px"; actionsContainer.appendChild(reopenBtn); }
+
+        // Reassign to Aplicaciones button (conditions: department=Mesa de Ayuda, group=Infraestructura DBA, user in subgroup)
+        if (_btnReassignApp && department.toLowerCase().includes("mesa de ayuda") && groupName.toLowerCase().includes("infraestructura dba") && statusName !== "Cerrado") {
+          var reassignAppBtn = document.createElement("button");
+          reassignAppBtn.id = "sp-qd-reassign-app-btn";
+          reassignAppBtn.textContent = "🔀 Aplicaciones";
+          reassignAppBtn.style.cssText = "padding:5px 10px;border:none;border-radius:6px;background:#C62828;color:#fff;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;";
+          reassignAppBtn.addEventListener("click", function() {
+            showReassignAppModal(ticketId);
+          });
+          actionsContainer.insertBefore(reassignAppBtn, actionsContainer.firstChild);
+        }
       }
 
       // Copy folio button
@@ -6990,20 +7048,59 @@
     });
   }
 
+  // Inject row buttons and basic header (no Notion dependency)
+  function injectButtonsImmediate() {
+    injectConfigButton();
+    injectSearchButton();
+    injectQuickSearch();
+    injectUpdateButton();
+
+    if (isDetailView()) return;
+
+    // Row buttons for the data grid
+    const rows = document.querySelectorAll(".MuiDataGrid-row");
+    rows.forEach((row) => {
+      const ticketId = row.getAttribute("data-id");
+      if (!ticketId) return;
+      const statusCell = row.querySelector('[data-field="ticketStatusName"]');
+      const statusText = statusCell ? statusCell.textContent.trim() : "";
+      const firstCell = row.querySelector('[data-field="uniqueCode"]');
+      if (!firstCell) return;
+      var container = firstCell.querySelector(".MuiBox-root") || firstCell;
+
+      if (statusText === "En espera" && !row.querySelector("." + TAKE_BTN_CLASS)) {
+        container.appendChild(createTakeButton(ticketId));
+      }
+      if ((statusText === "Asignado" || statusText === "En atención") && !row.querySelector("." + STEAL_BTN_CLASS)) {
+        const responsibleCell = row.querySelector('[data-field="responsibleName"]');
+        const responsibleName = responsibleCell ? responsibleCell.textContent.trim() : "";
+        const myName = getLoggedUserName();
+        if (responsibleName && myName && responsibleName !== myName) {
+          container.appendChild(createStealButton(ticketId, responsibleName));
+        }
+      }
+      if (statusText !== "Cerrado" && !row.querySelector("." + CLOSE_BTN_CLASS)) {
+        container.appendChild(createCloseButton(ticketId));
+      }
+    });
+    highlightMyRows();
+    colorRowsByStatus();
+  }
+
   async function injectButtons() {
+    // Basic buttons + row buttons (immediate)
+    injectButtonsImmediate();
+
+    // Then load permission-dependent buttons after sync
     const synced = await ensureSyncStarted();
     var boardDate = await getBoardDate();
 
-    // Header buttons - always inject regardless of view
-    injectConfigButton();
-    injectSearchButton();
+    // Permission-dependent header buttons
     injectDashboardButton();
-    injectUpdateButton();
     injectWaterButton();
     injectSuggestedCommentsButton();
     injectReportButton();
     injectMondayStatsButton();
-    injectQuickSearch();
     injectQuickFilterButton();
 
     if (isDetailView()) {
@@ -7563,6 +7660,8 @@
       }).catch(function() {});
     }
     ensureSyncStarted().then(() => injectButtons());
+    // Also inject immediately (buttons + row buttons that don't need sync)
+    injectButtons();
   });
 
   // --- Re-sync on page focus ---

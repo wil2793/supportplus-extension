@@ -14,6 +14,7 @@ content.js             → Lógica principal (~7000 líneas, IIFE monolítico)
 monday-sync.js         → Auto-sync de tickets SP → Monday (cada 5 min)
 background.js          → Service worker: proxy Notion API + sync de datos
 popup.html/popup.js    → Popup informativo (solo muestra versión)
+v2/                    → Reescritura en React + TypeScript + Vite (en progreso)
 ```
 
 ## Flujo de Datos
@@ -34,6 +35,17 @@ Variables en memoria (_userConfig, _canCommentClosed, etc.)
 3. Funciones como `loadManagerGroupDetail` leen de memoria, con fallback a storage
 
 Este patrón existe porque la SPA de SupportPlus re-inyecta el content script al navegar, y la segunda instancia no completa `checkSession()` a tiempo.
+
+### Carga inmediata (sin esperar Notion)
+
+Algunas cosas se cargan al instante sin esperar a Notion:
+
+- **Colores de estatus en filas** — MutationObserver que colorea filas apenas aparecen en el DOM
+- **Botones de fila** (Tomar, Cerrar, Steal) — se inyectan inmediatamente via `injectButtonsImmediate()`
+- **Botones del header** básicos (Config, Buscar, Quick Search, Update) — no dependen de permisos
+- **Loading bar** — CSS inyectado al inicio
+
+Los botones que dependen de permisos de Notion (Dashboard, Monday Stats, DBA Info, Comentarios) se cargan después del sync.
 
 ## Bases de Datos en Notion
 
@@ -85,7 +97,7 @@ El rol del usuario debe tener `PuedeMigrarMonday = true` para ver opciones de Mo
 ### Status mapping (SP → Monday)
 
 ```javascript
-STATUS_MAP: {
+MONDAY_STATUS_MAP: {
   "cerrado": 1,       // Monday "Listo"
   "asignado": 0,      // Monday "En Proceso"
   "en atención": 0,   // Monday "En Proceso"
@@ -104,6 +116,32 @@ SP_STATUSES: {
   RECHAZADO: 10, CANCELADO: 11, REABIERTO: 35
 }
 ```
+
+## Modal del Ticket (Fullscreen)
+
+El modal de detalle del ticket ocupa el 100% de la pantalla. Características:
+
+- **Comentarios coloreados** — cada usuario tiene un color único (via `stringToColor`) basado en su nombre
+- **Comentarios del usuario logueado** — se mantienen en azul alineados a la derecha
+- **Botón Rechazar** — solo visible si: ticket en espera + usuario en subgrupo "Mostrar botón de rechazar"
+- **Botón Aplicaciones** — solo visible si: departamento solicitante = "Mesa de Ayuda" + grupo = "Infraestructura DBA" + usuario en subgrupo "migrar aplicaciones"
+- **Auto-refresh comentarios** — cada 30 segundos
+- **Adjuntos** — se muestran como botones clickeables que abren vista previa (imagen/PDF/texto)
+
+### Pendiente: Carrusel de adjuntos
+
+Cuando hay múltiples adjuntos, al abrir uno se debería poder navegar entre todos (flechas izquierda/derecha) como un carrusel. Actualmente se abren de uno en uno.
+
+## Drag & Drop (Optimistic UI)
+
+Al arrastrar un ticket entre columnas:
+
+1. Se mueve el DOM inmediatamente (sin esperar API)
+2. Se actualiza contadores de ambas columnas
+3. Se ejecuta la API en background
+4. Si falla, revierte visual
+
+NO se recarga la vista completa — solo se mueve el elemento.
 
 ## Proceso de Subir Versión
 
@@ -130,17 +168,18 @@ Los grupos que ve cada usuario vienen del **rol** en Notion (`MSP_cat_Roles.MSP_
 
 ## Decisiones Técnicas
 
-- **No usar React/bundler** por ahora — todo es vanilla JS en IIFEs
+- **No usar React/bundler** por ahora — todo es vanilla JS en IIFEs (v2 en progreso)
 - **Storage como cache reactivo** — la fuente de verdad es Notion, storage es el "estado"
 - **Toasts y modals** en `components.js` como globals (`window.*`)
 - **Token de Notion** en base64 en `background.js` (ofuscación mínima, no seguridad real)
 - **Token de Monday** en tabla `MSP_Config` de Notion (no hardcodeado)
 - **GROUP_INFO** se carga dinámicamente de Notion con fallback al array en `config.js`
+- **Botones de fila** se inyectan inmediatamente sin esperar Notion (via `injectButtonsImmediate`)
+- **Colores de estatus** se aplican via MutationObserver al instante
 
-## Roadmap (ver MEJORAS.md)
+## Pendientes / Próximos cambios
 
-Pendientes:
-
-- Dividir `content.js` completamente (requiere bundler)
-- Mover token de Notion a proxy backend serverless
-- Migrar a React (futuro lejano)
+- [ ] Carrusel de adjuntos (navegar entre archivos con flechas)
+- [ ] Migrar modal del ticket a usar `createModal()` genérico con opción fullscreen
+- [ ] v2 React: completar migración de features
+- [ ] Mover token de Notion a proxy backend serverless

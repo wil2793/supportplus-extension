@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "SupportPlus Tools",
+  "version": "6.0.0",
+  "description": "SupportPlus → Monday.com. Desarrollado por DBA - Macropay.",
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "https://macropay.supportplus.mx/*",
+    "https://macropayapi.supportplus.mx/*",
+    "https://api.monday.com/*",
+    "https://api.notion.com/*"
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://macropay.supportplus.mx/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
