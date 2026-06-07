@@ -354,10 +354,12 @@
   }
 
   function initByRole() {
-    // Update Monday config based on canMigrateMonday permission
+    // Update Monday config based on canMigrateMonday permission and group config
     try {
-      chrome.storage.local.get(["mondayBoardId"], function(r) {
-        hasMondayConfig = !!r.mondayBoardId && canMigrateMonday;
+      chrome.storage.local.get(["groupMondayConfig"], function(r) {
+        var config = r.groupMondayConfig || {};
+        var groupId = currentTeamArea || (currentUserGroups.length ? currentUserGroups[0] : "");
+        hasMondayConfig = !!(groupId && config[groupId] && config[groupId].etiqueta) && canMigrateMonday;
       });
     } catch(e) {}
     // Always init extension (for config, buttons, etc.)
@@ -1011,50 +1013,64 @@
   function getMondayWorkspaceId() {
     if (_mondayWorkspaceCache) return Promise.resolve(_mondayWorkspaceCache);
     return new Promise(function(resolve) {
-      chrome.storage.local.get(["notionUsers", "userEmail"], function(r) {
-        var email = (r.userEmail || "").toLowerCase();
-        var users = r.notionUsers || {};
-        var user = users[email];
-        _mondayWorkspaceCache = user?.mondayWorkspaceId || "";
+      chrome.storage.local.get(["groupMondayConfig"], function(r) {
+        var config = r.groupMondayConfig || {};
+        // Get first group that has monday config
+        var groupId = currentTeamArea || (currentUserGroups.length ? currentUserGroups[0] : "");
+        if (groupId && config[groupId]) {
+          _mondayWorkspaceCache = config[groupId].workspaceId;
+        }
         resolve(_mondayWorkspaceCache);
+      });
+    });
+  }
+
+  // Get Monday config for a specific group (workspace, folder, etiqueta)
+  function getMondayConfigForGroup(groupId) {
+    return new Promise(function(resolve) {
+      chrome.storage.local.get(["groupMondayConfig"], function(r) {
+        var config = r.groupMondayConfig || {};
+        resolve(config[groupId] || null);
       });
     });
   }
   var _mondayBoardsCache = {}; // month -> boardId
 
-  // Get all ticket boards for the user's workspace
+  // Get all ticket boards for the user's workspace (filters by configured groups' etiquetas)
   async function getMondayTicketBoards(mondayToken) {
     var wsId = await getMondayWorkspaceId();
     if (!wsId) return [];
     var boardsData = await mondayQuery(mondayToken, '{ boards(workspace_ids: [' + wsId + '], limit: 50) { id name } }', {});
-    return (boardsData.boards || []).filter(function(b) { return b.name.includes("Tickets DBA -") && !b.name.includes("Subelementos"); });
+    return (boardsData.boards || []).filter(function(b) { return !b.name.includes("Subelementos"); });
   }
 
-  async function getMondayBoardForMonth(year, month) {
-    var key = year + "-" + String(month + 1).padStart(2, "0");
+  async function getMondayBoardForMonth(year, month, groupId) {
+    var gId = groupId || currentTeamArea || (currentUserGroups.length ? currentUserGroups[0] : "");
+    var mondayConfig = await getMondayConfigForGroup(gId);
+    if (!mondayConfig || !mondayConfig.etiqueta) return null;
+    var key = gId + "-" + year + "-" + String(month + 1).padStart(2, "0");
     if (_mondayBoardsCache[key]) return _mondayBoardsCache[key];
     var mondayToken = await getMondayToken();
     if (!mondayToken) return null;
     var meses = window.SP_CONFIG.MONTH_NAMES;
-    var boardName = "Tickets DBA - " + meses[month] + " - " + year;
+    var boardName = mondayConfig.etiqueta + " - " + meses[month] + " - " + year;
     var boards = await getMondayTicketBoards(mondayToken);
     var board = boards.find(function(b) { return b.name.trim().toLowerCase() === boardName.trim().toLowerCase(); });
     if (board) { _mondayBoardsCache[key] = board.id; return board.id; }
     return null;
   }
 
-  function getMondayBoardId() {
-    // Returns current month board (for auto-migrate new tickets)
+  function getMondayBoardId(groupId) {
     var now = new Date();
-    return getMondayBoardForMonth(now.getFullYear(), now.getMonth());
+    return getMondayBoardForMonth(now.getFullYear(), now.getMonth(), groupId);
   }
 
-  // Parse "19/03/2026 - 17:51" → board name "Tickets DBA - Marzo - 2026"
+  // Parse "19/03/2026 - 17:51" → board name using group's EtiquetaMonday
   function dateToBoardName(dateStr) {
     const m = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
     if (!m) return null;
     const monthIdx = parseInt(m[2]) - 1;
-    return `Tickets DBA - ${MONTH_NAMES[monthIdx]} - ${m[3]}`;
+    return `${MONTH_NAMES[monthIdx]} - ${m[3]}`;
   }
 
   // --- Cache ---
@@ -1930,10 +1946,12 @@
   var hasMondayConfig = false;
   var mondayBoardConfigured = false;
 
-  // Check if Monday board is configured
+  // Check if current group has Monday config
   try {
-    chrome.storage.local.get(["mondayBoardId"], function(r) {
-      mondayBoardConfigured = !!r.mondayBoardId;
+    chrome.storage.local.get(["groupMondayConfig"], function(r) {
+      var config = r.groupMondayConfig || {};
+      var groupId = currentTeamArea || (currentUserGroups.length ? currentUserGroups[0] : "");
+      mondayBoardConfigured = !!(groupId && config[groupId] && config[groupId].etiqueta);
       hasMondayConfig = mondayBoardConfigured && canMigrateMonday;
     });
   } catch(e) {}
@@ -2197,7 +2215,7 @@
             var closeRes = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
               method: "PATCH",
               headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-              body: JSON.stringify({ nextTicketStatusId: 9, ticketCommentRequest: null }),
+              body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO, ticketCommentRequest: null }),
             });
             if (!closeRes.ok) throw new Error("HTTP " + closeRes.status);
             showSuccessToast("Ticket cerrado");
@@ -2945,7 +2963,7 @@
             var closeRes = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
               method: "PATCH",
               headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-              body: JSON.stringify({ nextTicketStatusId: 9, ticketCommentRequest: null }),
+              body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO, ticketCommentRequest: null }),
             });
             if (!closeRes.ok) throw new Error("Error al cerrar: HTTP " + closeRes.status);
 
@@ -3188,7 +3206,7 @@
         var res = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
           method: "PATCH",
           headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-          body: JSON.stringify({ nextTicketStatusId: 9, ticketCommentRequest: null }),
+          body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO, ticketCommentRequest: null }),
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
 
@@ -3439,7 +3457,7 @@
             method: "PATCH",
             headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
             body: JSON.stringify({
-              nextTicketStatusId: 9,
+              nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO,
               ticketCommentRequest: null
             }),
           });
@@ -6382,20 +6400,10 @@
             rejectBtn.disabled = true;
             rejectBtn.textContent = "⏳...";
             try {
-              // Get available next statuses and find "Rechazado"
-              var statusRes = await fetch("https://macropayapi.supportplus.mx/ticket-status/next-status-options/" + (t.ticketStatus?.id || 7), {
-                headers: { accept: "application/json", authorization: "Bearer " + spToken }
-              });
-              var statusJson = await statusRes.json();
-              var options = statusJson.data || [];
-              var rejectOption = options.find(function(o) { return (o.nextStatus?.name || "").toLowerCase().includes("rechaz"); });
-              if (!rejectOption) throw new Error("No se encontró el estatus Rechazado");
-              var rejectStatusId = rejectOption.nextStatus.id;
-              // Change status
               var res = await fetch(SP_API + "/change-status/" + ticketId, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                body: JSON.stringify({ nextTicketStatusId: rejectStatusId, ticketCommentRequest: null })
+                body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.RECHAZADO, ticketCommentRequest: null })
               });
               if (!res.ok) throw new Error("HTTP " + res.status);
               showSuccessToast("Ticket rechazado");
@@ -6556,7 +6564,7 @@
                 await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                  body: JSON.stringify({ nextTicketStatusId: 9, ticketCommentRequest: null }),
+                  body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO, ticketCommentRequest: null }),
                 });
                 var selectedGroup = takeGroupSelect ? takeGroupSelect.value : "";
                 if (selectedGroup) {
@@ -6754,7 +6762,7 @@
               var closeRes = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-                body: JSON.stringify({ nextTicketStatusId: 9, ticketCommentRequest: null }),
+                body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO, ticketCommentRequest: null }),
               });
               if (!closeRes.ok) throw new Error("HTTP " + closeRes.status);
               // Migrate if selected

@@ -42,6 +42,22 @@
     // Priority mapping
     PRIORITY_MAP: { critico: 10, alto: 110, medio: 109, bajo: 7 },
 
+    // SupportPlus ticket statuses (fixed, won't change)
+    SP_STATUSES: {
+      ASIGNADO: 1,
+      EN_VALIDACION: 2,
+      EN_ATENCION: 3,
+      POR_APROBADOR: 4,
+      POR_EJECUTAR: 5,
+      POR_REVISAR: 6,
+      EN_APLICACIONES: 7,
+      POR_CONFIRMAR: 8,
+      CERRADO: 9,
+      RECHAZADO: 10,
+      CANCELADO: 11,
+      REABIERTO: 35
+    },
+
     // GROUP_INFO - Resolution groups from SupportPlus
     GROUP_INFO: [
       { id: 9, name: "Mesa de Ayuda" },
