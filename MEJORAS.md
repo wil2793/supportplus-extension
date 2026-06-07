@@ -1,6 +1,6 @@
 # Plan de Mejoras - SupportPlus Extension
 
-## Progreso General: 11/16 completadas
+## Progreso General: 12/16 completadas
 
 ---
 
@@ -86,10 +86,12 @@
 - `config-modal.js` — modal de configuración
 - `buttons.js` — inyección de botones en header
 
-### 13. [ ] Traer GROUP_INFO de Notion en vez de hardcodear
+### 13. [x] Traer GROUP_INFO de Notion en vez de hardcodear
 
-- Crear una DB en Notion o usar la existente de grupos
-- Eliminar el array de 60+ elementos del código
+- ~~Crear una DB en Notion o usar la existente de grupos~~
+- ~~Eliminar el array de 60+ elementos del código~~
+- Se usa `groupNames` del storage (sincronizado por background desde Notion)
+- Fallback al array hardcodeado en config.js si no hay datos
 
 ---
 

@@ -69,7 +69,17 @@
   hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } } .MuiDataGrid-cell[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; } .MuiDataGrid-columnHeader[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; }";
   document.head.appendChild(hideBackdrop);
 
-  const GROUP_INFO = window.SP_CONFIG.GROUP_INFO;
+  // GROUP_INFO: loaded from Notion (groupNames in storage), fallback to config
+  var GROUP_INFO = window.SP_CONFIG.GROUP_INFO;
+  try {
+    chrome.storage.local.get("groupNames", function(r) {
+      if (r.groupNames && Object.keys(r.groupNames).length > 0) {
+        GROUP_INFO = Object.keys(r.groupNames).map(function(id) {
+          return { id: parseInt(id), name: r.groupNames[id] };
+        });
+      }
+    });
+  } catch(e) {}
 
   var currentUserRole = "usuario";
   var currentUserGroups = []; // Groups from Notion
