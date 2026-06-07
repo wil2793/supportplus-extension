@@ -76,11 +76,7 @@
 
         // Map status
         var spStatus = (t.ticketStatusName || "").toLowerCase();
-        var mondayStatusIndex = 5;
-        if (spStatus === "cerrado") mondayStatusIndex = 1;
-        else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
-        else if (spStatus === "en espera") mondayStatusIndex = 5;
-        else if (spStatus === "estancado") mondayStatusIndex = 2;
+        var mondayStatusIndex = window.mapStatusToMonday ? window.mapStatusToMonday(spStatus) : 5;
 
         var colValues = { status: { index: mondayStatusIndex } };
 

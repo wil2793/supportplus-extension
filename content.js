@@ -156,11 +156,7 @@
       }
       if (!mondayItemId) return;
       var spStatus = (newStatusName || "").toLowerCase();
-      var mondayStatusIndex = 5;
-      if (spStatus === "cerrado") mondayStatusIndex = 1;
-      else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
-      else if (spStatus === "en espera") mondayStatusIndex = 5;
-      else if (spStatus === "estancado") mondayStatusIndex = 2;
+      var mondayStatusIndex = mapStatusToMonday(spStatus);
       await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: foundBoardId, itemId: mondayItemId, columnValues: JSON.stringify({ status: { index: mondayStatusIndex } }) });
       console.log("[SP] Monday status updated:", code, "->", newStatusName);
     } catch(e) { console.log("[SP] Monday status update failed:", e.message); }
@@ -1841,10 +1837,7 @@
             if (!mondayItemId) continue;
 
             // Map status
-            var mondayStatusIndex = 5;
-            if (spStatus === "cerrado") mondayStatusIndex = 1;
-            else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
-            else if (spStatus === "estancado") mondayStatusIndex = 2;
+            var mondayStatusIndex = mapStatusToMonday(spStatus);
 
             var colValues = { status: { index: mondayStatusIndex } };
             if (holderEmail) {
@@ -5583,11 +5576,7 @@
           if (!mondayToken || !t.uniqueCode) return;
           var spStatus = (t.ticketStatus?.name || "").toLowerCase();
           var hEmail = t.ticketHolder?.ticketHolderLog?.email || "";
-          var mondayStatusIndex = 5;
-          if (spStatus === "cerrado") mondayStatusIndex = 1;
-          else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
-          else if (spStatus === "en espera") mondayStatusIndex = 5;
-          else if (spStatus === "estancado") mondayStatusIndex = 2;
+          var mondayStatusIndex = mapStatusToMonday(spStatus);
 
           // Direct fetch to Monday (no background proxy needed)
           async function mFetch(query, variables) {
@@ -7014,10 +7003,7 @@
               var items = itemRes.items_page_by_column_values?.items || [];
               if (items.length) {
                 var colValues = {};
-                var mondayStatusIndex = 5;
-                if (spStatus === "cerrado") mondayStatusIndex = 1;
-                else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0;
-                else if (spStatus === "estancado") mondayStatusIndex = 2;
+                var mondayStatusIndex = mapStatusToMonday(spStatus);
                 colValues.status = { index: mondayStatusIndex };
                 if (holderEmail) {
                   var users = await getMondayUsers(mondayToken);
@@ -7176,11 +7162,7 @@
                 }
                 // Map SP status to Monday status index
                 var spStatus = (ticket.ticketStatusName || "").toLowerCase();
-                var mondayStatusIndex = 5; // Default: "No iniciado"
-                if (spStatus === "cerrado") mondayStatusIndex = 1; // "Listo"
-                else if (spStatus === "asignado" || spStatus === "en atención") mondayStatusIndex = 0; // "En Proceso"
-                else if (spStatus === "en espera") mondayStatusIndex = 5; // "No iniciado"
-                else if (spStatus === "estancado") mondayStatusIndex = 2; // "Estancado"
+                var mondayStatusIndex = mapStatusToMonday(spStatus);
 
                 var columnValues = JSON.stringify({
                   descripci_n_mkn9e5f4: { text: desc },

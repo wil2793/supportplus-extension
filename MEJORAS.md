@@ -1,6 +1,6 @@
 # Plan de Mejoras - SupportPlus Extension
 
-## Progreso General: 9/16 completadas
+## Progreso General: 11/16 completadas
 
 ---
 
@@ -64,18 +64,17 @@
 - ~~GROUP_INFO~~
 - Monday workspace ID ahora viene del rol en Notion (dinámico por usuario)
 
-### 10. [ ] Crear `utils.js` con funciones compartidas
+### 10. [x] Crear `utils.js` con funciones compartidas
 
-- `mapStatusToMonday(statusName)` — mapeo SP→Monday
-- `findMondayItem(uniqueCode)` — búsqueda en boards
-- `getMondayToken()`, `getMondayBoardId()`
-- Helpers de fecha
+- ~~`mapStatusToMonday(statusName)` — mapeo SP→Monday~~
+- ~~`getMondayTicketBoards(token)` — búsqueda centralizada de boards~~
+- ~~`getMondayToken()`, `getMondayWorkspaceId()`~~
+- Eliminada duplicación de mapeo de status (6 instancias → 1 función)
 
-### 11. [ ] Eliminar duplicación de lógica Monday
+### 11. [x] Eliminar duplicación de lógica Monday
 
-- El mapeo de status se repite 5+ veces
-- La búsqueda de items en boards se repite 6+ veces
-- Centralizar en utils.js
+- ~~El mapeo de status se repite 5+ veces~~ → centralizado en `mapStatusToMonday()`
+- ~~La búsqueda de items en boards se repite 6+ veces~~ → centralizado en `getMondayTicketBoards()`
 
 ### 12. [ ] Dividir content.js en módulos
 
