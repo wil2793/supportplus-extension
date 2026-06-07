@@ -69,6 +69,25 @@
   hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } } .MuiDataGrid-cell[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; } .MuiDataGrid-columnHeader[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; }";
   document.head.appendChild(hideBackdrop);
 
+  // Colorear filas por estatus (inmediato, sin esperar Notion)
+  const statusStyles = document.createElement("style");
+  statusStyles.textContent = [
+    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Asignado"]) { background: rgba(33,150,243,0.18) !important; }',
+    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="En validación"]) { background: rgba(156,39,176,0.18) !important; }',
+    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="En atención"]) { background: rgba(255,152,0,0.18) !important; }',
+    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Por aprobador"]) { background: rgba(121,85,72,0.18) !important; }',
+    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Por ejecutar"]) { background: rgba(0,150,136,0.18) !important; }',
+    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Por revisar"]) { background: rgba(63,81,181,0.18) !important; }',
+    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="En aplicaciones"]) { background: rgba(233,30,99,0.18) !important; }',
+    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Por confirmar"]) { background: rgba(255,193,7,0.20) !important; }',
+    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Cerrado"]) { background: rgba(76,175,80,0.18) !important; }',
+    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Rechazado"]) { background: rgba(244,67,54,0.18) !important; }',
+    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Cancelado"]) { background: rgba(158,158,158,0.20) !important; }',
+    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="Reabierto"]) { background: rgba(255,87,34,0.18) !important; }',
+    '.MuiDataGrid-row:has([data-field="ticketStatusName"] [title="En espera"]) { background: rgba(255,235,59,0.20) !important; }'
+  ].join('\n');
+  document.head.appendChild(statusStyles);
+
   // GROUP_INFO: loaded from Notion (groupNames in storage), fallback to config
   var GROUP_INFO = window.SP_CONFIG.GROUP_INFO;
   try {
@@ -5671,7 +5690,7 @@
       var overlay = document.createElement("div");
       overlay.id = "sp-quick-detail-modal";
       overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0);z-index:99999;display:flex;align-items:center;justify-content:center;transition:background 0.3s ease;";
-      overlay.innerHTML = '<div style="background:#fff;padding:clamp(12px, 2vw, 24px);border-radius:12px;width:clamp(400px, 85vw, 900px);max-height:90vh;display:flex;flex-direction:column;overflow-y:auto;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);transform:scale(0.85) translateY(20px);opacity:0;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1),opacity 0.3s ease;">' +
+      overlay.innerHTML = '<div style="background:#fff;padding:clamp(12px, 2vw, 24px);border-radius:0;width:100vw;height:100vh;max-height:100vh;display:flex;flex-direction:column;overflow-y:auto;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);transform:scale(0.95);opacity:0;transition:transform 0.2s ease,opacity 0.2s ease;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
           '<h3 style="margin:0;font-size:1.1rem;">📋 ' + (t.uniqueCode || ticketId) + ' <span class="sp-qd-copy-folio" data-copy="' + (t.uniqueCode || ticketId) + '" style="cursor:pointer;font-size:0.85rem;opacity:0.6;" title="Copiar folio">⧉</span> <span style="font-weight:400;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-size:0.85rem;">(' + statusName + ')</span></h3>' +
           '<div style="display:flex;gap:6px;align-items:center;">' +
@@ -5780,8 +5799,9 @@
                 var isMyComment = (c.email && myEmail && c.email.toLowerCase() === myEmail.toLowerCase()) || c.fullName === myName;
                 var addAttachBtn = isMyComment ? ' <label class="sp-qd-add-attach" data-comment-id="' + c.id + '" style="cursor:pointer;font-size:12px;opacity:0.6;margin-left:4px;" title="Adjuntar evidencia">📎<input type="file" multiple style="display:none;"></label>' : '';
                 var align = isMyComment ? "flex-end" : "flex-start";
-                var bgColor = isMyComment ? "#e3f2fd" : "#f5f5f5";
-                var borderSide = isMyComment ? "border-right:3px solid #1976D2;" : "border-left:3px solid #90A4AE;";
+                var userColor = isMyComment ? null : stringToColor(c.fullName || "user");
+                var bgColor = isMyComment ? "#e3f2fd" : userColor.bg;
+                var borderSide = isMyComment ? "border-right:3px solid #1976D2;" : "border-left:3px solid " + userColor.border + ";";
                 return '<div style="display:flex;justify-content:' + align + ';margin-bottom:6px;">' +
                   '<div class="sp-comment-bubble" style="max-width:85%;padding:6px 10px;background:' + bgColor + ';' + borderSide + 'border-radius:6px;font-size:0.85rem;">' +
                     '<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:2px;' + (isMyComment ? 'justify-content:flex-end;' : '') + '">' + '<span style="font-weight:600;font-size:0.8rem;">' + (c.fullName || "") + '</span>' + '<span style="color:#888;font-size:0.75rem;">' + cDate + '</span>' + addAttachBtn + '</div>' +
@@ -5807,9 +5827,9 @@
 
       // Trigger open animation
       requestAnimationFrame(function() {
-        overlay.style.background = "rgba(0,0,0,.6)";
+        overlay.style.background = "rgba(0,0,0,0)";
         var modalBox = overlay.querySelector("div");
-        if (modalBox) { modalBox.style.transform = "scale(1) translateY(0)"; modalBox.style.opacity = "1"; }
+        if (modalBox) { modalBox.style.transform = "scale(1)"; modalBox.style.opacity = "1"; }
       });
 
       function closeQdModal() {
@@ -5854,8 +5874,9 @@
               }
               var addAttachBtn = isMyComment ? ' <label class="sp-qd-add-attach" data-comment-id="' + c.id + '" style="cursor:pointer;font-size:12px;opacity:0.6;margin-left:4px;" title="Adjuntar evidencia">📎<input type="file" multiple style="display:none;"></label>' : '';
               var align = isMyComment ? "flex-end" : "flex-start";
-              var bgColor = isMyComment ? "#e3f2fd" : "#f5f5f5";
-              var borderSide = isMyComment ? "border-right:3px solid #1976D2;" : "border-left:3px solid #90A4AE;";
+              var userColor = isMyComment ? null : stringToColor(c.fullName || "user");
+              var bgColor = isMyComment ? "#e3f2fd" : userColor.bg;
+              var borderSide = isMyComment ? "border-right:3px solid #1976D2;" : "border-left:3px solid " + userColor.border + ";";
               return '<div style="display:flex;justify-content:' + align + ';margin-bottom:6px;">' +
                 '<div class="sp-comment-bubble" style="max-width:85%;padding:6px 10px;background:' + bgColor + ';' + borderSide + 'border-radius:6px;font-size:0.85rem;">' +
                   '<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:2px;' + (isMyComment ? 'justify-content:flex-end;' : '') + '">' + '<span style="font-weight:600;font-size:0.8rem;">' + (c.fullName || "") + '</span>' + '<span style="color:#888;font-size:0.75rem;">' + cDate + '</span>' + addAttachBtn + '</div>' +
