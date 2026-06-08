@@ -320,4 +320,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }).catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }
+
+  if (message.type === "proxy-fetch") {
+    fetch(message.url).then(r => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.blob();
+    }).then(blob => blob.arrayBuffer()).then(buffer => {
+      sendResponse({ success: true, data: Array.from(new Uint8Array(buffer)) });
+    }).catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
 });

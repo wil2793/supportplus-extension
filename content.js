@@ -46,15 +46,20 @@
   function downloadZip(url, version, e) {
     var btn = e && e.target ? e.target : null;
     if (btn) { btn.textContent = "⏳ Descargando..."; btn.disabled = true; }
-    fetch(url).then(function(r) { return r.blob(); }).then(function(blob) {
-      var a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "supportplus-v" + version + ".zip";
-      a.click();
-      URL.revokeObjectURL(a.href);
-      if (btn) { btn.textContent = "✅ Descargado"; }
-    }).catch(function() {
-      if (btn) { btn.textContent = "❌ Error"; btn.disabled = false; }
+    chrome.runtime.sendMessage({ type: "proxy-fetch", url: url }, function(resp) {
+      if (resp && resp.success) {
+        var byteArray = new Uint8Array(resp.data);
+        var blob = new Blob([byteArray], { type: "application/zip" });
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "supportplus-v" + version + ".zip";
+        a.click();
+        URL.revokeObjectURL(a.href);
+        if (btn) { btn.textContent = "✅ Descargado"; }
+      } else {
+        if (btn) { btn.textContent = "❌ Error"; btn.disabled = false; }
+        showErrorToast("Error al descargar: " + (resp ? resp.error : "Sin respuesta"));
+      }
     });
   }
   // Check on load (after a delay to let sync finish)
