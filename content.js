@@ -7615,6 +7615,23 @@
                 var spToken = getToken();
                 var mondayToken = await getMondayToken();
                 if (!spToken || !mondayToken) throw new Error("No token");
+
+                // FIRST: Check if ticket already exists in Monday (prevent duplicates)
+                var ticketBoards = await getMondayTicketBoards(mondayToken);
+                for (var b of ticketBoards) {
+                  try {
+                    var existCheck = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: uCode });
+                    var existItems = existCheck.items_page_by_column_values?.items || [];
+                    if (existItems.length) {
+                      // Already in Monday - add to cache and show badge
+                      addToCache(uCode, existItems[0].id);
+                      badge.remove();
+                      container.appendChild(createSyncedBadge(existItems[0].id));
+                      return;
+                    }
+                  } catch(e) { continue; }
+                }
+
                 // Get ticket detail
                 var tRes = await fetch(SP_API + "/" + tId, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
                 if (!tRes.ok) throw new Error("HTTP " + tRes.status);
