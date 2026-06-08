@@ -2906,23 +2906,25 @@
 
     var overlay = document.createElement("div");
     overlay.id = "sp-take-modal";
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:420px;width:90%;font-family:system-ui;">' +
-      '<h3 style="margin:0 0 16px;">🤚 Tomar ticket #' + ticketId + '</h3>' +
-      summaryHTML +
-      '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario al tomar</label>' +
-      '<textarea id="sp-take-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:60px;resize:vertical;box-sizing:border-box;margin-bottom:12px;" placeholder="se revisa"></textarea>' +
-      '<div style="margin-bottom:12px;"><label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="sp-take-done"> <b>Ticket realizado</b></label></div>' +
-      '<div id="sp-take-close-comment-section" style="display:none;margin-bottom:12px;">' +
-        '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario antes de cerrar (opcional)</label>' +
-        '<textarea id="sp-take-close-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:60px;resize:vertical;box-sizing:border-box;" placeholder="Comentario de cierre..."></textarea>' +
-      '</div>' +
-      '<div id="sp-take-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
-      '<div style="display:flex;gap:8px;">' +
-        '<button id="sp-take-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">✊ Tomar ticket</button>' +
-        '<button id="sp-take-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
-      '</div></div>';
-    document.body.appendChild(overlay);
+    var m = createModal({
+      id: "sp-take-modal",
+      title: "🤚 Tomar ticket #" + ticketId,
+      content: summaryHTML +
+        '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario al tomar</label>' +
+        '<textarea id="sp-take-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:60px;resize:vertical;box-sizing:border-box;margin-bottom:12px;" placeholder="se revisa"></textarea>' +
+        '<div style="margin-bottom:12px;"><label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="sp-take-done"> <b>Ticket realizado</b></label></div>' +
+        '<div id="sp-take-close-comment-section" style="display:none;margin-bottom:12px;">' +
+          '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario antes de cerrar (opcional)</label>' +
+          '<textarea id="sp-take-close-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:60px;resize:vertical;box-sizing:border-box;" placeholder="Comentario de cierre..."></textarea>' +
+        '</div>' +
+        '<div id="sp-take-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button id="sp-take-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">✊ Tomar ticket</button>' +
+          '<button id="sp-take-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
+        '</div>',
+      options: { maxWidth: "420px" }
+    });
+    overlay = m.overlay;
     injectSLCopyButtons(overlay);
 
     // Inject spinner keyframes if not present
@@ -2960,8 +2962,7 @@
       }
     });
 
-    cancelBtn.addEventListener("click", function() { overlay.remove(); });
-    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+    cancelBtn.addEventListener("click", function() { m.close(); });
 
     confirmBtn.addEventListener("click", async function() {
       var comment = document.getElementById("sp-take-comment").value.trim() || "se revisa";
@@ -3078,18 +3079,18 @@
           if (isDetailView()) {
             if (doneCheck.checked) {
               // Show close tab / stay modal
-              var closeOverlay = document.createElement("div");
-              closeOverlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-              closeOverlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:360px;width:90%;font-family:system-ui;text-align:center;">' +
-                '<h3 style="margin:0 0 12px;">✅ Ticket tomado, cerrado y migrado</h3>' +
-                '<p style="font-size:13px;color:#555;margin:0 0 16px;">El ticket fue procesado correctamente.</p>' +
-                '<div style="display:flex;gap:8px;">' +
-                  '<button id="sp-take-close-tab" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;">Cerrar pestaña</button>' +
-                  '<button id="sp-take-stay-tab" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Quedarme</button>' +
-                '</div></div>';
-              document.body.appendChild(closeOverlay);
+              var successM = createModal({
+                id: "sp-take-success",
+                title: "✅ Ticket tomado, cerrado y migrado",
+                content: '<p style="font-size:13px;color:#555;margin:0 0 16px;">El ticket fue procesado correctamente.</p>' +
+                  '<div style="display:flex;gap:8px;">' +
+                    '<button id="sp-take-close-tab" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;">Cerrar pestaña</button>' +
+                    '<button id="sp-take-stay-tab" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Quedarme</button>' +
+                  '</div>',
+                options: { maxWidth: "360px", textAlign: "center", closeOnBackdrop: false }
+              });
               document.getElementById("sp-take-close-tab").addEventListener("click", function() { window.close(); });
-              document.getElementById("sp-take-stay-tab").addEventListener("click", function() { closeOverlay.remove(); window.location.reload(); });
+              document.getElementById("sp-take-stay-tab").addEventListener("click", function() { successM.close(); window.location.reload(); });
             } else {
               setTimeout(function() { window.location.reload(); }, 1500);
             }
@@ -3167,20 +3168,20 @@
     var groups = groupsData?.boards?.[0]?.groups || [];
     var groupOpts = '<option value="">-- Selecciona destino --</option>' + groups.map(function(g) { return '<option value="' + g.id + '">' + g.title + '</option>'; }).join("");
 
-    var overlay = document.createElement("div");
-    overlay.id = "sp-close-modal-single";
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:420px;width:90%;font-family:system-ui;">' +
-      '<h3 style="margin:0 0 16px;">🔒 Cerrar ticket #' + ticketId + '</h3>' +
-      summaryHTML +
-      '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario (opcional)</label>' +
-      '<textarea id="sp-close-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:60px;resize:vertical;box-sizing:border-box;margin-bottom:12px;" placeholder="Escribe un comentario..."></textarea>' +
-      '<div id="sp-close-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
-      '<div style="display:flex;gap:8px;">' +
-        '<button id="sp-close-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">🔐 Cerrar ticket</button>' +
-        '<button id="sp-close-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
-      '</div></div>';
-    document.body.appendChild(overlay);
+    var m = createModal({
+      id: "sp-close-modal-single",
+      title: "🔒 Cerrar ticket #" + ticketId,
+      content: summaryHTML +
+        '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Comentario (opcional)</label>' +
+        '<textarea id="sp-close-comment" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:system-ui;min-height:60px;resize:vertical;box-sizing:border-box;margin-bottom:12px;" placeholder="Escribe un comentario..."></textarea>' +
+        '<div id="sp-close-msg" style="font-size:13px;margin-bottom:12px;min-height:20px;"></div>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button id="sp-close-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">🔐 Cerrar ticket</button>' +
+          '<button id="sp-close-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
+        '</div>',
+      options: { maxWidth: "420px" }
+    });
+    var overlay = m.overlay;
     injectSLCopyButtons(overlay);
 
     if (!document.getElementById("sp-spinner-style")) {
@@ -3204,8 +3205,7 @@
       }
     });
 
-    cancelBtn.addEventListener("click", function() { overlay.remove(); });
-    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+    cancelBtn.addEventListener("click", function() { m.close(); });
 
     confirmBtn.addEventListener("click", async function() {
       var selectedGroup = groupSelect.value;
@@ -3325,18 +3325,18 @@
         }
         showSuccessToast(selectedGroup ? "Ticket cerrado y migrado" : "Ticket cerrado");
         if (isDetailView()) {
-          var closeOverlay = document.createElement("div");
-          closeOverlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-          closeOverlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:360px;width:90%;font-family:system-ui;text-align:center;">' +
-            '<h3 style="margin:0 0 12px;">✅ Ticket cerrado</h3>' +
-            '<p style="font-size:13px;color:#555;margin:0 0 16px;">' + (selectedGroup ? 'El ticket fue cerrado y migrado a Monday.' : 'El ticket fue cerrado correctamente.') + '</p>' +
-            '<div style="display:flex;gap:8px;">' +
-              '<button id="sp-close-tab" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;">Cerrar pestaña</button>' +
-              '<button id="sp-stay-tab" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Quedarme</button>' +
-            '</div></div>';
-          document.body.appendChild(closeOverlay);
+          var successM = createModal({
+            id: "sp-close-success",
+            title: "✅ Ticket cerrado",
+            content: '<p style="font-size:13px;color:#555;margin:0 0 16px;">' + (selectedGroup ? 'El ticket fue cerrado y migrado a Monday.' : 'El ticket fue cerrado correctamente.') + '</p>' +
+              '<div style="display:flex;gap:8px;">' +
+                '<button id="sp-close-tab" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;">Cerrar pestaña</button>' +
+                '<button id="sp-stay-tab" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Quedarme</button>' +
+              '</div>',
+            options: { maxWidth: "360px", textAlign: "center", closeOnBackdrop: false }
+          });
           document.getElementById("sp-close-tab").addEventListener("click", function() { window.close(); });
-          document.getElementById("sp-stay-tab").addEventListener("click", function() { closeOverlay.remove(); window.location.reload(); });
+          document.getElementById("sp-stay-tab").addEventListener("click", function() { successM.close(); window.location.reload(); });
         }
       } catch (err) {
         showErrorToast("Error: " + err.message);
@@ -3453,12 +3453,10 @@
 
     restoreCloseBtn();
 
-    var overlay = document.createElement("div");
-    overlay.id = "sp-close-modal";
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-    overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:560px;width:90%;max-height:85vh;display:flex;flex-direction:column;font-family:system-ui;">' +
-      '<h3 style="margin:0 0 8px;">🔒 Cerrar tickets (' + assigned.length + ' asignados)</h3>' +
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">' +
+    var m = createModal({
+      id: "sp-close-modal",
+      title: "🔒 Cerrar tickets (" + assigned.length + " asignados)",
+      content: '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">' +
         '<label style="font-size:12px;color:#555;cursor:pointer;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="sp-close-all"> Seleccionar todos</label>' +
       '</div>' +
       '<div style="flex:1;overflow:auto;border:1px solid #eee;border-radius:6px;padding:8px;margin-bottom:12px;">' + ticketRows + '</div>' +
@@ -3466,8 +3464,10 @@
       '<div style="display:flex;gap:8px;">' +
         '<button id="sp-close-start" style="flex:1;padding:10px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">🔐 Cerrar seleccionados</button>' +
         '<button id="sp-close-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
-      '</div></div>';
-    document.body.appendChild(overlay);
+      '</div>',
+      options: { maxWidth: "560px", maxHeight: "85vh" }
+    });
+    var overlay = m.overlay;
 
     // Select all toggle
     document.getElementById("sp-close-all").addEventListener("change", function() {
@@ -3479,8 +3479,7 @@
     var cancelBtn = document.getElementById("sp-close-cancel");
     var msg = document.getElementById("sp-close-msg");
 
-    cancelBtn.addEventListener("click", function() { overlay.remove(); });
-    overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+    cancelBtn.addEventListener("click", function() { m.close(); });
 
     startBtn.addEventListener("click", async function() {
       var selected = [];
@@ -3603,12 +3602,10 @@
       var currentBoardName = stored.mondayBoardName || "";
       var currentArea = stored.teamArea || "dba";
 
-      var overlay = document.createElement("div");
-      overlay.id = "sp-config-modal";
-      overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-      overlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:450px;width:90%;font-family:system-ui;">' +
-        '<h3 style="margin:0 0 12px;">⚙️ Configuración</h3>' +
-        '<div style="display:flex;gap:0;margin-bottom:12px;border-bottom:2px solid #eee;">' +
+      var cfgM = createModal({
+        id: "sp-config-modal",
+        title: "⚙️ Configuración",
+        content: '<div style="display:flex;gap:0;margin-bottom:12px;border-bottom:2px solid #eee;">' +
           '<button id="sp-cfg-tab-area" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid #D94040;color:#D94040;">Área de trabajo</button>' +
           (canMigrateMonday ? '<button id="sp-cfg-tab-monday" style="flex:1;padding:8px;font-size:12px;font-weight:600;border:none;background:transparent;cursor:pointer;color:#888;">Monday.com</button>' : '') +
         '</div>' +
@@ -3634,12 +3631,13 @@
         '<div style="display:flex;gap:8px;margin-top:12px;">' +
           '<button id="sp-cfg-save" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">💾 Guardar</button>' +
           '<button id="sp-cfg-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
-        '</div></div>';
-      document.body.appendChild(overlay);
+        '</div>',
+        options: { maxWidth: "450px" }
+      });
+      var overlay = cfgM.overlay;
 
       // Events
-      document.getElementById("sp-cfg-cancel").addEventListener("click", function() { overlay.remove(); });
-      overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+      document.getElementById("sp-cfg-cancel").addEventListener("click", function() { cfgM.close(); });
 
       // Tab switching
       var tabArea = document.getElementById("sp-cfg-tab-area");
@@ -6943,11 +6941,126 @@
           if (needsHighlight) {
             var highlighted = escaped;
             if (ext === "sql") {
-              highlighted = highlighted.replace(/\b(SELECT|FROM|WHERE|INSERT|INTO|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TABLE|INDEX|VIEW|PROCEDURE|FUNCTION|TRIGGER|BEGIN|END|IF|ELSE|THEN|CASE|WHEN|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|IS|NULL|AS|ON|JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|UNION|ALL|DISTINCT|ORDER|BY|GROUP|HAVING|LIMIT|OFFSET|TOP|VALUES|EXEC|EXECUTE|DECLARE|VARCHAR|INT|BIGINT|NVARCHAR|DATETIME|BIT|FLOAT|DECIMAL|PRIMARY|KEY|FOREIGN|REFERENCES|CONSTRAINT|DEFAULT|IDENTITY|GO|USE|DATABASE|SCHEMA|GRANT|REVOKE|COMMIT|ROLLBACK|TRANSACTION|WITH|NOLOCK|COUNT|SUM|AVG|MAX|MIN|COALESCE|ISNULL|CAST|CONVERT|GETDATE|DATEADD|DATEDIFF|LEN|SUBSTRING|REPLACE|TRIM|UPPER|LOWER|ROW_NUMBER|OVER|PARTITION|RANK|DENSE_RANK|LAG|LEAD|MERGE|OUTPUT|INSERTED|DELETED|CURSOR|FETCH|NEXT|OPEN|CLOSE|DEALLOCATE|PRINT|RAISERROR|TRY|CATCH|THROW|RETURN|WHILE|BREAK|CONTINUE|TEMP|TEMPORARY|TRUNCATE|ASC|DESC|HAVING|EXCEPT|INTERSECT)\b/gi, '<span style="color:#569CD6;">$1</span>');
-              highlighted = highlighted.replace(/(&apos;|&#39;|&#x27;|'[^']*')/g, '<span style="color:#CE9178;">$1</span>');
-              highlighted = highlighted.replace(/(--[^\n]*)/g, '<span style="color:#6A9955;">$1</span>');
-              highlighted = highlighted.replace(/(\/\*[\s\S]*?\*\/)/g, '<span style="color:#6A9955;">$1</span>');
-              highlighted = highlighted.replace(/\b(\d+)\b/g, '<span style="color:#B5CEA8;">$1</span>');
+              // --- SQL Linter ---
+              var sqlErrors = [];
+              var rawLines = textContent.split("\n");
+              // Strip comments for analysis
+              var cleanedSQL = textContent.replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+
+              // 1. Unbalanced parentheses
+              var parenCount = 0;
+              rawLines.forEach(function(line, idx) {
+                var lineClean = line.replace(/--.*$/, "").replace(/'[^']*'/g, "");
+                for (var c = 0; c < lineClean.length; c++) {
+                  if (lineClean[c] === "(") parenCount++;
+                  if (lineClean[c] === ")") parenCount--;
+                  if (parenCount < 0) { sqlErrors.push({ line: idx + 1, msg: "Paréntesis ')' sin abrir" }); parenCount = 0; }
+                }
+              });
+              if (parenCount > 0) sqlErrors.push({ line: rawLines.length, msg: "Faltan " + parenCount + " paréntesis de cierre ')'" });
+
+              // 2. Unclosed strings
+              var inString = false;
+              rawLines.forEach(function(line, idx) {
+                var lineNoComment = line.replace(/--.*$/, "");
+                for (var c = 0; c < lineNoComment.length; c++) {
+                  if (lineNoComment[c] === "'") {
+                    if (inString && lineNoComment[c + 1] === "'") { c++; continue; }
+                    inString = !inString;
+                  }
+                }
+                if (inString) { sqlErrors.push({ line: idx + 1, msg: "String sin cerrar (comilla simple)" }); inString = false; }
+              });
+
+              // 3. SELECT without FROM (unless it's SELECT @var or SELECT value with no table)
+              var selectMatches = cleanedSQL.match(/\bSELECT\b(?![\s\S]*?\bFROM\b)(?![\s]*@)(?![\s]*\d)(?![\s]*')/gi);
+              // Simplified: check each SELECT...FROM pair
+              var statements = cleanedSQL.split(/\bGO\b|\b;\s*\n/gi);
+              statements.forEach(function(stmt) {
+                var trimmed = stmt.trim().toUpperCase();
+                if (trimmed.match(/^\s*SELECT\b/) && !trimmed.match(/\bFROM\b/) && !trimmed.match(/SELECT\s+@/) && !trimmed.match(/SELECT\s+\d/) && trimmed.length > 20) {
+                  var stmtStart = textContent.indexOf(stmt.trim().substring(0, 30));
+                  if (stmtStart >= 0) {
+                    var lineNum = textContent.substring(0, stmtStart).split("\n").length;
+                    sqlErrors.push({ line: lineNum, msg: "SELECT sin FROM" });
+                  }
+                }
+              });
+
+              // 4. BEGIN without END
+              var beginCount = (cleanedSQL.match(/\bBEGIN\b/gi) || []).length;
+              var endCount = (cleanedSQL.match(/\bEND\b/gi) || []).length;
+              if (beginCount > endCount) sqlErrors.push({ line: rawLines.length, msg: "Faltan " + (beginCount - endCount) + " END para cerrar BEGIN" });
+              if (endCount > beginCount) sqlErrors.push({ line: rawLines.length, msg: (endCount - beginCount) + " END sin BEGIN correspondiente" });
+
+              // 5. Trailing comma before FROM or closing paren
+              rawLines.forEach(function(line, idx) {
+                var lineClean = line.replace(/--.*$/, "").trim();
+                if (/,\s*$/.test(lineClean)) {
+                  var nextLine = (rawLines[idx + 1] || "").replace(/--.*$/, "").trim().toUpperCase();
+                  if (/^(FROM|WHERE|\))/.test(nextLine)) {
+                    sqlErrors.push({ line: idx + 1, msg: "Coma al final antes de " + nextLine.split(/\s/)[0] });
+                  }
+                }
+              });
+
+              // 6. UPDATE without SET
+              statements.forEach(function(stmt) {
+                var trimmed = stmt.trim().toUpperCase();
+                if (trimmed.match(/^\s*UPDATE\b/) && !trimmed.match(/\bSET\b/)) {
+                  var stmtStart = textContent.indexOf(stmt.trim().substring(0, 20));
+                  if (stmtStart >= 0) {
+                    var lineNum = textContent.substring(0, stmtStart).split("\n").length;
+                    sqlErrors.push({ line: lineNum, msg: "UPDATE sin SET" });
+                  }
+                }
+              });
+
+              // 7. INSERT INTO without VALUES/SELECT/EXEC
+              statements.forEach(function(stmt) {
+                var trimmed = stmt.trim().toUpperCase();
+                if (trimmed.match(/^\s*INSERT\s+INTO\b/) && !trimmed.match(/\bVALUES\b/) && !trimmed.match(/\bSELECT\b/) && !trimmed.match(/\bEXEC\b/)) {
+                  var stmtStart = textContent.indexOf(stmt.trim().substring(0, 20));
+                  if (stmtStart >= 0) {
+                    var lineNum = textContent.substring(0, stmtStart).split("\n").length;
+                    sqlErrors.push({ line: lineNum, msg: "INSERT INTO sin VALUES/SELECT" });
+                  }
+                }
+              });
+
+              // Build error line set for highlighting
+              var errorLines = {};
+              sqlErrors.forEach(function(e) { errorLines[e.line] = e.msg; });
+
+              // Apply syntax highlighting with error lines marked
+              var lines = escaped.split("\n");
+              highlighted = lines.map(function(line, idx) {
+                var lineNum = idx + 1;
+                var hl = line;
+                // Apply SQL syntax highlighting
+                hl = hl.replace(/\b(SELECT|FROM|WHERE|INSERT|INTO|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TABLE|INDEX|VIEW|PROCEDURE|FUNCTION|TRIGGER|BEGIN|END|IF|ELSE|THEN|CASE|WHEN|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|IS|NULL|AS|ON|JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|UNION|ALL|DISTINCT|ORDER|BY|GROUP|HAVING|LIMIT|OFFSET|TOP|VALUES|EXEC|EXECUTE|DECLARE|VARCHAR|INT|BIGINT|NVARCHAR|DATETIME|BIT|FLOAT|DECIMAL|PRIMARY|KEY|FOREIGN|REFERENCES|CONSTRAINT|DEFAULT|IDENTITY|GO|USE|DATABASE|SCHEMA|GRANT|REVOKE|COMMIT|ROLLBACK|TRANSACTION|WITH|NOLOCK|COUNT|SUM|AVG|MAX|MIN|COALESCE|ISNULL|CAST|CONVERT|GETDATE|DATEADD|DATEDIFF|LEN|SUBSTRING|REPLACE|TRIM|UPPER|LOWER|ROW_NUMBER|OVER|PARTITION|RANK|DENSE_RANK|LAG|LEAD|MERGE|OUTPUT|INSERTED|DELETED|CURSOR|FETCH|NEXT|OPEN|CLOSE|DEALLOCATE|PRINT|RAISERROR|TRY|CATCH|THROW|RETURN|WHILE|BREAK|CONTINUE|TEMP|TEMPORARY|TRUNCATE|ASC|DESC|HAVING|EXCEPT|INTERSECT)\b/gi, '<span style="color:#569CD6;">$1</span>');
+                hl = hl.replace(/('(?:[^'\\]|\\.)*')/g, '<span style="color:#CE9178;">$1</span>');
+                hl = hl.replace(/(--[^\n]*)/g, '<span style="color:#6A9955;">$1</span>');
+                hl = hl.replace(/\b(\d+)\b/g, '<span style="color:#B5CEA8;">$1</span>');
+
+                if (errorLines[lineNum]) {
+                  return '<span style="background:rgba(255,0,0,0.15);border-left:3px solid #F44336;display:inline-block;width:100%;padding-left:4px;" title="⚠️ ' + errorLines[lineNum] + '">' + hl + '</span>';
+                }
+                return hl;
+              }).join("\n");
+
+              // Build error panel if there are errors
+              var errorPanelHTML = "";
+              if (sqlErrors.length) {
+                errorPanelHTML = '<div style="background:#2d1515;border:1px solid #F44336;border-radius:6px;padding:8px 12px;margin-bottom:8px;max-height:120px;overflow:auto;width:90vw;box-sizing:border-box;">' +
+                  '<div style="color:#F44336;font-weight:600;font-size:11px;margin-bottom:4px;">⚠️ ' + sqlErrors.length + ' posible' + (sqlErrors.length > 1 ? 's' : '') + ' error' + (sqlErrors.length > 1 ? 'es' : '') + ' de sintaxis:</div>';
+                sqlErrors.forEach(function(e) {
+                  errorPanelHTML += '<div style="color:#ef9a9a;font-size:11px;font-family:Consolas,monospace;padding:1px 0;">Línea ' + e.line + ': ' + e.msg + '</div>';
+                });
+                errorPanelHTML += '</div>';
+              }
+
+              contentHTML = errorPanelHTML + '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:' + (sqlErrors.length ? '65vh' : '75vh') + ';overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + highlighted + '</pre></div>';
             } else if (ext === "json") {
               highlighted = highlighted.replace(/(&quot;[^&]*?&quot;)\s*:/g, '<span style="color:#9CDCFE;">$1</span>:');
               highlighted = highlighted.replace(/:\s*(&quot;[^&]*?&quot;)/g, ': <span style="color:#CE9178;">$1</span>');
@@ -6967,7 +7080,9 @@
               highlighted = highlighted.replace(/([.#]?[a-zA-Z_-][a-zA-Z0-9_-]*)\s*\{/g, '<span style="color:#D7BA7D;">$1</span> {');
               highlighted = highlighted.replace(/([a-z-]+)\s*:/g, '<span style="color:#9CDCFE;">$1</span>:');
             }
-            contentHTML = '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:75vh;overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + highlighted + '</pre></div>';
+            if (ext !== "sql") {
+              contentHTML = '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:75vh;overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + highlighted + '</pre></div>';
+            }
           } else {
             contentHTML = '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:75vh;overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + escaped + '</pre></div>';
           }
@@ -7623,14 +7738,10 @@
     // Resolve board by ticket createdAt
     const createdDate = new Date(ticket.createdAt);
 
-    const overlay = document.createElement("div");
-    overlay.id = "sp-monday-modal";
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-
-    overlay.innerHTML = `
-      <div style="background:#fff;padding:24px;border-radius:12px;max-width:520px;width:90%;max-height:85vh;overflow:auto;font-family:system-ui;">
-        <h3 style="margin:0 0 16px;">📤 Migrar Ticket a Monday</h3>
-        <div style="background:#f5f5f5;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px;">
+    const mondayM = createModal({
+      id: "sp-monday-modal",
+      title: "📤 Migrar Ticket a Monday",
+      content: `<div style="background:#f5f5f5;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px;">
           <div><b>Folio:</b> ${ticket.uniqueCode || "N/A"}</div>
           <div><b>Asunto:</b> ${ticket.subject || "N/A"}</div>
           <div><b>Persona:</b> 👤 ${holderName} ${holderEmail ? `(${holderEmail})` : ""}</div>
@@ -7644,10 +7755,10 @@
         <div style="display:flex;gap:8px;">
           <button id="sp-monday-send" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">💾 Crear en Monday</button>
           <button id="sp-monday-close" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cerrar</button>
-        </div>
-      </div>`;
-
-    document.body.appendChild(overlay);
+        </div>`,
+      options: { maxWidth: "520px", maxHeight: "85vh" }
+    });
+    const overlay = mondayM.overlay;
     injectSLCopyButtons(overlay);
 
     const groupSelect = document.getElementById("sp-group-select");
@@ -7789,26 +7900,25 @@
         document.dispatchEvent(new CustomEvent("sp-refresh-panel"));
         injectButtons();
         if (isDetailView()) {
-          var migrateOverlay = document.createElement("div");
-          migrateOverlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-          migrateOverlay.innerHTML = '<div style="background:#fff;padding:24px;border-radius:12px;max-width:360px;width:90%;font-family:system-ui;text-align:center;">' +
-            '<h3 style="margin:0 0 12px;">✅ Ticket migrado a Monday</h3>' +
-            '<p style="font-size:13px;color:#555;margin:0 0 16px;">El ticket fue migrado correctamente.</p>' +
-            '<div style="display:flex;gap:8px;">' +
-              '<button id="sp-migrate-close-tab" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;">Cerrar pestaña</button>' +
-              '<button id="sp-migrate-stay-tab" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Quedarme</button>' +
-            '</div></div>';
-          document.body.appendChild(migrateOverlay);
+          var successM = createModal({
+            id: "sp-migrate-success",
+            title: "✅ Ticket migrado a Monday",
+            content: '<p style="font-size:13px;color:#555;margin:0 0 16px;">El ticket fue migrado correctamente.</p>' +
+              '<div style="display:flex;gap:8px;">' +
+                '<button id="sp-migrate-close-tab" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;">Cerrar pestaña</button>' +
+                '<button id="sp-migrate-stay-tab" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Quedarme</button>' +
+              '</div>',
+            options: { maxWidth: "360px", textAlign: "center", closeOnBackdrop: false }
+          });
           document.getElementById("sp-migrate-close-tab").addEventListener("click", function() { window.close(); });
-          document.getElementById("sp-migrate-stay-tab").addEventListener("click", function() { migrateOverlay.remove(); });
+          document.getElementById("sp-migrate-stay-tab").addEventListener("click", function() { successM.close(); });
         }
       } catch (err) {
         showErrorToast("Error: " + err.message);
       }
     });
 
-    document.getElementById("sp-monday-close").addEventListener("click", () => overlay.remove());
-    overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+    document.getElementById("sp-monday-close").addEventListener("click", () => mondayM.close());
   }
 
   // --- Observer ---
