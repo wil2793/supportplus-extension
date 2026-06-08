@@ -3862,23 +3862,22 @@
           if (blacklistProfileIds !== null) {
             props["BlackList"] = { relation: blacklistRelations };
           }
-          if (notionPageId) {
-            // Update existing
-            chrome.runtime.sendMessage({ type: "notion-update", pageId: notionPageId, body: { properties: props } });
-          } else {
-            // Search if config already exists for this user before creating
-            chrome.runtime.sendMessage({ type: "notion-query", dbId: "37320e0684b9806b84ecc4aae906f645", body: { filter: { property: "Nombre", title: { equals: email } }, page_size: 1 } }, function(searchResp) {
-              if (searchResp && searchResp.success && searchResp.data.results && searchResp.data.results.length) {
-                var existingId = searchResp.data.results[0].id;
-                chrome.runtime.sendMessage({ type: "notion-update", pageId: existingId, body: { properties: props } });
-              } else if (userNotionId) {
-                chrome.runtime.sendMessage({ type: "notion-create", body: {
-                  parent: { database_id: "37320e0684b9806b84ecc4aae906f645" },
-                  properties: Object.assign({ "Nombre": { title: [{ text: { content: email } }] }, "Usuario": { relation: [{ id: userNotionId }] } }, props)
-                }});
-              }
-            });
-          }
+
+          // Always search for existing config page to ensure we have the right ID
+          chrome.runtime.sendMessage({ type: "notion-query", dbId: "37320e0684b9806b84ecc4aae906f645", body: { filter: { property: "Nombre", title: { equals: email } }, page_size: 1 } }, function(searchResp) {
+            if (searchResp && searchResp.success && searchResp.data.results && searchResp.data.results.length) {
+              var existingId = searchResp.data.results[0].id;
+              chrome.runtime.sendMessage({ type: "notion-update", pageId: existingId, body: { properties: props } });
+              notionPageId = existingId;
+            } else if (notionPageId) {
+              chrome.runtime.sendMessage({ type: "notion-update", pageId: notionPageId, body: { properties: props } });
+            } else if (userNotionId) {
+              chrome.runtime.sendMessage({ type: "notion-create", body: {
+                parent: { database_id: "37320e0684b9806b84ecc4aae906f645" },
+                properties: Object.assign({ "Nombre": { title: [{ text: { content: email } }] }, "Usuario": { relation: [{ id: userNotionId }] } }, props)
+              }});
+            }
+          });
           // Save blacklist locally as Notion page IDs for immediate use
           var blacklistNotionIds = blacklistProfileIds !== null ? blacklistRelations.map(function(r) { return r.id; }) : (_userConfig.blacklist || []);
           _userConfig = { pageId: notionPageId || userCfg.pageId, onlyWithTickets: onlyWithTickets, blacklist: blacklistNotionIds };
