@@ -268,8 +268,17 @@
       var userData = notionUsers[email];
 
       if (!userData) {
-        // Auto-create user in Notion as inactive
+        // Check directly in Notion before creating (avoid duplicates)
         try {
+          var checkResp = await new Promise(function(resolve) {
+            chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b98051a190e51d38d97288", body: { filter: { property: "Correo", rich_text: { equals: email } }, page_size: 1 } }, function(resp) { resolve(resp); });
+          });
+          if (checkResp && checkResp.success && checkResp.data.results && checkResp.data.results.length > 0) {
+            // User exists in Notion but wasn't in cache - trigger re-sync and return
+            chrome.runtime.sendMessage({ type: "sync-notion" });
+            return null;
+          }
+          // User truly doesn't exist - create as inactive
           chrome.runtime.sendMessage({ type: "notion-create", body: {
             parent: { database_id: "36620e0684b98051a190e51d38d97288" },
             properties: {
