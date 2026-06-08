@@ -46,21 +46,37 @@
   function downloadZip(url, version, e) {
     var btn = e && e.target ? e.target : null;
     if (btn) { btn.textContent = "⏳ Descargando..."; btn.disabled = true; }
-    chrome.runtime.sendMessage({ type: "proxy-fetch", url: url }, function(resp) {
-      if (resp && resp.success) {
-        var byteArray = new Uint8Array(resp.data);
-        var blob = new Blob([byteArray], { type: "application/zip" });
-        var a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "supportplus-v" + version + ".zip";
-        a.click();
-        URL.revokeObjectURL(a.href);
-        if (btn) { btn.textContent = "✅ Descargado"; }
-      } else {
-        if (btn) { btn.textContent = "❌ Error"; btn.disabled = false; }
-        showErrorToast("Error al descargar: " + (resp ? resp.error : "Sin respuesta"));
-      }
-    });
+    // Try proxy via background first, fallback to direct link
+    if (chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({ type: "proxy-fetch", url: url }, function(resp) {
+        if (resp && resp.success) {
+          var byteArray = new Uint8Array(resp.data);
+          var blob = new Blob([byteArray], { type: "application/zip" });
+          var a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = "supportplus-v" + version + ".zip";
+          a.click();
+          URL.revokeObjectURL(a.href);
+          if (btn) { btn.textContent = "✅ Descargado"; }
+        } else {
+          // Fallback: direct link open (no CORS issue with navigation)
+          var a = document.createElement("a");
+          a.href = url;
+          a.download = "supportplus-v" + version + ".zip";
+          a.target = "_blank";
+          a.click();
+          if (btn) { btn.textContent = "📥 Abriendo..."; setTimeout(function() { btn.textContent = "📥 Descargar"; btn.disabled = false; }, 3000); }
+        }
+      });
+    } else {
+      // No background available - direct link
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "supportplus-v" + version + ".zip";
+      a.target = "_blank";
+      a.click();
+      if (btn) { btn.textContent = "📥 Abriendo..."; setTimeout(function() { btn.textContent = "📥 Descargar"; btn.disabled = false; }, 3000); }
+    }
   }
   // Check on load (after a delay to let sync finish)
   setTimeout(checkVersion, 3000);
@@ -3973,17 +3989,20 @@
           '<select id="sp-update-version-select" style="flex:1;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">' + selectOpts + '</select>' +
         '</div>' +
         '<div id="sp-update-selected-changes" style="margin-bottom:12px;font-size:0.85rem;color:#555;min-height:20px;"></div>' +
-        '<button id="sp-update-download" style="width:100%;padding:10px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">📥 Descargar</button>',
+        '<button id="sp-update-download" style="width:100%;padding:10px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">📥 Descargar</button>' +
+        '<a id="sp-update-direct-link" href="#" target="_blank" style="display:block;text-align:center;margin-top:8px;font-size:0.8rem;color:#666;text-decoration:underline;">Si no descarga, clic aquí para abrir enlace directo</a>',
         options: { maxWidth: "500px" }
       });
 
       var vSelect = document.getElementById("sp-update-version-select");
       var changesDiv = document.getElementById("sp-update-selected-changes");
       var downloadBtn = document.getElementById("sp-update-download");
+      var directLink = document.getElementById("sp-update-direct-link");
 
       function updateSelectedChanges() {
         var selected = allVersions.find(function(v) { return v.version === vSelect.value; });
         changesDiv.textContent = selected ? (selected.changes || "Sin descripción") : "";
+        if (directLink && selected && selected.zipUrl) directLink.href = selected.zipUrl;
       }
       vSelect.addEventListener("change", updateSelectedChanges);
       updateSelectedChanges();
