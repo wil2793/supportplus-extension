@@ -3829,9 +3829,11 @@
 
         var saveData = { mondayToken: token, mondayBoardId: boardId, mondayBoardName: boardName, teamArea: area };
         // Collect blacklisted profileIds (unchecked = blacklisted)
+        // ONLY update blacklist if members were actually loaded (prevent accidental wipe)
         var memberChecks = membersDiv.querySelectorAll('input[data-pid]');
-        var blacklistProfileIds = [];
-        if (memberChecks.length && area) {
+        var blacklistProfileIds = null; // null = don't update
+        if (memberChecks.length > 0 && area) {
+          blacklistProfileIds = [];
           memberChecks.forEach(function(cb) {
             if (!cb.checked) blacklistProfileIds.push(parseInt(cb.dataset.pid));
           });
@@ -3845,15 +3847,21 @@
           var user = users[email];
           var userNotionId = user?.notionPageId || "";
           // Build blacklist relations (convert profileIds to Notion page IDs)
-          var blacklistRelations = blacklistProfileIds.map(function(pid) {
-            var found = null;
-            Object.values(users).forEach(function(u) { if (u.profileId === pid && u.notionPageId) found = u.notionPageId; });
-            return found ? { id: found } : null;
-          }).filter(Boolean);
+          var blacklistRelations = [];
+          if (blacklistProfileIds !== null) {
+            blacklistRelations = blacklistProfileIds.map(function(pid) {
+              var found = null;
+              Object.values(users).forEach(function(u) { if (u.profileId === pid && u.notionPageId) found = u.notionPageId; });
+              return found ? { id: found } : null;
+            }).filter(Boolean);
+          }
           var props = {
-            "MostrarSoloConTickets": { checkbox: onlyWithTickets },
-            "BlackList": { relation: blacklistRelations }
+            "MostrarSoloConTickets": { checkbox: onlyWithTickets }
           };
+          // Only update BlackList if members were loaded
+          if (blacklistProfileIds !== null) {
+            props["BlackList"] = { relation: blacklistRelations };
+          }
           if (notionPageId) {
             // Update existing
             chrome.runtime.sendMessage({ type: "notion-update", pageId: notionPageId, body: { properties: props } });
@@ -3872,8 +3880,8 @@
             });
           }
           // Save blacklist locally as Notion page IDs for immediate use
-          var blacklistNotionIds = blacklistRelations.map(function(r) { return r.id; });
-          _userConfig = { pageId: notionPageId, onlyWithTickets: onlyWithTickets, blacklist: blacklistNotionIds };
+          var blacklistNotionIds = blacklistProfileIds !== null ? blacklistRelations.map(function(r) { return r.id; }) : (_userConfig.blacklist || []);
+          _userConfig = { pageId: notionPageId || userCfg.pageId, onlyWithTickets: onlyWithTickets, blacklist: blacklistNotionIds };
           saveData.userConfig = _userConfig;
           chrome.storage.local.set(saveData, function() {
             overlay.remove();
