@@ -171,6 +171,8 @@ async function syncNotionData() {
     }
 
     // 5. Get user's Monday token from their MSP_Usuarios record
+    const storedData = await chrome.storage.local.get("userEmail");
+    const currentEmail = (storedData.userEmail || "").toLowerCase();
     let mondayTokenFromNotion = "";
     if (currentEmail && usersMap[currentEmail]?.notionPageId) {
       const userPageId = usersMap[currentEmail].notionPageId;
@@ -207,8 +209,6 @@ async function syncNotionData() {
     const USER_CONFIG_DB = "37320e0684b9806b84ecc4aae906f645";
     let userConfig = {};
     // Get current user email from storage to find their config
-    const storedData = await chrome.storage.local.get("userEmail");
-    const currentEmail = (storedData.userEmail || "").toLowerCase();
     if (currentEmail && usersMap[currentEmail]?.notionPageId) {
       const userNotionId = usersMap[currentEmail].notionPageId;
       const cfgRaw = await notionQuery(USER_CONFIG_DB, { filter: { property: "Usuario", relation: { contains: userNotionId } }, page_size: 1 });
