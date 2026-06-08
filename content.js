@@ -1086,10 +1086,8 @@
   function getMondayToken() {
     if (_mondayTokenCache) return Promise.resolve(_mondayTokenCache);
     return new Promise(function(resolve) {
-      chrome.runtime.sendMessage({ type: "notion-query", dbId: window.SP_CONFIG.NOTION_CONFIG_DB, body: { filter: { property: "Nombre", title: { equals: "token_monday" } }, page_size: 1 } }, function(resp) {
-        if (resp && resp.success && resp.data.results && resp.data.results[0]) {
-          _mondayTokenCache = resp.data.results[0].properties.Valor?.rich_text?.[0]?.plain_text || "";
-        }
+      chrome.storage.local.get("mondayToken", function(r) {
+        _mondayTokenCache = r.mondayToken || "";
         resolve(_mondayTokenCache);
       });
     });
@@ -3640,6 +3638,8 @@
           '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#555;margin-bottom:12px;cursor:pointer;"><input type="checkbox" id="sp-cfg-only-with-tickets"> Solo mostrar personas con tickets</label>' +
         '</div>' +
         '<div id="sp-cfg-panel-monday" style="display:none;">' +
+          '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Token de Monday</label>' +
+          '<input id="sp-cfg-monday-token" type="password" value="' + (currentToken ? '••••••••' : '') + '" placeholder="Pega tu token de Monday aquí..." style="width:100%;padding:8px;font-size:12px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;margin-bottom:12px;">' +
           '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Board</label>' +
           '<div style="position:relative;margin-bottom:4px;">' +
             '<input id="sp-cfg-board-search" type="text" value="' + currentBoardName.replace(/"/g, '&quot;') + '" placeholder="Buscar board..." style="width:100%;padding:8px;font-size:12px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;">' +
@@ -3781,10 +3781,29 @@
       // Save
       document.getElementById("sp-cfg-save").addEventListener("click", async function() {
         var token = await getMondayToken();
+        var mondayTokenInput = document.getElementById("sp-cfg-monday-token").value.trim();
         var boardId = document.getElementById("sp-cfg-board-id").value;
         var boardName = document.getElementById("sp-cfg-board-search").value.trim();
         var area = document.getElementById("sp-cfg-area").value;
         var onlyWithTickets = onlyWithTicketsEl.checked;
+
+        // If user entered a new Monday token (not the placeholder), save it to Notion
+        if (mondayTokenInput && mondayTokenInput !== "••••••••") {
+          token = mondayTokenInput;
+          var encoded = btoa(mondayTokenInput);
+          // Update token_monday column in user's Notion page
+          chrome.storage.local.get(["notionUsers", "userEmail"], function(nd) {
+            var email = (nd.userEmail || "").toLowerCase();
+            var users = nd.notionUsers || {};
+            var user = users[email];
+            if (user && user.notionPageId) {
+              chrome.runtime.sendMessage({ type: "notion-update", pageId: user.notionPageId, body: { properties: { "token_monday": { rich_text: [{ text: { content: encoded } }] } } } });
+            }
+          });
+          // Update local cache immediately
+          _mondayTokenCache = mondayTokenInput;
+        }
+
         var saveData = { mondayToken: token, mondayBoardId: boardId, mondayBoardName: boardName, teamArea: area };
         // Collect blacklisted profileIds (unchecked = blacklisted)
         var memberChecks = membersDiv.querySelectorAll('input[data-pid]');

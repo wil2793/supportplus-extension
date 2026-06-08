@@ -30,6 +30,12 @@
       const mondayToken = await getMondayToken();
       if (!spToken || !mondayToken) { _syncing = false; return; }
 
+      // Get logged user email - only sync tickets assigned to me
+      const userEmail = await new Promise((r) => {
+        chrome.storage.local.get("userEmail", (d) => r((d.userEmail || "").toLowerCase()));
+      });
+      if (!userEmail) { _syncing = false; return; }
+
       const { workspaceId, etiqueta } = await new Promise((r) => {
         chrome.storage.local.get(["groupMondayConfig"], (d) => {
           const config = d.groupMondayConfig || {};
@@ -44,7 +50,12 @@
       });
       if (!res.ok) { _syncing = false; return; }
       const json = await res.json();
-      const tickets = (json.data || json).content || [];
+      const allTickets = (json.data || json).content || [];
+      // Filter: only tickets assigned to me
+      const tickets = allTickets.filter((t) => {
+        const responsible = (t.responsibleEmail || "").toLowerCase();
+        return responsible === userEmail;
+      });
       if (!tickets.length) { _syncing = false; return; }
 
       const boardsRes = await mondayQ(mondayToken, `{ boards(workspace_ids: [${workspaceId}], limit: 50) { id name } }`, {});

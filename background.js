@@ -5,7 +5,6 @@ const NOTION_USERS_DB = "36620e0684b98051a190e51d38d97288";
 const NOTION_ROLES_DB = "36720e0684b9807aba20c1c3d0536c09";
 const NOTION_GROUPS_DB = "36620e0684b9800e9a57df46019a03e0";
 const NOTION_COMMENTS_DB = "36920e0684b980a19fdbd27302a65feb";
-const NOTION_CONFIG_DB = "36b20e0684b9807aa115df0bb6b36517";
 const NOTION_HEADERS = {
   "Authorization": "Bearer " + NOTION_TOKEN,
   "Notion-Version": "2022-06-28",
@@ -171,13 +170,16 @@ async function syncNotionData() {
       }
     }
 
-    // 5. Get config tokens (Monday token from Notion)
-    const configRaw = await notionQueryAll(NOTION_CONFIG_DB);
+    // 5. Get user's Monday token from their MSP_Usuarios record
     let mondayTokenFromNotion = "";
-    for (const c of configRaw) {
-      const name = (c.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase();
-      if (name === "token_monday") {
-        mondayTokenFromNotion = c.properties.Valor?.rich_text?.[0]?.plain_text || "";
+    if (currentEmail && usersMap[currentEmail]?.notionPageId) {
+      const userPageId = usersMap[currentEmail].notionPageId;
+      const userPage = users.find(u => u.id === userPageId);
+      if (userPage) {
+        const encoded = userPage.properties.token_monday?.rich_text?.[0]?.plain_text || "";
+        if (encoded) {
+          try { mondayTokenFromNotion = atob(encoded); } catch(e) { mondayTokenFromNotion = encoded; }
+        }
       }
     }
 
@@ -220,7 +222,7 @@ async function syncNotionData() {
 
     // Save to storage
     await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, groupNames: groupNamesMap, groupMondayConfig, suggestedComments, mondayToken: mondayTokenFromNotion, latestVersion, latestZipUrl, allVersions, userConfig, notionSyncTime: Date.now() });
-    console.log("[SP Background] Notion synced:", Object.keys(usersMap).length, "users,", rolesList.length, "roles,", commentsRaw.length, "comments, monday token:", mondayTokenFromNotion ? "OK" : "MISSING", "latest version:", latestVersion, "versions:", allVersions.length);
+    console.log("[SP Background] Notion synced:", Object.keys(usersMap).length, "users,", rolesList.length, "roles,", commentsRaw.length, "comments, monday token:", mondayTokenFromNotion ? "OK (user)" : "NOT SET", "latest version:", latestVersion, "versions:", allVersions.length);
   } catch (e) {
     console.error("[SP Background] Notion sync error:", e);
   }
