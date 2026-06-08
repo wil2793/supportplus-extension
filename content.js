@@ -3744,31 +3744,37 @@
       // Load initially if area set
       if (currentArea) loadMembersForConfig(currentArea);
 
-      // Load boards
+      // Load boards (only if board elements exist)
       var allBoards = [];
-      document.getElementById("sp-cfg-load-boards").addEventListener("click", async function() {
-        var token = await getMondayToken();
-        if (!token) { document.getElementById("sp-cfg-board-status").textContent = "⚠️ Token de Monday no configurado en Notion"; return; }
-        document.getElementById("sp-cfg-board-status").textContent = "Cargando...";
-        try {
-          var res = await fetch("https://api.monday.com/v2", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: token },
-            body: JSON.stringify({ query: "{ boards(limit:500) { id name } }" }),
-          });
-          var json = await res.json();
-          if (json.errors) throw new Error(json.errors[0].message);
-          allBoards = json.data.boards.sort(function(a, b) { return a.name.localeCompare(b.name); });
-          document.getElementById("sp-cfg-board-status").textContent = allBoards.length + " boards cargados. Escribe para buscar.";
-        } catch(e) {
-          document.getElementById("sp-cfg-board-status").textContent = "❌ " + e.message;
-        }
-      });
+      var loadBoardsBtn = document.getElementById("sp-cfg-load-boards");
+      var boardSearchEl = document.getElementById("sp-cfg-board-search");
+      if (loadBoardsBtn) {
+        loadBoardsBtn.addEventListener("click", async function() {
+          var token = await getMondayToken();
+          if (!token) { document.getElementById("sp-cfg-board-status").textContent = "⚠️ Token de Monday no configurado"; return; }
+          document.getElementById("sp-cfg-board-status").textContent = "Cargando...";
+          try {
+            var res = await fetch("https://api.monday.com/v2", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: token },
+              body: JSON.stringify({ query: "{ boards(limit:500) { id name } }" }),
+            });
+            var json = await res.json();
+            if (json.errors) throw new Error(json.errors[0].message);
+            allBoards = json.data.boards.sort(function(a, b) { return a.name.localeCompare(b.name); });
+            document.getElementById("sp-cfg-board-status").textContent = allBoards.length + " boards cargados. Escribe para buscar.";
+          } catch(e) {
+            document.getElementById("sp-cfg-board-status").textContent = "❌ " + e.message;
+          }
+        });
+      }
 
       // Board search
       function filterCfgBoards() {
-        var query = document.getElementById("sp-cfg-board-search").value.toLowerCase().trim();
+        if (!boardSearchEl) return;
+        var query = boardSearchEl.value.toLowerCase().trim();
         var results = document.getElementById("sp-cfg-board-results");
+        if (!results) return;
         if (!query || !allBoards.length) { results.style.display = "none"; return; }
         var filtered = allBoards.filter(function(b) { return b.name.toLowerCase().includes(query); }).slice(0, 15);
         if (!filtered.length) { results.innerHTML = '<div style="padding:6px 8px;color:#888;">Sin resultados</div>'; results.style.display = "block"; return; }
@@ -3777,23 +3783,30 @@
         }).join("");
         results.style.display = "block";
       }
-      document.getElementById("sp-cfg-board-search").addEventListener("input", filterCfgBoards);
-      document.getElementById("sp-cfg-board-search").addEventListener("focus", filterCfgBoards);
-      document.getElementById("sp-cfg-board-results").addEventListener("click", function(e) {
-        var opt = e.target.closest(".sp-cfg-board-opt");
-        if (!opt) return;
-        document.getElementById("sp-cfg-board-id").value = opt.dataset.id;
-        document.getElementById("sp-cfg-board-search").value = opt.dataset.name;
-        document.getElementById("sp-cfg-board-status").textContent = "✅ " + opt.dataset.name;
-        document.getElementById("sp-cfg-board-results").style.display = "none";
-      });
+      if (boardSearchEl) {
+        boardSearchEl.addEventListener("input", filterCfgBoards);
+        boardSearchEl.addEventListener("focus", filterCfgBoards);
+      }
+      var boardResultsEl = document.getElementById("sp-cfg-board-results");
+      if (boardResultsEl) {
+        boardResultsEl.addEventListener("click", function(e) {
+          var opt = e.target.closest(".sp-cfg-board-opt");
+          if (!opt) return;
+          document.getElementById("sp-cfg-board-id").value = opt.dataset.id;
+          document.getElementById("sp-cfg-board-search").value = opt.dataset.name;
+          document.getElementById("sp-cfg-board-status").textContent = "✅ " + opt.dataset.name;
+          boardResultsEl.style.display = "none";
+        });
+      }
 
       // Save
       document.getElementById("sp-cfg-save").addEventListener("click", async function() {
         var token = await getMondayToken();
         var mondayTokenInput = document.getElementById("sp-cfg-monday-token").value.trim();
-        var boardId = document.getElementById("sp-cfg-board-id").value;
-        var boardName = document.getElementById("sp-cfg-board-search").value.trim();
+        var boardIdEl = document.getElementById("sp-cfg-board-id");
+        var boardSearchEl = document.getElementById("sp-cfg-board-search");
+        var boardId = boardIdEl ? boardIdEl.value : "";
+        var boardName = boardSearchEl ? boardSearchEl.value.trim() : "";
         var area = document.getElementById("sp-cfg-area").value;
         var onlyWithTickets = onlyWithTicketsEl.checked;
 
