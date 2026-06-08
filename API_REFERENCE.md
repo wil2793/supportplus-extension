@@ -40,3 +40,55 @@
 - **DBA_cat_Productos:** `36c20e0684b980b7984bc6c5751a1057`
 - **DBA_LogInfo:** `36c20e0684b98030b292c088101e8184`
 - **DBA_Guardias:** `36d20e0684b98004b687c452ab2367a2`
+
+---
+
+## Proceso de subir versión
+
+Cada vez que se sube una versión, se deben hacer los siguientes pasos en este orden:
+
+### 1. Actualizar versión en manifest.json
+
+```json
+"version": "X.Y.Z"
+```
+
+### 2. Commit y push a GitHub
+
+```bash
+git add . && git commit -m "vX.Y.Z - Descripción breve" && git push
+```
+
+### 3. Generar el ZIP
+
+Solo incluir los archivos de la extensión (no .git, no scripts temporales):
+
+```powershell
+$src = 'c:\GitHub\DBA\supportplus-extension'
+$files = @('background.js','content.js','components.js','monday-sync.js','manifest.json','popup.html','popup.js','icon.png','icon16.png','icon48.png','icon128.png')
+$paths = $files | ForEach-Object { Join-Path $src $_ }
+Compress-Archive -Path $paths -DestinationPath (Join-Path $src "releases\vX.Y.Z.zip") -Force
+```
+
+### 4. Subir ZIP a GitHub
+
+```bash
+git add releases/vX.Y.Z.zip && git commit -m "vX.Y.Z - Release zip" && git push
+```
+
+### 5. Registrar en Notion (tabla MSP_Versiones)
+
+Crear un registro con:
+
+- **Version** (title): `X.Y.Z`
+- **Camios** (rich_text): Descripción técnica y breve de los cambios
+- **Activo** (checkbox): `false` (se activa manualmente cuando se quiere distribuir)
+- **Archivo zip** (files): URL del zip en GitHub: `https://raw.githubusercontent.com/wil2793/supportplus-extension/feature/initial/releases/vX.Y.Z.zip`
+
+### Notas importantes
+
+- **No eliminar zips anteriores** — los usuarios pueden descargar versiones antiguas
+- **No eliminar registros de versiones** — sirven como changelog
+- **Los logs de cambios deben ser en español** y entendibles para usuarios no técnicos
+- **Activo = false** por defecto — el administrador lo activa manualmente
+- La extensión valida la versión más reciente con `Activo = true` para notificar actualizaciones

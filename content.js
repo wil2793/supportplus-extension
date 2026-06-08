@@ -5568,19 +5568,6 @@
   // --- Quick detail button ---
   const DETAIL_QUICK_CLASS = "sp-quick-detail-btn";
 
-  function createQuickDetailButton(ticketId) {
-    var btn = document.createElement("button");
-    btn.className = DETAIL_QUICK_CLASS + " MuiButtonBase-root MuiButton-root MuiButton-contained MuiButton-containedPrimary MuiButton-sizeMedium MuiButton-containedSizeMedium MuiButton-colorPrimary";
-    btn.textContent = "👁️ Ver";
-    btn.style.cssText = "padding:2px 8px;font-size:11px;cursor:pointer;margin-left:6px;white-space:nowrap;min-width:auto;";
-    btn.addEventListener("click", function(e) {
-      e.stopPropagation();
-      e.preventDefault();
-      showQuickDetailModal(ticketId);
-    });
-    return btn;
-  }
-
   var _qdCommentsInterval = null;
   var _qdLastOpen = 0;
   async function showQuickDetailModal(ticketId) {
@@ -5717,8 +5704,8 @@
 
       var overlay = document.createElement("div");
       overlay.id = "sp-quick-detail-modal";
-      overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0);z-index:99999;display:flex;align-items:center;justify-content:center;transition:background 0.3s ease;";
-      overlay.innerHTML = '<div style="background:#fff;padding:clamp(12px, 2vw, 24px);border-radius:0;width:100vw;height:100vh;max-height:100vh;display:flex;flex-direction:column;overflow-y:auto;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);transform:scale(0.95);opacity:0;transition:transform 0.2s ease,opacity 0.2s ease;">' +
+      overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0);z-index:99999;display:flex;align-items:center;justify-content:center;transition:background 0.3s ease,backdrop-filter 0.3s ease;backdrop-filter:blur(0px);";
+      overlay.innerHTML = '<div style="background:#fff;padding:clamp(16px, 2vw, 28px);border-radius:12px;width:92vw;max-width:900px;height:85vh;max-height:85vh;display:flex;flex-direction:column;overflow-y:auto;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);transform:scale(0.95);opacity:0;transition:transform 0.2s ease,opacity 0.2s ease;box-shadow:0 8px 40px rgba(0,0,0,0.25);">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
           '<h3 style="margin:0;font-size:1.1rem;">📋 ' + (t.uniqueCode || ticketId) + ' <span class="sp-qd-copy-folio" data-copy="' + (t.uniqueCode || ticketId) + '" style="cursor:pointer;font-size:0.85rem;opacity:0.6;" title="Copiar folio">⧉</span> <span style="font-weight:400;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-size:0.85rem;">(' + statusName + ')</span></h3>' +
           '<div style="display:flex;gap:6px;align-items:center;">' +
@@ -5855,7 +5842,8 @@
 
       // Trigger open animation
       requestAnimationFrame(function() {
-        overlay.style.background = "rgba(0,0,0,0)";
+        overlay.style.background = "rgba(0,0,0,0.5)";
+        overlay.style.backdropFilter = "blur(6px)";
         var modalBox = overlay.querySelector("div");
         if (modalBox) { modalBox.style.transform = "scale(1)"; modalBox.style.opacity = "1"; }
       });
@@ -5865,13 +5853,13 @@
         var modalBox = overlay.querySelector("div");
         if (modalBox) { modalBox.style.transform = "scale(0.9) translateY(10px)"; modalBox.style.opacity = "0"; }
         overlay.style.background = "rgba(0,0,0,0)";
+        overlay.style.backdropFilter = "blur(0px)";
         setTimeout(function() { overlay.remove(); }, 250);
       }
 
       document.getElementById("sp-qd-close").addEventListener("click", closeQdModal);
-      overlay.addEventListener("click", function(e) { if (e.target === overlay) closeQdModal(); });
       document.addEventListener("keydown", function escHandler(e) {
-        if (e.key === "Escape" && document.getElementById("sp-quick-detail-modal")) { closeQdModal(); document.removeEventListener("keydown", escHandler); }
+        if (e.key === "Escape" && document.getElementById("sp-quick-detail-modal") && !document.getElementById("sp-carousel-modal")) { closeQdModal(); document.removeEventListener("keydown", escHandler); }
       });
 
       // Auto-refresh comments every 30s
@@ -5924,7 +5912,7 @@
         var stealBtn = document.getElementById("sp-qd-steal-btn");
         if (stealBtn) { stealBtn.style.padding = "5px 10px"; stealBtn.style.fontSize = "11px"; actionsContainer.appendChild(stealBtn); }
         var takeBtn = document.getElementById("sp-qd-take-btn");
-        if (takeBtn) { takeBtn.style.padding = "5px 10px"; actionsContainer.appendChild(takeBtn); }
+        if (takeBtn) { takeBtn.style.padding = "5px 10px"; takeBtn.style.fontSize = "11px"; actionsContainer.appendChild(takeBtn); }
         var rejectBtn = document.getElementById("sp-qd-reject-btn");
         if (rejectBtn) { rejectBtn.style.padding = "5px 10px"; rejectBtn.style.fontSize = "11px"; actionsContainer.appendChild(rejectBtn); }
         var migrateBtn = document.getElementById("sp-qd-migrate-btn");
@@ -6416,6 +6404,10 @@
         // Toggle "Ticket realizado" extras
         takeDoneCheck.addEventListener("change", function() {
           takeExtraDiv.style.display = takeDoneCheck.checked ? "block" : "none";
+          if (takeDoneCheck.checked) {
+            var takeCloseCommentEl = document.getElementById("sp-qd-take-close-comment");
+            if (takeCloseCommentEl) setTimeout(function() { takeCloseCommentEl.focus(); }, 50);
+          }
         });
 
         // Load Monday groups for the select
@@ -6452,6 +6444,9 @@
           takeBtn.textContent = "🤚 Tomar";
           takeBtn.style.background = "#0D47A1";
           takeBtn.disabled = true;
+          // Focus comment textarea
+          var takeCommentEl = document.getElementById("sp-qd-take-comment");
+          if (takeCommentEl) setTimeout(function() { takeCommentEl.focus(); takeCommentEl.select(); }, 50);
         });
 
         // Reject button - change status to Rechazado directly
@@ -6892,132 +6887,216 @@
         });
       }
 
-      // View attachments in modal
-      console.log("[SP] Registering download listeners, found:", overlay.querySelectorAll(".sp-qd-download").length);
-      overlay.querySelectorAll(".sp-qd-download").forEach(function(btn) {
-        btn.addEventListener("click", async function() {
+      // View attachments in modal (carousel mode)
+      var allAttachBtns = Array.from(overlay.querySelectorAll(".sp-qd-download"));
+      console.log("[SP] Registering download listeners (carousel), found:", allAttachBtns.length);
+
+      // Cache for loaded files: { fileId: { url, blob, byteArray, mimeType, fileName } }
+      var attachCache = {};
+
+      async function loadFileData(fileId, fileName) {
+        if (attachCache[fileId]) return attachCache[fileId];
+        var fileRes = await fetch("https://macropayapi.supportplus.mx/files/" + fileId, {
+          headers: { accept: "application/json", authorization: "Bearer " + spToken }
+        });
+        if (!fileRes.ok) throw new Error("HTTP " + fileRes.status);
+        var fileJson = await fileRes.json();
+        var fileData = fileJson.data || fileJson;
+        var base64Content = fileData.content;
+        if (!base64Content) throw new Error("Sin contenido");
+
+        var byteChars = atob(base64Content);
+        var byteNumbers = new Array(byteChars.length);
+        for (var i = 0; i < byteChars.length; i++) {
+          byteNumbers[i] = byteChars.charCodeAt(i);
+        }
+        var byteArray = new Uint8Array(byteNumbers);
+
+        var mimeType = "application/octet-stream";
+        var ext = fileName.split(".").pop().toLowerCase();
+        var mimeMap = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml", bmp: "image/bmp", pdf: "application/pdf", zip: "application/zip", txt: "text/plain" };
+        if (mimeMap[ext]) mimeType = mimeMap[ext];
+
+        var blob = new Blob([byteArray], { type: mimeType });
+        var url = URL.createObjectURL(blob);
+        attachCache[fileId] = { url: url, blob: blob, byteArray: byteArray, mimeType: mimeType, fileName: fileName };
+        return attachCache[fileId];
+      }
+
+      function buildFileContentHTML(fileName, url, byteArray) {
+        var isImage = /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(fileName);
+        var isPdf = /\.pdf$/i.test(fileName);
+        var isText = /\.(txt|sql|csv|json|xml|log|md|yml|yaml|ini|conf|sh|bat|ps1|py|js|ts|html|css|env)$/i.test(fileName);
+        var contentHTML = '';
+        var textContent = null;
+        if (isImage) {
+          contentHTML = '<img src="' + url + '" style="max-width:90vw;max-height:70vh;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:block;margin:0 auto;">';
+        } else if (isPdf) {
+          contentHTML = '<iframe src="' + url + '" style="width:90vw;height:75vh;border:none;border-radius:8px;"></iframe>';
+        } else if (isText) {
+          textContent = new TextDecoder("utf-8").decode(byteArray);
+          var escaped = textContent.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+          var extMatch = fileName.match(/\.([^.]+)$/);
+          var ext = extMatch ? extMatch[1].toLowerCase() : "";
+          var needsHighlight = ext === "sql" || ext === "js" || ext === "ts" || ext === "py" || ext === "json" || ext === "xml" || ext === "html" || ext === "css";
+
+          if (needsHighlight) {
+            var highlighted = escaped;
+            if (ext === "sql") {
+              highlighted = highlighted.replace(/\b(SELECT|FROM|WHERE|INSERT|INTO|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TABLE|INDEX|VIEW|PROCEDURE|FUNCTION|TRIGGER|BEGIN|END|IF|ELSE|THEN|CASE|WHEN|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|IS|NULL|AS|ON|JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|UNION|ALL|DISTINCT|ORDER|BY|GROUP|HAVING|LIMIT|OFFSET|TOP|VALUES|EXEC|EXECUTE|DECLARE|VARCHAR|INT|BIGINT|NVARCHAR|DATETIME|BIT|FLOAT|DECIMAL|PRIMARY|KEY|FOREIGN|REFERENCES|CONSTRAINT|DEFAULT|IDENTITY|GO|USE|DATABASE|SCHEMA|GRANT|REVOKE|COMMIT|ROLLBACK|TRANSACTION|WITH|NOLOCK|COUNT|SUM|AVG|MAX|MIN|COALESCE|ISNULL|CAST|CONVERT|GETDATE|DATEADD|DATEDIFF|LEN|SUBSTRING|REPLACE|TRIM|UPPER|LOWER|ROW_NUMBER|OVER|PARTITION|RANK|DENSE_RANK|LAG|LEAD|MERGE|OUTPUT|INSERTED|DELETED|CURSOR|FETCH|NEXT|OPEN|CLOSE|DEALLOCATE|PRINT|RAISERROR|TRY|CATCH|THROW|RETURN|WHILE|BREAK|CONTINUE|TEMP|TEMPORARY|TRUNCATE|ASC|DESC|HAVING|EXCEPT|INTERSECT)\b/gi, '<span style="color:#569CD6;">$1</span>');
+              highlighted = highlighted.replace(/(&apos;|&#39;|&#x27;|'[^']*')/g, '<span style="color:#CE9178;">$1</span>');
+              highlighted = highlighted.replace(/(--[^\n]*)/g, '<span style="color:#6A9955;">$1</span>');
+              highlighted = highlighted.replace(/(\/\*[\s\S]*?\*\/)/g, '<span style="color:#6A9955;">$1</span>');
+              highlighted = highlighted.replace(/\b(\d+)\b/g, '<span style="color:#B5CEA8;">$1</span>');
+            } else if (ext === "json") {
+              highlighted = highlighted.replace(/(&quot;[^&]*?&quot;)\s*:/g, '<span style="color:#9CDCFE;">$1</span>:');
+              highlighted = highlighted.replace(/:\s*(&quot;[^&]*?&quot;)/g, ': <span style="color:#CE9178;">$1</span>');
+              highlighted = highlighted.replace(/:\s*(true|false|null|\d+\.?\d*)/g, ': <span style="color:#B5CEA8;">$1</span>');
+            } else if (ext === "js" || ext === "ts") {
+              highlighted = highlighted.replace(/\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|new|this|try|catch|throw|typeof|instanceof)\b/g, '<span style="color:#569CD6;">$1</span>');
+              highlighted = highlighted.replace(/(\/\/[^\n]*)/g, '<span style="color:#6A9955;">$1</span>');
+              highlighted = highlighted.replace(/(&quot;[^&]*?&quot;|&apos;[^&]*?&apos;)/g, '<span style="color:#CE9178;">$1</span>');
+            } else if (ext === "py") {
+              highlighted = highlighted.replace(/\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|in|not|and|or|True|False|None|self|print|lambda|yield|raise|pass|break|continue)\b/g, '<span style="color:#569CD6;">$1</span>');
+              highlighted = highlighted.replace(/(#[^\n]*)/g, '<span style="color:#6A9955;">$1</span>');
+            } else if (ext === "xml" || ext === "html") {
+              highlighted = highlighted.replace(/(&lt;\/?[a-zA-Z][a-zA-Z0-9]*)/g, '<span style="color:#569CD6;">$1</span>');
+              highlighted = highlighted.replace(/(\s[a-zA-Z-]+)=/g, '<span style="color:#9CDCFE;">$1</span>=');
+              highlighted = highlighted.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span style="color:#6A9955;">$1</span>');
+            } else if (ext === "css") {
+              highlighted = highlighted.replace(/([.#]?[a-zA-Z_-][a-zA-Z0-9_-]*)\s*\{/g, '<span style="color:#D7BA7D;">$1</span> {');
+              highlighted = highlighted.replace(/([a-z-]+)\s*:/g, '<span style="color:#9CDCFE;">$1</span>:');
+            }
+            contentHTML = '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:75vh;overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + highlighted + '</pre></div>';
+          } else {
+            contentHTML = '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:75vh;overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + escaped + '</pre></div>';
+          }
+        } else if (/\.(xlsx|xls)$/i.test(fileName)) {
+          // Excel preview using SheetJS (loaded as content script)
+          try {
+            var wb = XLSX.read(byteArray, { type: "array" });
+            var ws = wb.Sheets[wb.SheetNames[0]];
+            var htmlTable = XLSX.utils.sheet_to_html(ws, { editable: false });
+            contentHTML = '<div style="max-height:75vh;max-width:90vw;overflow:auto;background:#fff;border-radius:8px;padding:8px;">' +
+              '<div style="font-size:11px;color:#888;margin-bottom:8px;">Hoja: ' + esc(wb.SheetNames[0]) + (wb.SheetNames.length > 1 ? ' (' + wb.SheetNames.length + ' hojas)' : '') + '</div>' +
+              '<style>.sp-excel-table table{border-collapse:collapse;font-size:11px;font-family:Consolas,monospace;} .sp-excel-table td,.sp-excel-table th{border:1px solid #ddd;padding:3px 6px;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;}</style>' +
+              '<div class="sp-excel-table">' + htmlTable + '</div></div>';
+          } catch(e) {
+            contentHTML = '<div style="background:#fff;padding:24px;border-radius:8px;text-align:center;color:#D94040;">Error al leer el archivo Excel</div>';
+          }
+        } else {
+          contentHTML = '<div style="background:#fff;padding:24px;border-radius:8px;text-align:center;"><p style="margin:0 0 12px;font-size:14px;">No se puede previsualizar: <b>' + esc(fileName) + '</b></p><a href="' + url + '" download="' + fileName + '" style="padding:8px 16px;background:#1976D2;color:#fff;border-radius:6px;text-decoration:none;font-size:13px;">📥 Descargar</a></div>';
+        }
+        return { html: contentHTML, textContent: textContent, isText: isText };
+      }
+
+      function openCarousel(startIndex) {
+        var currentIndex = startIndex;
+        var totalFiles = allAttachBtns.length;
+        var currentUrl = null;
+        var currentTextContent = null;
+
+        var fileModal = document.createElement("div");
+        fileModal.id = "sp-carousel-modal";
+        fileModal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0);z-index:999999;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:background 0.3s ease;";
+        fileModal.innerHTML = '<div class="sp-file-content" style="transform:scale(0.85) translateY(20px);opacity:0;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1),opacity 0.3s ease;display:flex;flex-direction:column;align-items:center;width:100%;"><div id="sp-carousel-header" style="display:flex;justify-content:space-between;align-items:center;width:90vw;margin-bottom:8px;gap:8px;"></div><div id="sp-carousel-body" style="display:flex;align-items:center;justify-content:center;width:100%;position:relative;min-height:200px;"></div></div>';
+        document.body.appendChild(fileModal);
+
+        requestAnimationFrame(function() {
+          fileModal.style.background = "rgba(0,0,0,.85)";
+          var contentEl = fileModal.querySelector(".sp-file-content");
+          if (contentEl) { contentEl.style.transform = "scale(1) translateY(0)"; contentEl.style.opacity = "1"; }
+        });
+
+        function closeCarousel() {
+          var contentEl = fileModal.querySelector(".sp-file-content");
+          if (contentEl) { contentEl.style.transform = "scale(0.9) translateY(10px)"; contentEl.style.opacity = "0"; }
+          fileModal.style.background = "rgba(0,0,0,0)";
+          document.removeEventListener("keydown", handleKeys);
+          setTimeout(function() { fileModal.remove(); }, 250);
+        }
+
+        function renderHeader(fileName, url, isText) {
+          var header = fileModal.querySelector("#sp-carousel-header");
+          var counterHTML = totalFiles > 1 ? '<span style="color:#fff;font-size:13px;font-weight:600;">' + (currentIndex + 1) + ' / ' + totalFiles + '</span>' : '';
+          var copyBtn = isText ? '<button id="sp-file-copy-text" style="padding:6px 14px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">📋 Copiar</button>' : '';
+          header.innerHTML = '<div style="display:flex;align-items:center;gap:12px;">' + counterHTML + '<span style="color:#ccc;font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(fileName) + '">' + esc(fileName) + '</span></div><div style="display:flex;gap:8px;">' + copyBtn + '<a href="' + url + '" download="' + fileName + '" style="padding:6px 14px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:13px;text-decoration:none;">📥 Descargar</a><button id="sp-file-close" style="padding:6px 14px;border:none;border-radius:6px;background:rgba(255,255,255,0.9);cursor:pointer;font-size:13px;">✕ Cerrar</button></div>';
+          fileModal.querySelector("#sp-file-close").addEventListener("click", closeCarousel);
+          var copyTextBtn = fileModal.querySelector("#sp-file-copy-text");
+          if (copyTextBtn && currentTextContent) {
+            copyTextBtn.addEventListener("click", function() {
+              navigator.clipboard.writeText(currentTextContent).then(function() {
+                copyTextBtn.textContent = "✅ Copiado";
+                setTimeout(function() { copyTextBtn.textContent = "📋 Copiar"; }, 2000);
+              });
+            });
+          }
+        }
+
+        function renderBody(contentHTML) {
+          var body = fileModal.querySelector("#sp-carousel-body");
+          var navPrevHTML = totalFiles > 1 ? '<button id="sp-carousel-prev" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.3)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.15)\'">◀</button>' : '';
+          var navNextHTML = totalFiles > 1 ? '<button id="sp-carousel-next" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.3)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.15)\'">▶</button>' : '';
+          body.innerHTML = navPrevHTML + '<div style="display:flex;align-items:center;justify-content:center;width:90vw;">' + contentHTML + '</div>' + navNextHTML;
+
+          var prevBtn = fileModal.querySelector("#sp-carousel-prev");
+          var nextBtn = fileModal.querySelector("#sp-carousel-next");
+          if (prevBtn) prevBtn.addEventListener("click", function(e) { e.stopPropagation(); navigateTo(currentIndex - 1); });
+          if (nextBtn) nextBtn.addEventListener("click", function(e) { e.stopPropagation(); navigateTo(currentIndex + 1); });
+        }
+
+        function showLoading() {
+          var body = fileModal.querySelector("#sp-carousel-body");
+          body.innerHTML = '<div style="color:#fff;font-size:16px;display:flex;flex-direction:column;align-items:center;gap:12px;"><div style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.8s linear infinite;"></div><span>Cargando archivo...</span></div>';
+          if (!document.getElementById("sp-carousel-spin-style")) {
+            var style = document.createElement("style");
+            style.id = "sp-carousel-spin-style";
+            style.textContent = "@keyframes sp-spin { to { transform: rotate(360deg); } }";
+            document.head.appendChild(style);
+          }
+        }
+
+        async function navigateTo(index) {
+          if (index < 0) index = totalFiles - 1;
+          if (index >= totalFiles) index = 0;
+          currentIndex = index;
+
+          var btn = allAttachBtns[currentIndex];
           var fileId = btn.dataset.fileId;
           var fileName = btn.dataset.fileName;
-          btn.textContent = "⏳ ...";
-          btn.disabled = true;
+
+          showLoading();
+          renderHeader(fileName, "", false);
+
           try {
-            var fileRes = await fetch("https://macropayapi.supportplus.mx/files/" + fileId, {
-              headers: { accept: "application/json", authorization: "Bearer " + spToken }
-            });
-            if (!fileRes.ok) throw new Error("HTTP " + fileRes.status);
-            var fileJson = await fileRes.json();
-            var fileData = fileJson.data || fileJson;
-            var base64Content = fileData.content;
-            if (!base64Content) throw new Error("Sin contenido");
-
-            // Decode base64 to blob
-            var byteChars = atob(base64Content);
-            var byteNumbers = new Array(byteChars.length);
-            for (var i = 0; i < byteChars.length; i++) {
-              byteNumbers[i] = byteChars.charCodeAt(i);
-            }
-            var byteArray = new Uint8Array(byteNumbers);
-
-            // Determine mime type
-            var mimeType = "application/octet-stream";
-            var ext = fileName.split(".").pop().toLowerCase();
-            var mimeMap = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml", bmp: "image/bmp", pdf: "application/pdf", zip: "application/zip", txt: "text/plain" };
-            if (mimeMap[ext]) mimeType = mimeMap[ext];
-
-            var blob = new Blob([byteArray], { type: mimeType });
-            var url = URL.createObjectURL(blob);
-            btn.textContent = "📎 " + fileName;
-            btn.disabled = false;
-
-            // Show file in a modal with animation
-            var fileModal = document.createElement("div");
-            fileModal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0);z-index:999999;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:background 0.3s ease;";
-            var isImage = /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(fileName);
-            var isPdf = /\.pdf$/i.test(fileName);
-            var isText = /\.(txt|sql|csv|json|xml|log|md|yml|yaml|ini|conf|sh|bat|ps1|py|js|ts|html|css|env)$/i.test(fileName);
-            var contentHTML = '';
-            if (isImage) {
-              contentHTML = '<img src="' + url + '" style="max-width:90vw;max-height:80vh;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:block;margin:0 auto;">';
-            } else if (isPdf) {
-              contentHTML = '<iframe src="' + url + '" style="width:90vw;height:85vh;border:none;border-radius:8px;"></iframe>';
-            } else if (isText) {
-              var textContent = new TextDecoder("utf-8").decode(byteArray);
-              var escaped = textContent.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-              // Determine language for syntax highlighting
-              var extMatch = fileName.match(/\.([^.]+)$/);
-              var ext = extMatch ? extMatch[1].toLowerCase() : "";
-              var needsHighlight = ext === "sql" || ext === "js" || ext === "ts" || ext === "py" || ext === "json" || ext === "xml" || ext === "html" || ext === "css";
-
-              if (needsHighlight) {
-                var highlighted = escaped;
-                if (ext === "sql") {
-                  // SQL keywords
-                  highlighted = highlighted.replace(/\b(SELECT|FROM|WHERE|INSERT|INTO|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TABLE|INDEX|VIEW|PROCEDURE|FUNCTION|TRIGGER|BEGIN|END|IF|ELSE|THEN|CASE|WHEN|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|IS|NULL|AS|ON|JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|UNION|ALL|DISTINCT|ORDER|BY|GROUP|HAVING|LIMIT|OFFSET|TOP|VALUES|EXEC|EXECUTE|DECLARE|VARCHAR|INT|BIGINT|NVARCHAR|DATETIME|BIT|FLOAT|DECIMAL|PRIMARY|KEY|FOREIGN|REFERENCES|CONSTRAINT|DEFAULT|IDENTITY|GO|USE|DATABASE|SCHEMA|GRANT|REVOKE|COMMIT|ROLLBACK|TRANSACTION|WITH|NOLOCK|COUNT|SUM|AVG|MAX|MIN|COALESCE|ISNULL|CAST|CONVERT|GETDATE|DATEADD|DATEDIFF|LEN|SUBSTRING|REPLACE|TRIM|UPPER|LOWER|ROW_NUMBER|OVER|PARTITION|RANK|DENSE_RANK|LAG|LEAD|MERGE|OUTPUT|INSERTED|DELETED|CURSOR|FETCH|NEXT|OPEN|CLOSE|DEALLOCATE|PRINT|RAISERROR|TRY|CATCH|THROW|RETURN|WHILE|BREAK|CONTINUE|TEMP|TEMPORARY|TRUNCATE|ASC|DESC|HAVING|EXCEPT|INTERSECT)\b/gi, '<span style="color:#569CD6;">$1</span>');
-                  // Strings
-                  highlighted = highlighted.replace(/(&apos;|&#39;|&#x27;|'[^']*')/g, '<span style="color:#CE9178;">$1</span>');
-                  // Comments
-                  highlighted = highlighted.replace(/(--[^\n]*)/g, '<span style="color:#6A9955;">$1</span>');
-                  highlighted = highlighted.replace(/(\/\*[\s\S]*?\*\/)/g, '<span style="color:#6A9955;">$1</span>');
-                  // Numbers
-                  highlighted = highlighted.replace(/\b(\d+)\b/g, '<span style="color:#B5CEA8;">$1</span>');
-                } else if (ext === "json") {
-                  // Keys
-                  highlighted = highlighted.replace(/(&quot;[^&]*?&quot;)\s*:/g, '<span style="color:#9CDCFE;">$1</span>:');
-                  // String values
-                  highlighted = highlighted.replace(/:\s*(&quot;[^&]*?&quot;)/g, ': <span style="color:#CE9178;">$1</span>');
-                  // Numbers/booleans
-                  highlighted = highlighted.replace(/:\s*(true|false|null|\d+\.?\d*)/g, ': <span style="color:#B5CEA8;">$1</span>');
-                } else if (ext === "js" || ext === "ts") {
-                  highlighted = highlighted.replace(/\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|new|this|try|catch|throw|typeof|instanceof)\b/g, '<span style="color:#569CD6;">$1</span>');
-                  highlighted = highlighted.replace(/(\/\/[^\n]*)/g, '<span style="color:#6A9955;">$1</span>');
-                  highlighted = highlighted.replace(/(&quot;[^&]*?&quot;|&apos;[^&]*?&apos;)/g, '<span style="color:#CE9178;">$1</span>');
-                } else if (ext === "py") {
-                  highlighted = highlighted.replace(/\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|in|not|and|or|True|False|None|self|print|lambda|yield|raise|pass|break|continue)\b/g, '<span style="color:#569CD6;">$1</span>');
-                  highlighted = highlighted.replace(/(#[^\n]*)/g, '<span style="color:#6A9955;">$1</span>');
-                } else if (ext === "xml" || ext === "html") {
-                  highlighted = highlighted.replace(/(&lt;\/?[a-zA-Z][a-zA-Z0-9]*)/g, '<span style="color:#569CD6;">$1</span>');
-                  highlighted = highlighted.replace(/(\s[a-zA-Z-]+)=/g, '<span style="color:#9CDCFE;">$1</span>=');
-                  highlighted = highlighted.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span style="color:#6A9955;">$1</span>');
-                } else if (ext === "css") {
-                  highlighted = highlighted.replace(/([.#]?[a-zA-Z_-][a-zA-Z0-9_-]*)\s*\{/g, '<span style="color:#D7BA7D;">$1</span> {');
-                  highlighted = highlighted.replace(/([a-z-]+)\s*:/g, '<span style="color:#9CDCFE;">$1</span>:');
-                }
-                contentHTML = '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:85vh;overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + highlighted + '</pre></div>';
-              } else {
-                contentHTML = '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:85vh;overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + escaped + '</pre></div>';
-              }
-            } else {
-              contentHTML = '<div style="background:#fff;padding:24px;border-radius:8px;text-align:center;"><p style="margin:0 0 12px;font-size:14px;">No se puede previsualizar: <b>' + fileName + '</b></p><a href="' + url + '" download="' + fileName + '" style="padding:8px 16px;background:#1976D2;color:#fff;border-radius:6px;text-decoration:none;font-size:13px;">📥 Descargar</a></div>';
-            }
-            fileModal.innerHTML = '<div class="sp-file-content" style="transform:scale(0.85) translateY(20px);opacity:0;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1),opacity 0.3s ease;display:flex;flex-direction:column;align-items:center;"><div style="display:flex;justify-content:flex-end;width:90vw;margin-bottom:8px;gap:8px;">' + (isText ? '<button id="sp-file-copy-text" style="padding:6px 14px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">📋 Copiar</button>' : '') + '<a id="sp-file-download" href="' + url + '" download="' + fileName + '" style="padding:6px 14px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:13px;text-decoration:none;">📥 Descargar</a><button id="sp-file-close" style="padding:6px 14px;border:none;border-radius:6px;background:rgba(255,255,255,0.9);cursor:pointer;font-size:13px;">✕ Cerrar</button></div>' + contentHTML + '</div>';
-            document.body.appendChild(fileModal);
-            // Trigger animation
-            requestAnimationFrame(function() {
-              fileModal.style.background = "rgba(0,0,0,.8)";
-              var contentEl = fileModal.querySelector(".sp-file-content");
-              if (contentEl) { contentEl.style.transform = "scale(1) translateY(0)"; contentEl.style.opacity = "1"; }
-            });
-            function closeFileModal() {
-              var contentEl = fileModal.querySelector(".sp-file-content");
-              if (contentEl) { contentEl.style.transform = "scale(0.9) translateY(10px)"; contentEl.style.opacity = "0"; }
-              fileModal.style.background = "rgba(0,0,0,0)";
-              setTimeout(function() { fileModal.remove(); URL.revokeObjectURL(url); }, 250);
-            }
-            document.getElementById("sp-file-close").addEventListener("click", closeFileModal);
-            fileModal.addEventListener("click", function(e) { if (e.target === fileModal) closeFileModal(); });
-            var copyTextBtn = document.getElementById("sp-file-copy-text");
-            if (copyTextBtn) {
-              copyTextBtn.addEventListener("click", function() {
-                navigator.clipboard.writeText(textContent).then(function() {
-                  copyTextBtn.textContent = "✅ Copiado";
-                  setTimeout(function() { copyTextBtn.textContent = "📋 Copiar"; }, 2000);
-                });
-              });
-            }
+            var data = await loadFileData(fileId, fileName);
+            var result = buildFileContentHTML(fileName, data.url, data.byteArray);
+            currentTextContent = result.textContent;
+            currentUrl = data.url;
+            renderHeader(fileName, data.url, result.isText);
+            renderBody(result.html);
           } catch(err) {
-            btn.textContent = "❌ Error";
-            setTimeout(function() { btn.textContent = "📎 " + fileName; btn.disabled = false; }, 2000);
+            var body = fileModal.querySelector("#sp-carousel-body");
+            body.innerHTML = '<div style="background:#fff;padding:24px;border-radius:8px;text-align:center;"><p style="margin:0 0 8px;color:#c62828;font-size:14px;">❌ Error al cargar: ' + esc(fileName) + '</p><p style="margin:0;color:#666;font-size:12px;">' + esc(err.message) + '</p></div>';
           }
+        }
+
+        function handleKeys(e) {
+          if (e.key === "Escape") { closeCarousel(); e.preventDefault(); e.stopImmediatePropagation(); }
+          if (e.key === "ArrowLeft" && totalFiles > 1) { navigateTo(currentIndex - 1); e.preventDefault(); }
+          if (e.key === "ArrowRight" && totalFiles > 1) { navigateTo(currentIndex + 1); e.preventDefault(); }
+        }
+        document.addEventListener("keydown", handleKeys);
+
+        fileModal.addEventListener("click", function(e) { if (e.target === fileModal) closeCarousel(); });
+
+        // Load first file
+        navigateTo(currentIndex);
+      }
+
+      allAttachBtns.forEach(function(btn, idx) {
+        btn.addEventListener("click", function() {
+          openCarousel(idx);
         });
       });
 
@@ -7067,6 +7146,31 @@
       const firstCell = row.querySelector('[data-field="uniqueCode"]');
       if (!firstCell) return;
       var container = firstCell.querySelector(".MuiBox-root") || firstCell;
+
+      // Inject copy button if not present
+      if (!row.querySelector(".sp-copy-btn")) {
+        const codeEl = firstCell.querySelector("p.MuiTypography-body1");
+        const codeText = codeEl ? codeEl.textContent.trim() : "";
+        if (codeText) container.appendChild(createCopyButton(codeText));
+      }
+
+      // Replace folio text with clickable button
+      if (!row.querySelector("." + DETAIL_QUICK_CLASS)) {
+        var folioEl = container.querySelector("p.MuiTypography-body1");
+        if (folioEl) {
+          var folioText = folioEl.textContent.trim();
+          var btn = document.createElement("button");
+          btn.className = DETAIL_QUICK_CLASS + " MuiButtonBase-root MuiButton-root MuiButton-contained MuiButton-containedPrimary MuiButton-sizeMedium MuiButton-containedSizeMedium MuiButton-colorPrimary";
+          btn.textContent = folioText;
+          btn.style.cssText = "padding:2px 8px;font-size:11px;cursor:pointer;min-width:auto;white-space:nowrap;";
+          btn.addEventListener("click", function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            showQuickDetailModal(ticketId);
+          });
+          folioEl.replaceWith(btn);
+        }
+      }
 
       if (statusText === "En espera" && !row.querySelector("." + TAKE_BTN_CLASS)) {
         container.appendChild(createTakeButton(ticketId));
@@ -7156,13 +7260,6 @@
       const firstCell = row.querySelector('[data-field="uniqueCode"]');
       if (!firstCell) return;
       const container = firstCell.querySelector(".MuiBox-root") || firstCell;
-
-      // Inject copy button if not present
-      if (!row.querySelector(".sp-copy-btn")) {
-        const codeEl = firstCell.querySelector("p.MuiTypography-body1");
-        const codeText = codeEl ? codeEl.textContent.trim() : "";
-        if (codeText) container.appendChild(createCopyButton(codeText));
-      }
 
       // Clean up stale buttons if status changed
       if (statusText !== "En espera") {
@@ -7321,30 +7418,6 @@
     colorRowsByStatus();
     makeWaitingRowsDraggable();
 
-    // Replace folio label with quick detail button on all rows
-    document.querySelectorAll(".MuiDataGrid-row").forEach(function(row) {
-      if (row.querySelector("." + DETAIL_QUICK_CLASS)) return;
-      var ticketId = row.getAttribute("data-id");
-      if (!ticketId) return;
-      var firstCell = row.querySelector('[data-field="uniqueCode"]');
-      if (!firstCell) return;
-      var container = firstCell.querySelector(".MuiBox-root") || firstCell;
-      var folioEl = container.querySelector("p.MuiTypography-body1");
-      if (!folioEl) return;
-      var folioText = folioEl.textContent.trim();
-      // Create button with folio text
-      var btn = document.createElement("button");
-      btn.className = DETAIL_QUICK_CLASS + " MuiButtonBase-root MuiButton-root MuiButton-contained MuiButton-containedPrimary MuiButton-sizeMedium MuiButton-containedSizeMedium MuiButton-colorPrimary";
-      btn.textContent = folioText;
-      btn.style.cssText = "padding:2px 8px;font-size:11px;cursor:pointer;min-width:auto;white-space:nowrap;";
-      btn.addEventListener("click", function(e) {
-        e.stopPropagation();
-        e.preventDefault();
-        showQuickDetailModal(ticketId);
-      });
-      // Replace folio with button
-      folioEl.replaceWith(btn);
-    });
     injectBulkButton();
     injectBulkCloseButton();
     injectNewTicketButton();

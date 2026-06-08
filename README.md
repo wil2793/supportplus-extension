@@ -128,9 +128,16 @@ El modal de detalle del ticket ocupa el 100% de la pantalla. Características:
 - **Auto-refresh comentarios** — cada 30 segundos
 - **Adjuntos** — se muestran como botones clickeables que abren vista previa (imagen/PDF/texto)
 
-### Pendiente: Carrusel de adjuntos
+### Carrusel de adjuntos ✅
 
-Cuando hay múltiples adjuntos, al abrir uno se debería poder navegar entre todos (flechas izquierda/derecha) como un carrusel. Actualmente se abren de uno en uno.
+Al abrir un adjunto se muestra un visor con navegación tipo carrusel:
+
+- Flechas ◀ ▶ para navegar entre todos los adjuntos del ticket (incluyendo los de comentarios)
+- Navegación con teclado (← → Esc)
+- Contador "1 / N" en el header
+- Cache de archivos ya cargados (no re-descarga al volver)
+- Navegación circular (del último vuelve al primero)
+- Spinner de carga al cambiar de archivo
 
 ## Drag & Drop (Optimistic UI)
 
@@ -179,7 +186,7 @@ Los grupos que ve cada usuario vienen del **rol** en Notion (`MSP_cat_Roles.MSP_
 
 ## Pendientes / Próximos cambios
 
-- [ ] Carrusel de adjuntos (navegar entre archivos con flechas)
+- [x] Carrusel de adjuntos (navegar entre archivos con flechas)
 - [ ] Migrar modal del ticket a usar `createModal()` genérico con opción fullscreen
 - [ ] v2 React: completar migración de features
 - [ ] Mover token de Notion a proxy backend serverless
