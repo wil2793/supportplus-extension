@@ -6932,7 +6932,7 @@
         if (isImage) {
           contentHTML = '<img src="' + url + '" style="max-width:90vw;max-height:70vh;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:block;margin:0 auto;">';
         } else if (isPdf) {
-          contentHTML = '<iframe src="' + url + '" style="width:90vw;height:75vh;border:none;border-radius:8px;"></iframe>';
+          contentHTML = '<div style="display:flex;flex-direction:column;align-items:center;width:90vw;max-width:860px;"><div id="sp-pdf-viewer" style="width:100%;height:68vh;overflow:auto;background:#404040;border-radius:8px 8px 0 0;display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:12px;"></div><div id="sp-pdf-controls" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:8px 16px;background:rgba(30,30,30,0.9);border-radius:0 0 8px 8px;width:100%;box-sizing:border-box;"><button id="sp-pdf-prev-page" style="padding:5px 12px;border:none;border-radius:4px;background:rgba(255,255,255,0.12);color:#fff;cursor:pointer;font-size:12px;font-weight:500;transition:background 0.2s;">◀ Anterior</button><span id="sp-pdf-page-info" style="color:#ddd;font-size:12px;min-width:90px;text-align:center;">Cargando...</span><button id="sp-pdf-next-page" style="padding:5px 12px;border:none;border-radius:4px;background:rgba(255,255,255,0.12);color:#fff;cursor:pointer;font-size:12px;font-weight:500;transition:background 0.2s;">Siguiente ▶</button><span style="width:1px;height:18px;background:rgba(255,255,255,0.2);"></span><button id="sp-pdf-zoom-out" style="padding:5px 8px;border:none;border-radius:4px;background:rgba(255,255,255,0.12);color:#fff;cursor:pointer;font-size:12px;">−</button><span id="sp-pdf-zoom-info" style="color:#ddd;font-size:12px;min-width:40px;text-align:center;">130%</span><button id="sp-pdf-zoom-in" style="padding:5px 8px;border:none;border-radius:4px;background:rgba(255,255,255,0.12);color:#fff;cursor:pointer;font-size:12px;">+</button></div></div>';
         } else if (isText) {
           textContent = new TextDecoder("utf-8").decode(byteArray);
           var escaped = textContent.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
@@ -6987,7 +6987,7 @@
         } else {
           contentHTML = '<div style="background:#fff;padding:24px;border-radius:8px;text-align:center;"><p style="margin:0 0 12px;font-size:14px;">No se puede previsualizar: <b>' + esc(fileName) + '</b></p><a href="' + url + '" download="' + fileName + '" style="padding:8px 16px;background:#1976D2;color:#fff;border-radius:6px;text-decoration:none;font-size:13px;">📥 Descargar</a></div>';
         }
-        return { html: contentHTML, textContent: textContent, isText: isText };
+        return { html: contentHTML, textContent: textContent, isText: isText, isPdf: isPdf, byteArray: byteArray };
       }
 
       function openCarousel(startIndex) {
@@ -7056,6 +7056,96 @@
           }
         }
 
+        async function renderPdfViewer(pdfByteArray) {
+          if (typeof pdfjsLib === "undefined") return;
+          // Worker code is loaded in same scope (content script), PDF.js will use it directly
+          pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+          var loadingTask = pdfjsLib.getDocument({ data: pdfByteArray });
+
+          var pdfContainer = fileModal.querySelector("#sp-pdf-viewer");
+          var pageInfoEl = fileModal.querySelector("#sp-pdf-page-info");
+          var zoomInfoEl = fileModal.querySelector("#sp-pdf-zoom-info");
+          var prevPageBtn = fileModal.querySelector("#sp-pdf-prev-page");
+          var nextPageBtn = fileModal.querySelector("#sp-pdf-next-page");
+          var zoomInBtn = fileModal.querySelector("#sp-pdf-zoom-in");
+          var zoomOutBtn = fileModal.querySelector("#sp-pdf-zoom-out");
+          if (!pdfContainer) return;
+
+          var pdfDoc = null;
+          var currentPage = 1;
+          var totalPages = 0;
+          var scale = 1.3;
+
+          function updatePageInfo() {
+            if (pageInfoEl) pageInfoEl.textContent = "Página " + currentPage + " / " + totalPages;
+            if (zoomInfoEl) zoomInfoEl.textContent = Math.round(scale * 100) + "%";
+          }
+
+          function renderPage(num) {
+            pdfDoc.getPage(num).then(function(page) {
+              var viewport = page.getViewport({ scale: scale });
+              var canvas = document.createElement("canvas");
+              canvas.style.cssText = "display:block;margin:0 auto;box-shadow:0 2px 8px rgba(0,0,0,0.3);";
+              canvas.width = viewport.width;
+              canvas.height = viewport.height;
+              var ctx = canvas.getContext("2d");
+              page.render({ canvasContext: ctx, viewport: viewport });
+              return canvas;
+            }).then(function(canvas) {
+              // Append canvas (keep all pages rendered)
+              pdfContainer.appendChild(canvas);
+            });
+          }
+
+          function renderAllPages() {
+            pdfContainer.innerHTML = "";
+            for (var i = 1; i <= totalPages; i++) {
+              renderPage(i);
+            }
+            updatePageInfo();
+          }
+
+          function goToPage(num) {
+            if (num < 1) num = 1;
+            if (num > totalPages) num = totalPages;
+            currentPage = num;
+            var canvases = pdfContainer.querySelectorAll("canvas");
+            if (canvases[num - 1]) {
+              canvases[num - 1].scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+            updatePageInfo();
+          }
+
+          // Load PDF
+          loadingTask.promise.then(function(pdf) {
+            pdfDoc = pdf;
+            totalPages = pdf.numPages;
+            currentPage = 1;
+            renderAllPages();
+          }).catch(function(err) {
+            pdfContainer.innerHTML = '<p style="color:#fff;text-align:center;padding:20px;">Error al cargar PDF: ' + (err.message || err) + '</p>';
+          });
+
+          // Controls
+          if (prevPageBtn) prevPageBtn.addEventListener("click", function(e) { e.stopPropagation(); goToPage(currentPage - 1); });
+          if (nextPageBtn) nextPageBtn.addEventListener("click", function(e) { e.stopPropagation(); goToPage(currentPage + 1); });
+          if (zoomInBtn) zoomInBtn.addEventListener("click", function(e) { e.stopPropagation(); scale = Math.min(scale + 0.25, 3); renderAllPages(); });
+          if (zoomOutBtn) zoomOutBtn.addEventListener("click", function(e) { e.stopPropagation(); scale = Math.max(scale - 0.25, 0.5); renderAllPages(); });
+
+          // Scroll tracking to update current page
+          pdfContainer.addEventListener("scroll", function() {
+            var canvases = pdfContainer.querySelectorAll("canvas");
+            var containerTop = pdfContainer.scrollTop;
+            for (var i = 0; i < canvases.length; i++) {
+              if (canvases[i].offsetTop + canvases[i].height / 2 > containerTop) {
+                currentPage = i + 1;
+                updatePageInfo();
+                break;
+              }
+            }
+          });
+        }
+
         async function navigateTo(index) {
           if (index < 0) index = totalFiles - 1;
           if (index >= totalFiles) index = 0;
@@ -7075,6 +7165,11 @@
             currentUrl = data.url;
             renderHeader(fileName, data.url, result.isText);
             renderBody(result.html);
+
+            // Render PDF with PDF.js
+            if (result.isPdf && typeof pdfjsLib !== "undefined") {
+              await renderPdfViewer(result.byteArray);
+            }
           } catch(err) {
             var body = fileModal.querySelector("#sp-carousel-body");
             body.innerHTML = '<div style="background:#fff;padding:24px;border-radius:8px;text-align:center;"><p style="margin:0 0 8px;color:#c62828;font-size:14px;">❌ Error al cargar: ' + esc(fileName) + '</p><p style="margin:0;color:#666;font-size:12px;">' + esc(err.message) + '</p></div>';
