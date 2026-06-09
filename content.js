@@ -1431,43 +1431,6 @@
           });
           const chip = container.querySelector(".MuiChip-root");
           container.insertBefore(badge, chip);
-        } else if (ticketGroupId && ticketGroupId !== getTeamConfig().resolutionGroupId && Object.values(TEAM_AREAS).some(function (a) { return a.resolutionGroupId === ticketGroupId; })) {
-          // Ticket is from another known area - always show migrate button regardless of status
-          const btn = document.createElement("button");
-          btn.id = DETAIL_BTN_ID;
-          btn.textContent = "🙂 Migrar a Monday";
-          btn.style.cssText =
-            "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#D94040;color:#fff;font-weight:600;white-space:nowrap;";
-          btn.addEventListener("mouseenter", () => { if (!btn.disabled) btn.textContent = "🫡 Migrar a Monday"; });
-          btn.addEventListener("mouseleave", () => { if (!btn.disabled) btn.textContent = "🙂 Migrar a Monday"; });
-          btn.addEventListener("click", () => {
-            btn.textContent = "⏳ Migrando...";
-            btn.disabled = true;
-            handleMondayClick(ticketId).finally(() => { btn.textContent = "🙂 Migrar a Monday"; btn.disabled = false; });
-          });
-          const chip2 = container.querySelector(".MuiChip-root");
-          container.insertBefore(btn, chip2);
-        } else if (isClosed) {
-          // Show migrate button if ticket belongs to my area, the other area, or gerente
-          var myArea = getTeamConfig();
-          var isOtherKnownArea = Object.values(TEAM_AREAS).some(function (a) { return a.resolutionGroupId === ticketGroupId; });
-          var canShowMigrate = !ticketGroupId || ticketGroupId === myArea.resolutionGroupId || isOtherKnownArea || isMultiGroup();
-          if (canShowMigrate) {
-            const btn = document.createElement("button");
-            btn.id = DETAIL_BTN_ID;
-            btn.textContent = "🙂 Migrar a Monday";
-            btn.style.cssText =
-              "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#D94040;color:#fff;font-weight:600;white-space:nowrap;margin-right:6px;";
-            btn.addEventListener("mouseenter", () => { if (!btn.disabled) btn.textContent = "🫡 Migrar a Monday"; });
-            btn.addEventListener("mouseleave", () => { if (!btn.disabled) btn.textContent = "🙂 Migrar a Monday"; });
-            btn.addEventListener("click", () => {
-              btn.textContent = "⏳ Migrando...";
-              btn.disabled = true;
-              handleMondayClick(ticketId).finally(() => { btn.textContent = "🙂 Migrar a Monday"; btn.disabled = false; });
-            });
-            const chip2 = container.querySelector(".MuiChip-root");
-            container.insertBefore(btn, chip2);
-          }
         } else if (isAssigned || isWaiting) {
           // Show buttons only if ticket belongs to my area (or gerente)
           var myArea3 = getTeamConfig();
@@ -6745,11 +6708,6 @@
                     body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO, ticketCommentRequest: null }),
                   });
                   var selectedGroup = takeGroupSelect ? takeGroupSelect.value : "";
-                  if (selectedGroup) {
-                    overlay.remove();
-                    handleMondayClick(ticketId, selectedGroup);
-                    return;
-                  }
                   showSuccessToast("Ticket tomado y cerrado");
                   updateMondayStatus(ticketId, t.uniqueCode, "Cerrado");
                 } else {
@@ -6946,11 +6904,6 @@
                 });
                 if (!closeRes.ok) throw new Error("HTTP " + closeRes.status);
                 // Migrate if selected
-                if (selectedGroup) {
-                  overlay.remove();
-                  handleMondayClick(ticketId, selectedGroup);
-                  return;
-                }
                 showSuccessToast("Ticket cerrado");
                 updateMondayStatus(ticketId, t.uniqueCode, "Cerrado");
                 overlay.remove();
@@ -6964,14 +6917,10 @@
           }
         }
 
-        // Migrate only button
+        // Migrate only button (removed - auto-migrate handles this)
         var migrateOnlyBtn = document.getElementById("sp-qd-migrate-btn");
         if (migrateOnlyBtn) {
-          migrateOnlyBtn.addEventListener("click", function () {
-            console.log("[SP] Migrate button clicked, ticketId:", ticketId);
-            overlay.remove();
-            handleMondayClick(ticketId);
-          });
+          migrateOnlyBtn.style.display = "none";
         }
 
         // Reopen button - reassigns to current holder to reopen
@@ -7524,7 +7473,6 @@
       injectWaterButton();
       injectSuggestedCommentsButton();
       injectReportButton();
-      injectMondayStatsButton();
       injectQuickFilterButton();
 
       if (isDetailView()) {
@@ -7666,6 +7614,10 @@
                       if (!tRes.ok) throw new Error("HTTP " + tRes.status);
                       var tJson = await tRes.json();
                       var ticket = tJson.data || tJson;
+                      // Only auto-migrate if ticket is assigned to me
+                      var ticketHolderEmail = (ticket.ticketHolder?.ticketHolderLog?.email || "").toLowerCase();
+                      var myEmail = getLoggedUserEmail().toLowerCase();
+                      if (ticketHolderEmail !== myEmail) throw new Error("Not my ticket");
                       // Get requester's department/group name
                       var creatorGroup = ticket.ticketInfo?.departmentName || ticket.resolutionGroup?.name || "Sin grupo";
                       // Get board for the ticket's month
@@ -7740,7 +7692,6 @@
       colorRowsByStatus();
       makeWaitingRowsDraggable();
 
-      injectBulkButton();
       injectBulkCloseButton();
       injectNewTicketButton();
       loadTeamPanel();
