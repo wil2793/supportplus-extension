@@ -7454,21 +7454,6 @@
           folioEl.replaceWith(btn);
         }
       }
-
-      if (statusText === "En espera" && !row.querySelector("." + TAKE_BTN_CLASS)) {
-        container.appendChild(createTakeButton(ticketId));
-      }
-      if ((statusText === "Asignado" || statusText === "En atención") && !row.querySelector("." + STEAL_BTN_CLASS)) {
-        const responsibleCell = row.querySelector('[data-field="responsibleName"]');
-        const responsibleName = responsibleCell ? responsibleCell.textContent.trim() : "";
-        const myName = getLoggedUserName();
-        if (responsibleName && myName && responsibleName !== myName) {
-          container.appendChild(createStealButton(ticketId, responsibleName));
-        }
-      }
-      if (statusText !== "Cerrado" && !row.querySelector("." + CLOSE_BTN_CLASS)) {
-        container.appendChild(createCloseButton(ticketId));
-      }
     });
     highlightMyRows();
     colorRowsByStatus();
@@ -7557,36 +7542,21 @@
         const oldSteal = row.querySelector("." + STEAL_BTN_CLASS);
         if (oldSteal) oldSteal.remove();
       }
-
-      // Inject take button for "En espera" tickets
-      var rowGroupCell = row.querySelector('[data-field="resolutionGroupName"]');
-      var rowGroupName = rowGroupCell ? rowGroupCell.textContent.trim() : "";
-      var rowBelongsToMe = !rowGroupName || rowGroupName === getTeamConfig().resolutionGroupLabel || isMultiGroup();
-
-      if (statusText === "En espera" && !row.querySelector("." + TAKE_BTN_CLASS) && rowBelongsToMe) {
-        container.appendChild(createTakeButton(ticketId));
-      }
-
-      // Inject steal button for "Asignado"/"En atención" tickets not assigned to me
-      if ((statusText === "Asignado" || statusText === "En atención") && !row.querySelector("." + STEAL_BTN_CLASS) && rowBelongsToMe) {
-        const responsibleCell = row.querySelector('[data-field="responsibleName"]');
-        const responsibleName = responsibleCell ? responsibleCell.textContent.trim() : "";
-        const myName = getLoggedUserName();
-        if (responsibleName && myName && responsibleName !== myName) {
-          container.appendChild(createStealButton(ticketId, responsibleName));
-        }
-      }
-
-      // Inject close button for any non-closed ticket in my area
-      if (statusText !== "Cerrado" && !row.querySelector("." + CLOSE_BTN_CLASS) && rowBelongsToMe) {
-        container.appendChild(createCloseButton(ticketId));
-      }
-
       // Clean up close button if status changed to Cerrado
       if (statusText === "Cerrado") {
         const oldClose = row.querySelector("." + CLOSE_BTN_CLASS);
         if (oldClose) oldClose.remove();
       }
+
+      // Remove any leftover row action buttons (now handled in ticket modal)
+      var oldTakeBtn = row.querySelector("." + TAKE_BTN_CLASS); if (oldTakeBtn) oldTakeBtn.remove();
+      var oldStealBtn = row.querySelector("." + STEAL_BTN_CLASS); if (oldStealBtn) oldStealBtn.remove();
+      var oldCloseBtn = row.querySelector("." + CLOSE_BTN_CLASS); if (oldCloseBtn) oldCloseBtn.remove();
+
+      // Auto-migrate logic
+      var rowGroupCell = row.querySelector('[data-field="resolutionGroupName"]');
+      var rowGroupName = rowGroupCell ? rowGroupCell.textContent.trim() : "";
+      var rowBelongsToMe = !rowGroupName || rowGroupName === getTeamConfig().resolutionGroupLabel || isMultiGroup();
 
       // Auto-migrate ANY ticket that isn't in Monday yet
       if (rowBelongsToMe) {
