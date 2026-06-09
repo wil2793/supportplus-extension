@@ -87,7 +87,7 @@
 
   // Make loading backdrop less invasive - thin top bar instead of fullscreen (all users)
   const hideBackdrop = document.createElement("style");
-  hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } } .MuiDataGrid-cell[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; } .MuiDataGrid-columnHeader[data-field='uniqueCode'] { min-width: 320px !important; max-width: 320px !important; }";
+  hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } }";
   document.head.appendChild(hideBackdrop);
 
   // Colorear filas por estatus (inmediato, sin esperar Notion - usa MutationObserver ligero)
@@ -1037,13 +1037,18 @@
   function initExtension() {
     _showQuickDetailModal = showQuickDetailModal;
 
-    // Inject basic buttons immediately (no permission check needed)
-    setTimeout(function () {
-      injectConfigButton();
-      injectSearchButton();
-      injectQuickSearch();
-      injectUpdateButton();
-    }, 500);
+    // Inject basic buttons immediately with retry (SPA may not have rendered yet)
+    (function retryInjectHeader(attempts) {
+      var wrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
+      if (wrapper || attempts >= 20) {
+        injectConfigButton();
+        injectSearchButton();
+        injectQuickSearch();
+        injectUpdateButton();
+      } else {
+        setTimeout(function () { retryInjectHeader(attempts + 1); }, 250);
+      }
+    })(0);
 
     // --- Toast helpers (from components.js window globals) ---
     const ensureToastStyles = window.ensureToastStyles;
