@@ -5830,7 +5830,7 @@
         var overlay = document.createElement("div");
         overlay.id = "sp-quick-detail-modal";
         overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0);z-index:99999;display:flex;align-items:center;justify-content:center;transition:background 0.3s ease,backdrop-filter 0.3s ease;backdrop-filter:blur(0px);";
-        overlay.innerHTML = '<div style="background:#fff;padding:clamp(16px, 2vw, 28px);border-radius:12px;width:92vw;max-width:900px;height:85vh;max-height:85vh;display:flex;flex-direction:column;overflow-y:auto;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);transform:scale(0.95);opacity:0;transition:transform 0.2s ease,opacity 0.2s ease;box-shadow:0 8px 40px rgba(0,0,0,0.25);">' +
+        overlay.innerHTML = '<div style="background:#fff;padding:clamp(16px, 2vw, 28px);border-radius:12px;width:92vw;max-width:900px;max-height:85vh;display:flex;flex-direction:column;overflow-y:auto;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);transform:scale(0.95);opacity:0;transition:transform 0.2s ease,opacity 0.2s ease;box-shadow:0 8px 40px rgba(0,0,0,0.25);">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
           '<h3 style="margin:0;font-size:1.1rem;">📋 ' + (t.uniqueCode || ticketId) + ' <span class="sp-qd-copy-folio" data-copy="' + (t.uniqueCode || ticketId) + '" style="cursor:pointer;font-size:0.85rem;opacity:0.6;" title="Copiar folio">⧉</span> <span style="font-weight:400;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-size:0.85rem;">(' + statusName + ')</span></h3>' +
           '<div style="display:flex;gap:6px;align-items:center;">' +
@@ -7164,10 +7164,12 @@
                   hl = hl.replace(/(--[^\n]*)/g, '<span style="color:#6A9955;">$1</span>');
                   hl = hl.replace(/\b(\d+)\b/g, '<span style="color:#B5CEA8;">$1</span>');
 
+                  var lineNumStr = '<span style="display:inline-block;min-width:' + (String(lines.length).length * 8 + 8) + 'px;text-align:right;color:#858585;user-select:none;padding-right:12px;border-right:1px solid #404040;margin-right:12px;">' + lineNum + '</span>';
+
                   if (errorLines[lineNum]) {
-                    return '<span style="background:rgba(255,0,0,0.15);border-left:3px solid #F44336;display:inline-block;width:100%;padding-left:4px;" title="⚠️ ' + errorLines[lineNum] + '">' + hl + '</span>';
+                    return '<span style="background:rgba(255,0,0,0.15);display:inline-block;width:100%;">' + lineNumStr + hl + '</span>';
                   }
-                  return hl;
+                  return lineNumStr + hl;
                 }).join("\n");
 
                 // Build error panel if there are errors
@@ -7181,7 +7183,7 @@
                   errorPanelHTML += '</div>';
                 }
 
-                contentHTML = errorPanelHTML + '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:' + (sqlErrors.length ? '65vh' : '75vh') + ';overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + highlighted + '</pre></div>';
+                contentHTML = '<div style="display:flex;flex-direction:column-reverse;align-items:center;gap:8px;">' + '<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:' + (sqlErrors.length ? '65vh' : '75vh') + ';overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">' + highlighted + '</pre></div>' + errorPanelHTML + '</div>';
               } else if (ext === "json") {
                 highlighted = highlighted.replace(/(&quot;[^&]*?&quot;)\s*:/g, '<span style="color:#9CDCFE;">$1</span>:');
                 highlighted = highlighted.replace(/:\s*(&quot;[^&]*?&quot;)/g, ': <span style="color:#CE9178;">$1</span>');

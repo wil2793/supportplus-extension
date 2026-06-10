@@ -129,13 +129,13 @@ async function syncNotionData() {
     for (const u of users) {
       const email = (u.properties.Correo?.rich_text?.[0]?.plain_text || u.properties.Correo?.title?.[0]?.plain_text || "").toLowerCase();
       if (email && usersMap[email]) {
-        usersMap[email].canDragDrop = dragDropMembers.includes(u.id);
-        usersMap[email].canReassignApp = reassignAppMembers.includes(u.id);
-        usersMap[email].canAddIAM = iamMembers.includes(u.id);
-        usersMap[email].canShowLabels = labelsMembers.includes(u.id);
-        usersMap[email].canReopenTickets = reopenMembers.includes(u.id);
-        usersMap[email].canCommentClosed = commentClosedMembers.includes(u.id);
-        usersMap[email].canRejectTickets = rejectMembers.includes(u.id);
+        if (dragDropMembers.includes(u.id)) usersMap[email].canDragDrop = true;
+        if (reassignAppMembers.includes(u.id)) usersMap[email].canReassignApp = true;
+        if (iamMembers.includes(u.id)) usersMap[email].canAddIAM = true;
+        if (labelsMembers.includes(u.id)) usersMap[email].canShowLabels = true;
+        if (reopenMembers.includes(u.id)) usersMap[email].canReopenTickets = true;
+        if (commentClosedMembers.includes(u.id)) usersMap[email].canCommentClosed = true;
+        if (rejectMembers.includes(u.id)) usersMap[email].canRejectTickets = true;
       }
     }
 
