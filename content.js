@@ -2136,10 +2136,15 @@
     async function loadTeamPanel() {
       if (isDetailView()) return;
       if (teamPanelLoading) return;
-      if (!currentTeamArea) return; // No group configured
-      if (document.getElementById("sp-manager-panel")) return; // Manager view active
+      if (!currentTeamArea) return;
+      if (document.getElementById("sp-manager-panel")) return;
       if (document.getElementById(TEAM_PANEL_ID)) return;
+      if (window.location.pathname.includes("/tickets-mesa")) return;
+      // Double-check: mark loading BEFORE any async work
       teamPanelLoading = true;
+      // Extra safety: if panel appeared while we were waiting, abort
+      await new Promise(function(r) { setTimeout(r, 50); });
+      if (document.getElementById(TEAM_PANEL_ID)) { teamPanelLoading = false; return; }
       var grid = document.querySelector(".MuiDataGrid-root");
       if (!grid) { teamPanelLoading = false; return; }
 
