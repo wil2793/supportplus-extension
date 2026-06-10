@@ -7578,132 +7578,17 @@
         var rowGroupName = rowGroupCell ? rowGroupCell.textContent.trim() : "";
         var rowBelongsToMe = !rowGroupName || rowGroupName === getTeamConfig().resolutionGroupLabel || isMultiGroup();
 
-        // Auto-migrate ANY ticket that isn't in Monday yet
+        // Auto-migrate disabled from rows - handled exclusively by monday-sync.js
+        // Only show synced badge if ticket is already in cache
         if (rowBelongsToMe) {
           if (row.querySelector("." + SYNCED_CLASS)) return;
-          if (row.dataset.spAutoMigrating) return;
           const codeEl = firstCell.querySelector("p.MuiTypography-body1");
           const uniqueCode = codeEl ? codeEl.textContent.trim() : "";
           if (uniqueCode && synced[uniqueCode]) {
-            // Already migrated - show badge (only if not already shown)
             var oldBtn = row.querySelector("." + BTN_CLASS);
             if (oldBtn) oldBtn.remove();
             if (!row.querySelector("." + SYNCED_CLASS)) {
               container.appendChild(createSyncedBadge(synced[uniqueCode]));
-            }
-          }
-          // Monday sync is handled by monday-sync.js using the search API
-          if (!uniqueCode || !synced[uniqueCode]) {
-            if (!row.querySelector("." + BTN_CLASS) && !row.dataset.spAutoMigrating) {
-              // Not migrated - auto-migrate in background
-              var dateCell = row.querySelector('[data-field="createdAt"]');
-              var dateText = dateCell ? dateCell.textContent.trim() : "";
-              {
-                row.dataset.spAutoMigrating = "true";
-                var migratingBadge = document.createElement("span");
-                migratingBadge.className = BTN_CLASS;
-                migratingBadge.style.cssText = "padding:2px 8px;font-size:10px;border-radius:4px;background:#FFF3E0;color:#E65100;margin-left:6px;white-space:nowrap;";
-                migratingBadge.textContent = "⏳ Migrando...";
-                container.appendChild(migratingBadge);
-                // Fetch ticket detail to get creator's group, then auto-migrate (serialized)
-                _autoMigrateQueue = _autoMigrateQueue.then(function () {
-                  return (async function (tId, badge, uCode) {
-                    try {
-                      var spToken = getToken();
-                      var mondayToken = await getMondayToken();
-                      if (!spToken || !mondayToken) throw new Error("No token");
-
-                      // FIRST: Check if ticket already exists in Monday (prevent duplicates)
-                      var ticketBoards = await getMondayTicketBoards(mondayToken);
-                      for (var b of ticketBoards) {
-                        try {
-                          var existCheck = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: uCode });
-                          var existItems = existCheck.items_page_by_column_values?.items || [];
-                          if (existItems.length) {
-                            // Already in Monday - add to cache and show badge
-                            addToCache(uCode, existItems[0].id);
-                            badge.remove();
-                            container.appendChild(createSyncedBadge(existItems[0].id));
-                            return;
-                          }
-                        } catch (e) { continue; }
-                      }
-
-                      // Get ticket detail
-                      var tRes = await fetch(SP_API + "/" + tId, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
-                      if (!tRes.ok) throw new Error("HTTP " + tRes.status);
-                      var tJson = await tRes.json();
-                      var ticket = tJson.data || tJson;
-                      // Only auto-migrate if ticket is assigned to me
-                      var ticketHolderEmail = (ticket.ticketHolder?.ticketHolderLog?.email || "").toLowerCase();
-                      var myEmail = getLoggedUserEmail().toLowerCase();
-                      if (ticketHolderEmail !== myEmail) throw new Error("Not my ticket");
-                      // Get requester's department/group name
-                      var creatorGroup = ticket.ticketInfo?.departmentName || ticket.resolutionGroup?.name || "Sin grupo";
-                      // Get board for the ticket's month
-                      var ticketDate = new Date(ticket.createdAt);
-                      var boardId = await getMondayBoardForMonth(ticketDate.getFullYear(), ticketDate.getMonth());
-                      if (!boardId) boardId = await getMondayBoardId(); // fallback to current
-                      if (!boardId) throw new Error("No board");
-                      var boardData = await mondayQuery(mondayToken, 'query ($boardId: [ID!]!) { boards(ids: $boardId) { id name groups { id title } } }', { boardId: boardId });
-                      var board = boardData.boards[0];
-                      if (!board) throw new Error("Board not found");
-                      // Find or create group (use cache to avoid duplicates)
-                      var groupKey = creatorGroup.trim().toLowerCase();
-                      var targetGroup = board.groups.find(function (g) { return g.title.trim().toLowerCase() === groupKey; });
-                      if (!targetGroup && _mondayGroupCache[groupKey]) {
-                        targetGroup = { id: _mondayGroupCache[groupKey], title: creatorGroup };
-                      }
-                      if (!targetGroup) {
-                        // Create group
-                        var createGroupRes = await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $groupName: String!) { create_group(board_id: $boardId, group_name: $groupName) { id } }', { boardId: board.id, groupName: creatorGroup });
-                        targetGroup = { id: createGroupRes.create_group.id, title: creatorGroup };
-                        _mondayGroupCache[groupKey] = targetGroup.id;
-                      } else {
-                        _mondayGroupCache[groupKey] = targetGroup.id;
-                      }
-                      // Migrate ticket
-                      var desc = (ticket.description || "").replace(/<[^>]*>/g, "");
-                      var itemName = ticket.subject || "Sin asunto";
-                      var createdDate = new Date(ticket.createdAt).toISOString().slice(0, 10);
-                      var spPriority = (ticket.incidentPriorityName || ticket.incidentPriority?.name || "").toLowerCase().trim();
-                      var priorityIndex = PRIORITY_MAP[spPriority] ?? PRIORITY_MAP["medio"];
-                      var holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
-                      var personValue = {};
-                      if (holderEmail) {
-                        try {
-                          var users = await getMondayUsers(mondayToken);
-                          var userId = users[holderEmail.toLowerCase()];
-                          if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
-                        } catch (e) { }
-                      }
-                      // Map SP status to Monday status index
-                      var spStatus = (ticket.ticketStatusName || "").toLowerCase();
-                      var mondayStatusIndex = mapStatusToMonday(spStatus);
-
-                      var columnValues = JSON.stringify({
-                        descripci_n_mkn9e5f4: { text: desc },
-                        ...(personValue.personsAndTeams ? { multiple_person_mm25nvfq: personValue } : {}),
-                        status: { index: mondayStatusIndex },
-                        priority_mkn9kbe9: { index: priorityIndex },
-                        cronograma_mkn9hwe3: { from: createdDate, to: createdDate },
-                        link_mknkdctz: { url: "https://macropay.supportplus.mx/es/dashboard/tickets/" + tId, text: ticket.uniqueCode || uCode || String(tId) },
-                        text_mm2c9nhc: ticket.uniqueCode || uCode || String(tId),
-                      });
-                      var result = await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $groupId: String!, $itemName: String!, $columnValues: JSON!) { create_item(board_id: $boardId, group_id: $groupId, item_name: $itemName, column_values: $columnValues) { id } }', { boardId: board.id, groupId: targetGroup.id, itemName: itemName, columnValues: columnValues });
-                      if (result.create_item) {
-                        addToCache(ticket.uniqueCode || uCode || String(tId), result.create_item.id);
-                        badge.remove();
-                        container.appendChild(createSyncedBadge(result.create_item.id));
-                      }
-                    } catch (err) {
-                      badge.textContent = "⚠️";
-                      badge.style.color = "#D32F2F";
-                      console.log("[SP] Auto-migrate failed:", tId, err.message);
-                    }
-                  })(ticketId, migratingBadge, uniqueCode);
-                });
-              }
             }
           }
         }
