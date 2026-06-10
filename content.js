@@ -20,8 +20,6 @@
         // Same version - hide buttons
         var btn = document.getElementById("sp-update-btn");
         if (btn) btn.style.display = "none";
-        var floatBtn = document.getElementById("sp-floating-update");
-        if (floatBtn) floatBtn.remove();
         return;
       }
       _latestVersion = latest;
@@ -39,18 +37,7 @@
         document.body.appendChild(blocker);
         if (zipUrl) document.getElementById("sp-blocker-download").addEventListener("click", function (e) { downloadZip(zipUrl, latest, e); });
       } else {
-        // Show floating update button (independent of session/header)
-        if (!document.getElementById("sp-floating-update")) {
-          var floatBtn = document.createElement("div");
-          floatBtn.id = "sp-floating-update";
-          floatBtn.style.cssText = "position:fixed;bottom:20px;right:20px;z-index:99998;background:#5D4037;color:#fff;padding:10px 16px;border-radius:8px;font-family:system-ui;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.3);display:flex;align-items:center;gap:6px;transition:transform 0.2s;";
-          floatBtn.innerHTML = '📥 Actualizar a v' + latest;
-          floatBtn.addEventListener("mouseenter", function() { floatBtn.style.transform = "scale(1.05)"; });
-          floatBtn.addEventListener("mouseleave", function() { floatBtn.style.transform = "scale(1)"; });
-          floatBtn.addEventListener("click", function(e) { downloadZip(zipUrl, latest, e); });
-          document.body.appendChild(floatBtn);
-        }
-        // Also show in header if available
+        // Show update button in header if available
         var btn = document.getElementById("sp-update-btn");
         if (btn) btn.style.display = "inline-block";
       }
