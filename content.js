@@ -299,7 +299,7 @@
             });
           }
         } catch (e) { }
-        return null;
+        if (!userData) return null;
       }
       if (!userData.active) return "inactive";
 
