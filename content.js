@@ -444,9 +444,11 @@
     // Update Monday config based on canMigrateMonday permission and group config
     try {
       chrome.storage.local.get(["groupMondayConfig"], function (r) {
-        var config = r.groupMondayConfig || {};
-        var groupId = currentTeamArea || (currentUserGroups.length ? currentUserGroups[0] : "");
-        hasMondayConfig = !!(groupId && config[groupId] && config[groupId].etiqueta) && canMigrateMonday;
+        try {
+          var config = r.groupMondayConfig || {};
+          var groupId = (typeof currentTeamArea !== "undefined" ? currentTeamArea : "") || (currentUserGroups && currentUserGroups.length ? currentUserGroups[0] : "");
+          hasMondayConfig = !!(groupId && config[groupId] && config[groupId].etiqueta) && canMigrateMonday;
+        } catch(e) {}
       });
     } catch (e) { }
     // Always init extension (for config, buttons, etc.)
@@ -8010,8 +8012,9 @@
           var suggestedDiv = document.getElementById("sp-qd-suggested");
           if (suggestedDiv) {
             chrome.storage.local.get("suggestedComments", function (r) {
+              try {
               var comments = r.suggestedComments || {};
-              var groupId = currentTeamArea || (currentUserGroups.length ? currentUserGroups[0] : 0);
+              var groupId = (typeof currentTeamArea !== "undefined" ? currentTeamArea : "") || (typeof currentUserGroups !== "undefined" && currentUserGroups.length ? currentUserGroups[0] : 0);
               var groupComments = comments[groupId] || [];
               suggestedDiv.innerHTML = "";
               var commentInputEl = document.getElementById("sp-qd-comment-input");
@@ -8025,6 +8028,7 @@
                 });
                 suggestedDiv.appendChild(chip);
               });
+              } catch(e) {}
             });
           }
         });
