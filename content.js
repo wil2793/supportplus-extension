@@ -363,6 +363,21 @@
     return el ? el.textContent.trim() : "";
   }
 
+  // Inject header buttons independently of session (retry until wrapper appears)
+  (function retryHeaderIndependent(attempts) {
+    setTimeout(function() {
+      var wrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
+      if (wrapper) {
+        if (typeof injectConfigButton === "function") injectConfigButton();
+        if (typeof injectSearchButton === "function") injectSearchButton();
+        if (typeof injectQuickSearch === "function") injectQuickSearch();
+        if (typeof injectUpdateButton === "function") injectUpdateButton();
+      } else if (attempts < 50) {
+        retryHeaderIndependent(attempts + 1);
+      }
+    }, 100);
+  })(0);
+
   checkSession().then(function (result) {
     if (result === null) { showAccessMessage("⚠️ Usuario no registrado en SupportPlus Tools. Solicite su alta con el administrador."); injectFolioButtons(); return; }
     if (result === "inactive") { showAccessMessage("⚠️ Usuario inactivo en SupportPlus Tools. Solicite su reactivación con el administrador."); injectFolioButtons(); return; }
@@ -1038,6 +1053,7 @@
     _showQuickDetailModal = showQuickDetailModal;
 
     // Inject basic buttons with retry (deferred via setTimeout to avoid temporal dead zone)
+    // NOTE: Also triggered independently below (outside session check)
     setTimeout(function () {
       (function retryInjectHeader(attempts) {
         var wrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
@@ -1047,7 +1063,7 @@
           injectQuickSearch();
           injectUpdateButton();
         } else {
-          setTimeout(function () { retryInjectHeader(attempts + 1); }, 250);
+          setTimeout(function () { retryInjectHeader(attempts + 1); }, 100);
         }
       })(0);
     }, 0);
