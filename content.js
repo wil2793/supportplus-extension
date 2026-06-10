@@ -5744,6 +5744,14 @@
         // Subgroup permissions already loaded in checkSession from Notion directly
         var _canCommentClosedResolved = _canCommentClosed;
         var _canReopenTicketsResolved = _canReopenTickets;
+        // Fallback: read from storage if not loaded yet
+        if (!_canReopenTicketsResolved || !_canCommentClosedResolved) {
+          try {
+            var permsData = await new Promise(function(r) { chrome.storage.local.get("subgroupPerms", function(d) { r(d.subgroupPerms || {}); }); });
+            if (!_canReopenTicketsResolved) _canReopenTicketsResolved = !!permsData.canReopenTickets;
+            if (!_canCommentClosedResolved) _canCommentClosedResolved = !!permsData.canCommentClosed;
+          } catch(e) {}
+        }
         var reportType = t.reportType?.name || "";
         var createdAt = t.createdAt ? t.createdAt.replace("T", " ").substring(0, 16) : "";
         var updatedAt = t.updatedAt ? t.updatedAt.replace("T", " ").substring(0, 16) : "";
