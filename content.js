@@ -274,21 +274,30 @@
             chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b98051a190e51d38d97288", body: { filter: { property: "Correo", rich_text: { equals: email } }, page_size: 1 } }, function (resp) { resolve(resp); });
           });
           if (checkResp && checkResp.success && checkResp.data.results && checkResp.data.results.length > 0) {
-            // User exists in Notion but wasn't in cache - trigger re-sync and return
-            chrome.runtime.sendMessage({ type: "sync-notion" });
-            return null;
-          }
-          // User truly doesn't exist - create as inactive
-          chrome.runtime.sendMessage({
-            type: "notion-create", body: {
-              parent: { database_id: "36620e0684b98051a190e51d38d97288" },
-              properties: {
-                "Nombre": { title: [{ text: { content: sessionUserName || email } }] },
-                "Correo": { rich_text: [{ text: { content: email } }] },
-                "Activo": { checkbox: false }
+            // User exists in Notion but wasn't in cache - trigger re-sync and wait
+            await new Promise(function(resolve) {
+              chrome.runtime.sendMessage({ type: "sync-notion" }, function() { resolve(); });
+            });
+            // Re-read from storage after sync
+            var freshStored = await new Promise(function(resolve) {
+              chrome.storage.local.get(["notionUsers"], function(r) { resolve(r); });
+            });
+            var freshUsers = freshStored.notionUsers || {};
+            userData = freshUsers[email];
+            if (!userData) return null; // Still not found after sync
+          } else {
+            // User truly doesn't exist - create as inactive
+            chrome.runtime.sendMessage({
+              type: "notion-create", body: {
+                parent: { database_id: "36620e0684b98051a190e51d38d97288" },
+                properties: {
+                  "Nombre": { title: [{ text: { content: sessionUserName || email } }] },
+                  "Correo": { rich_text: [{ text: { content: email } }] },
+                  "Activo": { checkbox: false }
+                }
               }
-            }
-          });
+            });
+          }
         } catch (e) { }
         return null;
       }
