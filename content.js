@@ -364,8 +364,8 @@
   }
 
   checkSession().then(function (result) {
-    if (result === null) { showAccessMessage("⚠️ Usuario no registrado en SupportPlus Tools. Solicite su alta con el administrador."); return; }
-    if (result === "inactive") { showAccessMessage("⚠️ Usuario inactivo en SupportPlus Tools. Solicite su reactivación con el administrador."); return; }
+    if (result === null) { showAccessMessage("⚠️ Usuario no registrado en SupportPlus Tools. Solicite su alta con el administrador."); injectFolioButtons(); return; }
+    if (result === "inactive") { showAccessMessage("⚠️ Usuario inactivo en SupportPlus Tools. Solicite su reactivación con el administrador."); injectFolioButtons(); return; }
     currentUserRole = result.role || result;
     initByRole();
 
@@ -7430,6 +7430,39 @@
         });
       });
     }
+
+    // Inject folio buttons only (clickable folio + copy) - works without session
+    function injectFolioButtons() {
+      if (isDetailView()) return;
+      document.querySelectorAll(".MuiDataGrid-row").forEach(function(row) {
+        var ticketId = row.getAttribute("data-id");
+        if (!ticketId) return;
+        var firstCell = row.querySelector('[data-field="uniqueCode"]');
+        if (!firstCell) return;
+        var container = firstCell.querySelector(".MuiBox-root") || firstCell;
+        if (!row.querySelector(".sp-copy-btn")) {
+          var codeEl = firstCell.querySelector("p.MuiTypography-body1");
+          var codeText = codeEl ? codeEl.textContent.trim() : "";
+          if (codeText) container.appendChild(createCopyButton(codeText));
+        }
+        if (!row.querySelector("." + DETAIL_QUICK_CLASS)) {
+          var folioEl = container.querySelector("p.MuiTypography-body1");
+          if (folioEl) {
+            var folioText = folioEl.textContent.trim();
+            var btn = document.createElement("button");
+            btn.className = DETAIL_QUICK_CLASS + " MuiButtonBase-root MuiButton-root MuiButton-contained MuiButton-containedPrimary MuiButton-sizeMedium MuiButton-containedSizeMedium MuiButton-colorPrimary";
+            btn.textContent = folioText;
+            btn.style.cssText = "padding:2px 8px;font-size:11px;cursor:pointer;min-width:auto;white-space:nowrap;";
+            btn.addEventListener("click", function(e) { e.stopPropagation(); e.preventDefault(); showQuickDetailModal(ticketId); });
+            folioEl.replaceWith(btn);
+          }
+        }
+      });
+    }
+    // Also run on DOM changes for SPA navigation (independent of session)
+    var _folioObserver = new MutationObserver(function() { injectFolioButtons(); });
+    _folioObserver.observe(document.body, { childList: true, subtree: true });
+    setTimeout(injectFolioButtons, 500);
 
     // Inject row buttons and basic header (no Notion dependency)
     function injectButtonsImmediate() {
