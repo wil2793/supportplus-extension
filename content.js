@@ -8011,7 +8011,7 @@
           if (suggestedDiv) {
             chrome.storage.local.get("suggestedComments", function (r) {
               var comments = r.suggestedComments || {};
-              var groupId = getTeamConfig().resolutionGroupId;
+              var groupId = currentTeamArea || (currentUserGroups.length ? currentUserGroups[0] : 0);
               var groupComments = comments[groupId] || [];
               suggestedDiv.innerHTML = "";
               var commentInputEl = document.getElementById("sp-qd-comment-input");
