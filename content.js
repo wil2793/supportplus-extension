@@ -5930,7 +5930,9 @@
             if (cAttachments.length) {
               cAttachHTML = '<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;">';
               cAttachments.forEach(function (a) {
-                cAttachHTML += '<button class="sp-qd-download" data-file-id="' + a.id + '" data-file-name="' + (a.name || "archivo").replace(/"/g, '&quot;') + '" style="padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:3px;font-size:0.8rem;cursor:pointer;color:#1976D2;">📎 ' + esc(a.name || "archivo") + '</button>';
+                var cFileId = a.fileId || a.file?.id || a.id;
+                var cFileName = a.file?.name || a.name || "archivo";
+                cAttachHTML += '<button class="sp-qd-download" data-file-id="' + cFileId + '" data-file-name="' + cFileName.replace(/"/g, '&quot;') + '" style="padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:3px;font-size:0.8rem;cursor:pointer;color:#1976D2;">📎 ' + esc(cFileName) + '</button>';
               });
               cAttachHTML += '</div>';
             }
@@ -6010,7 +6012,9 @@
                 if (c.attachments && c.attachments.length) {
                   cAttachHTML = '<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;">';
                   c.attachments.forEach(function (a) {
-                    cAttachHTML += '<button class="sp-qd-download" data-file-id="' + a.id + '" data-file-name="' + (a.name || "archivo").replace(/"/g, '&quot;') + '" style="padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:3px;font-size:0.8rem;cursor:pointer;color:#1976D2;">📎 ' + esc(a.name || "archivo") + '</button>';
+                    var cFileId = a.fileId || a.file?.id || a.id;
+                    var cFileName = a.file?.name || a.name || "archivo";
+                    cAttachHTML += '<button class="sp-qd-download" data-file-id="' + cFileId + '" data-file-name="' + cFileName.replace(/"/g, '&quot;') + '" style="padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:3px;font-size:0.8rem;cursor:pointer;color:#1976D2;">📎 ' + esc(cFileName) + '</button>';
                   });
                   cAttachHTML += '</div>';
                 }
