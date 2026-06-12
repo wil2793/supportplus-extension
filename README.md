@@ -190,3 +190,216 @@ Los grupos que ve cada usuario vienen del **rol** en Notion (`MSP_cat_Roles.MSP_
 - [ ] Migrar modal del ticket a usar `createModal()` genérico con opción fullscreen
 - [ ] v2 React: completar migración de features
 - [ ] Mover token de Notion a proxy backend serverless
+
+## Bugs Conocidos / Por Arreglar
+
+### Archivos de comentarios se confunden con otros tickets
+
+**Síntoma:** Al abrir un adjunto de un comentario, se muestra un archivo de otro ticket.
+**Causa:** Los attachments del comentario vienen como `{id, name, key}` donde `id` es secuencial y puede coincidir con IDs de archivos de otros tickets. El carrusel agrupa TODOS los adjuntos (del ticket + comentarios) y al navegar puede mostrar el incorrecto si hay colisión de IDs.
+**Fix:** Usar `key` del attachment (que es único por ticket) como identificador, o separar los adjuntos de comentarios del carrusel principal.
+
+### Auto-migrate crea duplicados en Monday
+
+**Síntoma:** Un ticket aparece múltiples veces en Monday.
+**Causa:** El auto-migrate en `content.js` no verifica correctamente si el ticket ya existe antes de crearlo. La race condition entre múltiples pestañas/recargas causa que se creen duplicados.
+**Fix:** Agregar un lock por `uniqueCode` y verificar en Monday antes de crear (búsqueda por `text_mm2c9nhc`).
+
+### Permisos de sub-grupos no se aplican si el background no re-sincroniza
+
+**Síntoma:** Un usuario que SÍ está en un sub-grupo no ve el botón/feature correspondiente.
+**Causa:** `checkSession` lee `userData.canXXX` del storage. Si el background no sincronizó después de agregar al usuario al sub-grupo, queda en `false`.
+**Fix:** El background limpia y re-sincroniza en `onInstalled`. El usuario debe recargar la extensión para forzar el sync.
+
+## Background Service Worker (`background.js`)
+
+El service worker se encarga de toda la comunicación con Notion (por CORS) y actúa como proxy para Monday.com y descargas de archivos.
+
+### Sync de Notion
+
+`syncNotionData()` se ejecuta en:
+
+- `chrome.runtime.onInstalled` (instalación o actualización)
+- `chrome.runtime.onStartup` (al abrir el navegador)
+- Mensaje `sync-notion` desde el content script
+
+El sync construye y persiste en `chrome.storage.local`:
+
+- `notionUsers` — email → datos del usuario (nombre, rol, grupos, permisos, profileId)
+- `notionRoles` — lista de roles activos
+- `notionRolesGroups` — roleName → groupIds[]
+- `groupNames` — groupId → nombre del grupo
+- `groupMondayConfig` — groupId → { workspaceId, folderId, etiqueta }
+- `suggestedComments` — groupId → [{ id, text, name }]
+- `mondayToken` — token decodificado del usuario actual
+- `latestVersion` / `latestZipUrl` — versión más reciente activa
+- `allVersions` — historial completo
+- `userConfig` — { pageId, blacklist[], onlyWithTickets }
+- `notionSyncTime` — timestamp del último sync
+
+### Message Handlers
+
+| Tipo                 | Descripción                        |
+| -------------------- | ---------------------------------- |
+| `sync-notion`        | Ejecuta syncNotionData() completo  |
+| `notion-query`       | POST a /databases/{dbId}/query     |
+| `notion-create`      | POST a /pages (crear página)       |
+| `notion-update`      | PATCH a /pages/{pageId}            |
+| `notion-delete`      | PATCH con `{ archived: true }`     |
+| `notion-page`        | GET a /pages/{pageId}              |
+| `notion-pages-batch` | GET múltiples páginas en paralelo  |
+| `monday-query`       | POST a api.monday.com/v2 (GraphQL) |
+| `proxy-fetch`        | Descarga binaria (para zips)       |
+
+### Comportamiento en actualización
+
+Al detectar `onInstalled` con `reason === "update"`:
+
+1. Re-sincroniza Notion
+2. Busca tabs abiertas de SupportPlus
+3. Ejecuta un `alert()` + `location.reload()` en cada una
+
+## Monday Auto-Sync (`monday-sync.js`)
+
+Script independiente que sincroniza el estado de tickets SP → Monday.
+
+### Comportamiento
+
+- **Primera ejecución:** 15 segundos después de cargar
+- **Periódico:** cada 5 minutos
+- **On focus:** 3 segundos después de volver a la pestaña
+- **Scope:** solo tickets asignados al usuario logueado
+
+### Flujo
+
+1. Obtiene token SP (localStorage) y token Monday (storage)
+2. Lee email del usuario y config Monday del storage
+3. Fetch tickets del usuario via `search-by-level-and-resolution-groups`
+4. Para cada ticket: busca el item en Monday por `uniqueCode` en columna `text_mm2c9nhc`
+5. Si existe → actualiza `status` (index mapeado) y `person` (por email → userId)
+6. Si no existe → skip (no crea items, solo actualiza)
+
+### Lock de concurrencia
+
+Variable `_syncing` evita ejecuciones paralelas (no es mutex real, solo flag).
+
+## Componentes UI (`components.js`)
+
+Todas las funciones se exponen como globales en `window.*`:
+
+| Función                    | Descripción                                                     |
+| -------------------------- | --------------------------------------------------------------- |
+| `createModal(opts)`        | Modal genérico con animación, backdrop blur, close en Esc/click |
+| `createHeaderButton(opts)` | Botón para el header con responsive breakpoints                 |
+| `showLoadingToast(text)`   | Toast con spinner (reemplaza anteriores)                        |
+| `showSuccessToast(text)`   | Toast verde (3s auto-dismiss)                                   |
+| `showErrorToast(text)`     | Toast rojo (4s auto-dismiss)                                    |
+| `esc(str)`                 | Escape HTML                                                     |
+| `stringToColor(str)`       | Color determinístico (HSL) a partir de un string                |
+
+### `createModal` Options
+
+```javascript
+createModal({
+  id: "sp-my-modal", // ID único del overlay
+  title: "Título", // Header text
+  content: "<p>HTML</p>", // Body content
+  options: {
+    maxWidth: "450px", // Ancho máximo
+    width: "90%", // Ancho relativo
+    height: null, // Alto fijo (opcional)
+    maxHeight: "90vh", // Alto máximo
+    scroll: true, // Scroll en body
+    zIndex: 99999, // z-index del overlay
+    blur: false, // backdrop-filter: blur
+    closeOnBackdrop: true, // Cerrar al click en backdrop
+    showHeader: true, // Mostrar header con título
+    headerActions: "", // HTML extra en el header (antes del ✕)
+    padding: "16px 20px 20px", // Padding del body
+    customClass: "", // CSS class en modal-box
+    onClose: null, // Callback al cerrar
+  },
+});
+// Retorna: { overlay, modal, body, close }
+```
+
+## Content Script (`content.js`)
+
+IIFE monolítico (~7000 líneas). Se ejecuta en `document_idle` después de `config.js`, `components.js` y las librerías (xlsx, pdf).
+
+### Estructura interna (orden de ejecución)
+
+1. **Variables globales** — `_userConfig`, `_canDragDrop`, `_canCommentClosed`, etc.
+2. **Version check** — bloquea si hay major update
+3. **Backdrop fix** — CSS para loading bar
+4. **Row coloring** — MutationObserver inmediato
+5. **Header buttons inmediatos** — Config, Buscar, Quick Search, Update
+6. **`checkSession()`** — obtiene email → sync Notion → lee storage → asigna permisos
+7. **Manager panel** — se renderiza si hay grupos asignados
+8. **Botones de fila** — Tomar, Cerrar, Steal (inyección inmediata + observer)
+9. **Modal de ticket** — fullscreen, con comentarios coloreados y carrusel
+10. **Acciones de ticket** — reasignar, cambiar estatus, comentar, rechazar, reabrir
+11. **Monday migrate** — botón y lógica para crear items en Monday
+12. **Dashboard/Reportes** — métricas y exportación
+13. **DBA Info** — modal interno del equipo (productos, guardias)
+
+### Funciones principales
+
+| Función                                        | Descripción                                      |
+| ---------------------------------------------- | ------------------------------------------------ |
+| `checkSession()`                               | Inicia auth: SP session → sync Notion → permisos |
+| `loadManagerGroupDetail(groupId)`              | Carga perfiles y tickets de un grupo             |
+| `openFullTicketModal(ticketId)`                | Abre el modal fullscreen del ticket              |
+| `reassignTicket(ticketId, groupId, profileId)` | Reasigna via API + update visual                 |
+| `changeStatus(ticketId, statusId, comment)`    | Cambia estatus con comentario opcional           |
+| `migrateToMonday(ticketId)`                    | Crea item en Monday.com                          |
+| `injectButtonsImmediate()`                     | Inyecta botones en cada fila del grid            |
+| `buildManagerPanel()`                          | Construye el panel de manager con drag & drop    |
+| `downloadZip(url, version)`                    | Descarga zip via proxy o directo                 |
+
+## Popup (`popup.html`)
+
+Popup simple que se abre al click en el icono de la extensión:
+
+- Muestra nombre, descripción y versión instalada
+- Consulta `chrome.storage.local` para `latestVersion` y `latestZipUrl`
+- Si hay versión más nueva disponible, muestra botón de descarga
+- No tiene funcionalidad interactiva más allá de la descarga
+
+## Archivos incluidos
+
+| Archivo             | Propósito                                                      |
+| ------------------- | -------------------------------------------------------------- |
+| `xlsx.min.js`       | SheetJS — exportación a Excel (se inyecta como content script) |
+| `pdf.min.js`        | PDF.js — renderizado de adjuntos PDF                           |
+| `pdf.worker.min.js` | Worker de PDF.js (web accessible resource)                     |
+| `icon*.png`         | Iconos de la extensión (16, 48, 128 px)                        |
+
+## Instalación / Desarrollo
+
+1. Clonar el repositorio
+2. Abrir `chrome://extensions/` (o `edge://extensions/`)
+3. Activar "Modo de desarrollador"
+4. Click "Cargar desempaquetada" → seleccionar la carpeta raíz del proyecto
+5. Navegar a `https://macropay.supportplus.mx` — la extensión se activa automáticamente
+
+Para actualizar después de cambios:
+
+- Click en el botón de reload (🔄) en la tarjeta de la extensión
+- O recargar la página de SupportPlus
+
+## Proceso de Subir Versión
+
+Ver `API_REFERENCE.md` sección "Proceso de subir versión" para el procedimiento completo.
+
+Resumen rápido:
+
+1. Bump version en `manifest.json`
+2. `git add + commit + push`
+3. Generar zip con los archivos de la extensión (sin .git, sin v2/)
+4. Push del zip a `releases/`
+5. Crear registro en Notion (MSP_Versiones) con Activo = false
+
+## APIs de SupportPlus
+
+Ver `API_REFERENCE.md` para la documentación completa de endpoints.
