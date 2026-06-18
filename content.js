@@ -7293,7 +7293,7 @@
             if (!document.getElementById("sp-carousel-spin-style")) {
               var style = document.createElement("style");
               style.id = "sp-carousel-spin-style";
-              style.textContent = "@keyframes sp-spin { to { transform: rotate(360deg); } }";
+              style.textContent = "@keyframes sp-spin { to { transform: rotate(360deg); } } .sp-pdf-text-layer { user-select: text; cursor: text; } .sp-pdf-text-layer span { color: transparent; position: absolute; white-space: pre; } .sp-pdf-text-layer span::selection { background: rgba(0,100,200,0.3); color: transparent; }";
               document.head.appendChild(style);
             }
           }
@@ -7326,16 +7326,41 @@
             function renderPage(num) {
               pdfDoc.getPage(num).then(function (page) {
                 var viewport = page.getViewport({ scale: scale });
+
+                // Container for canvas + text layer
+                var pageDiv = document.createElement("div");
+                pageDiv.style.cssText = "position:relative;display:block;margin:0 auto 12px;box-shadow:0 2px 8px rgba(0,0,0,0.3);width:" + viewport.width + "px;height:" + viewport.height + "px;";
+
+                // Canvas
                 var canvas = document.createElement("canvas");
-                canvas.style.cssText = "display:block;margin:0 auto;box-shadow:0 2px 8px rgba(0,0,0,0.3);";
+                canvas.style.cssText = "display:block;";
                 canvas.width = viewport.width;
                 canvas.height = viewport.height;
                 var ctx = canvas.getContext("2d");
                 page.render({ canvasContext: ctx, viewport: viewport });
-                return canvas;
-              }).then(function (canvas) {
-                // Append canvas (keep all pages rendered)
-                pdfContainer.appendChild(canvas);
+                pageDiv.appendChild(canvas);
+
+                // Text layer for selection
+                var textLayerDiv = document.createElement("div");
+                textLayerDiv.style.cssText = "position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;opacity:0.25;line-height:1;";
+                textLayerDiv.className = "sp-pdf-text-layer";
+                pageDiv.appendChild(textLayerDiv);
+
+                page.getTextContent().then(function (textContent) {
+                  textContent.items.forEach(function (item) {
+                    var tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+                    var span = document.createElement("span");
+                    span.textContent = item.str;
+                    span.style.cssText = "position:absolute;white-space:pre;transform-origin:0% 0%;font-family:sans-serif;" +
+                      "left:" + tx[4] + "px;" +
+                      "top:" + (viewport.height - tx[5]) + "px;" +
+                      "font-size:" + Math.abs(tx[0]) + "px;" +
+                      "color:transparent;";
+                    textLayerDiv.appendChild(span);
+                  });
+                });
+
+                pdfContainer.appendChild(pageDiv);
               });
             }
 
@@ -7351,9 +7376,9 @@
               if (num < 1) num = 1;
               if (num > totalPages) num = totalPages;
               currentPage = num;
-              var canvases = pdfContainer.querySelectorAll("canvas");
-              if (canvases[num - 1]) {
-                canvases[num - 1].scrollIntoView({ behavior: "smooth", block: "start" });
+              var pages = pdfContainer.children;
+              if (pages[num - 1]) {
+                pages[num - 1].scrollIntoView({ behavior: "smooth", block: "start" });
               }
               updatePageInfo();
             }
@@ -7376,10 +7401,10 @@
 
             // Scroll tracking to update current page
             pdfContainer.addEventListener("scroll", function () {
-              var canvases = pdfContainer.querySelectorAll("canvas");
+              var pages = pdfContainer.children;
               var containerTop = pdfContainer.scrollTop;
-              for (var i = 0; i < canvases.length; i++) {
-                if (canvases[i].offsetTop + canvases[i].height / 2 > containerTop) {
+              for (var i = 0; i < pages.length; i++) {
+                if (pages[i].offsetTop + pages[i].offsetHeight / 2 > containerTop) {
                   currentPage = i + 1;
                   updatePageInfo();
                   break;

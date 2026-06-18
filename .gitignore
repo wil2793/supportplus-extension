@@ -3,3 +3,10 @@ node_modules/
 Thumbs.db
 *.crx
 *.pem
+
+# ZIPs
+*.zip
+
+# MDs (excepto README)
+*.md
+!README.md
