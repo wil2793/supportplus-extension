@@ -150,10 +150,99 @@
   var _mondayGroupCache = {}; // Cache of created Monday groups: groupName -> groupId
   var _autoMigrateQueue = Promise.resolve(); // Serial queue for auto-migrations
   var _userConfig = {}; // User config from Notion (blacklist, onlyWithTickets)
+  var _workSchedule = { horaEntrada: 9, horaSalida: 19, diaInicio: "Lunes", diaFinal: "Viernes" }; // Work schedule from Notion
+
+  // Work schedule helper
+  var DAY_MAP = { "Domingo": 0, "Lunes": 1, "Martes": 2, "Miercoles": 3, "Miércoles": 3, "Jueves": 4, "Viernes": 5, "Sabado": 6, "Sábado": 6 };
+  function isWithinWorkHours() {
+    var now = new Date();
+    var currentHour = now.getHours();
+    var currentDay = now.getDay(); // 0=Sunday
+    var startDay = DAY_MAP[_workSchedule.diaInicio] || 1;
+    var endDay = DAY_MAP[_workSchedule.diaFinal] || 5;
+    var inDayRange = currentDay >= startDay && currentDay <= endDay;
+    var inHourRange = currentHour >= _workSchedule.horaEntrada && currentHour < _workSchedule.horaSalida;
+    console.log("[SP] isWithinWorkHours:", { currentHour, currentDay, schedule: _workSchedule, inDayRange, inHourRange, result: inDayRange && inHourRange });
+    return inDayRange && inHourRange;
+  }
+
+  // Save ticket to MSP_TicketsPorCerrar in Notion
+  var TICKETS_POR_CERRAR_DB = "38420e0684b980d682ccfac983fc1780";
+  function saveTicketPendingClose(uniqueCode, ticketId, userNotionPageId) {
+    return new Promise(function (resolve, reject) {
+      chrome.runtime.sendMessage({
+        type: "notion-create",
+        body: {
+          parent: { database_id: TICKETS_POR_CERRAR_DB },
+          properties: {
+            "Ticket": { title: [{ text: { content: uniqueCode } }] },
+            "IdSupporPlus": { number: ticketId },
+            "MSP_Usuarios": { relation: [{ id: userNotionPageId }] }
+          }
+        }
+      }, function (resp) {
+        if (resp && resp.success) resolve(resp.data);
+        else reject(new Error(resp?.error || "Error al guardar ticket pendiente"));
+      });
+    });
+  }
+
+  // Check and remove ticket from MSP_TicketsPorCerrar after successful close
+  function removeTicketPendingClose(ticketId) {
+    chrome.runtime.sendMessage({
+      type: "notion-query",
+      dbId: TICKETS_POR_CERRAR_DB,
+      body: { filter: { property: "IdSupporPlus", number: { equals: ticketId } } }
+    }, function (resp) {
+      if (resp && resp.success && resp.data && resp.data.results) {
+        resp.data.results.forEach(function (page) {
+          chrome.runtime.sendMessage({ type: "notion-delete", pageId: page.id });
+        });
+      }
+    });
+  }
+
+  // Fetch pending tickets for user's groups
+  function fetchPendingCloseTickets(userGroups) {
+    return new Promise(function (resolve) {
+      chrome.runtime.sendMessage({
+        type: "notion-query",
+        dbId: TICKETS_POR_CERRAR_DB,
+        body: {}
+      }, function (resp) {
+        if (!resp || !resp.success || !resp.data) { resolve([]); return; }
+        var results = resp.data.results || [];
+        // Filter: only tickets whose user belongs to one of my groups
+        chrome.storage.local.get("notionUsers", function (r) {
+          var users = r.notionUsers || {};
+          var pending = [];
+          results.forEach(function (page) {
+            var ticket = page.properties.Ticket?.title?.[0]?.plain_text || "";
+            var spId = page.properties.IdSupporPlus?.number || 0;
+            var userRel = page.properties.MSP_Usuarios?.relation || [];
+            if (!spId || !userRel.length) return;
+            // Check if the user who created this pending belongs to one of my groups
+            var creatorPageId = userRel[0].id;
+            var creatorEmail = "";
+            for (var email in users) {
+              if (users[email].notionPageId === creatorPageId) { creatorEmail = email; break; }
+            }
+            if (!creatorEmail || !users[creatorEmail]) return;
+            var creatorGroups = users[creatorEmail].groups || [];
+            var sharedGroup = creatorGroups.some(function (g) { return userGroups.includes(g); });
+            if (sharedGroup) {
+              pending.push({ ticket: ticket, ticketId: spId, pageId: page.id });
+            }
+          });
+          resolve(pending);
+        });
+      });
+    });
+  }
 
   // Load persisted state from storage immediately (like useState initial value)
   try {
-    chrome.storage.local.get(["subgroupPerms", "userConfig", "notionUsers", "userEmail"], function (r) {
+    chrome.storage.local.get(["subgroupPerms", "userConfig", "notionUsers", "userEmail", "workSchedule"], function (r) {
       // Try subgroupPerms first (set by checkSession)
       if (r.subgroupPerms) {
         canDragDrop = r.subgroupPerms.canDragDrop || false;
@@ -177,6 +266,7 @@
         }
       }
       if (r.userConfig) _userConfig = r.userConfig;
+      if (r.workSchedule) _workSchedule = r.workSchedule;
     });
   } catch (e) { }
 
@@ -261,8 +351,9 @@
 
       // Read synced data from storage
       var stored = await new Promise(function (resolve) {
-        chrome.storage.local.get(["notionUsers", "notionRoles", "notionRolesGroups", "suggestedComments", "userConfig"], function (r) { resolve(r); });
+        chrome.storage.local.get(["notionUsers", "notionRoles", "notionRolesGroups", "suggestedComments", "userConfig", "workSchedule"], function (r) { resolve(r); });
       });
+      if (stored.workSchedule) _workSchedule = stored.workSchedule;
 
       var notionUsers = stored.notionUsers || {};
       var userData = notionUsers[email];
@@ -388,9 +479,33 @@
     }, 100);
   })(0);
 
+  // Persistent observer: re-inject header buttons when SPA navigation rebuilds the header
+  (function () {
+    var _headerDebounce = null;
+    var _headerObserver = new MutationObserver(function () {
+      if (_headerDebounce) clearTimeout(_headerDebounce);
+      _headerDebounce = setTimeout(function () {
+        var wrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
+        if (!wrapper) return;
+        if (!document.getElementById("sp-config-btn")) {
+          if (typeof injectConfigButton === "function") injectConfigButton();
+          if (typeof injectSearchButton === "function") injectSearchButton();
+          if (typeof injectQuickSearch === "function") injectQuickSearch();
+          if (typeof injectUpdateButton === "function") injectUpdateButton();
+          if (typeof injectSessionTimer === "function") injectSessionTimer();
+          if (typeof injectDashboardButton === "function") injectDashboardButton();
+          if (typeof injectReportButton === "function") injectReportButton();
+          if (typeof injectSuggestedCommentsButton === "function") injectSuggestedCommentsButton();
+          if (typeof injectQuickFilterButton === "function") injectQuickFilterButton();
+        }
+      }, 300);
+    });
+    _headerObserver.observe(document.body, { childList: true, subtree: true });
+  })();
+
   checkSession().then(function (result) {
-    if (result === null) { showAccessMessage("⚠️ Usuario no registrado en SupportPlus Tools. Solicite su alta con el administrador."); injectFolioButtons(); return; }
-    if (result === "inactive") { showAccessMessage("⚠️ Usuario inactivo en SupportPlus Tools. Solicite su reactivación con el administrador."); injectFolioButtons(); return; }
+    if (result === null) { showAccessMessage("⚠️ Usuario no registrado en SupportPlus Tools. Solicite su alta con el administrador."); return; }
+    if (result === "inactive") { showAccessMessage("⚠️ Usuario inactivo en SupportPlus Tools. Solicite su reactivación con el administrador."); return; }
     currentUserRole = result.role || result;
     initByRole();
 
@@ -416,7 +531,7 @@
             var rl = document.createElement("span");
             rl.id = "sp-role-label";
             rl.textContent = rn;
-            rl.style.cssText = "display:block;font-size:11px;color:#fff;opacity:0.6;font-weight:400;margin-top:2px;text-transform:uppercase;text-align:right;";
+            rl.style.cssText = "display:block;font-size:11px;color:inherit;opacity:0.6;font-weight:400;margin-top:2px;text-transform:uppercase;text-align:right;";
             nameEl.appendChild(document.createElement("br"));
             nameEl.appendChild(rl);
           }, 300);
@@ -1035,6 +1150,40 @@
       if (ticketId) document.dispatchEvent(new CustomEvent("sp-open-ticket", { detail: { ticketId: parseInt(ticketId) } }));
     });
     container.appendChild(closedCol);
+
+    // "Pendientes por cerrar" column (first manager panel)
+    var pendingCol1 = document.createElement("div");
+    pendingCol1.className = "sp-mgr-pending-close-col";
+    pendingCol1.style.cssText = "min-width:160px;max-width:200px;border:1px solid #FF8F00;border-radius:6px;overflow:hidden;flex-shrink:0;display:none;";
+    pendingCol1.innerHTML = '<div style="background:#FF8F00;color:#fff;padding:4px 8px;font-size:10px;font-weight:700;text-align:center;">🕐 Pendientes <span class="sp-mgr-pending-count">(...)</span></div>' +
+      '<div class="sp-mgr-pending-list" style="padding:3px;max-height:180px;overflow-y:auto;background:#fafafa;min-height:25px;"></div>';
+    container.insertBefore(pendingCol1, closedCol);
+
+    fetchPendingCloseTickets(currentUserGroups).then(function (pendingTickets) {
+      if (!pendingTickets.length) return;
+      pendingCol1.style.display = "";
+      var countEl = pendingCol1.querySelector(".sp-mgr-pending-count");
+      if (countEl) countEl.textContent = "(" + pendingTickets.length + ")";
+      var listEl = pendingCol1.querySelector(".sp-mgr-pending-list");
+      if (!listEl) return;
+      var withinHours = isWithinWorkHours();
+      var html = "";
+      pendingTickets.forEach(function (pt) {
+        var cursor = withinHours ? "cursor:pointer;" : "cursor:not-allowed;opacity:0.6;";
+        html += '<div class="sp-mgr-ticket sp-pending-ticket" data-ticket-id="' + pt.ticketId + '" style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:9px;line-height:1.3;' + cursor + '">' +
+          '<div style="font-weight:600;color:#E65100;">' + esc(pt.ticket) + '</div>' +
+          (!withinHours ? '<div style="color:#888;font-size:8px;">🔒 Fuera de horario</div>' : '') +
+          '</div>';
+      });
+      listEl.innerHTML = html;
+      listEl.addEventListener("click", function (e) {
+        if (!isWithinWorkHours()) { showErrorToast("⏰ Fuera de horario laboral. No puedes cerrar tickets ahora."); return; }
+        var ticket = e.target.closest(".sp-pending-ticket");
+        if (!ticket) return;
+        var tId = ticket.dataset.ticketId;
+        if (tId) document.dispatchEvent(new CustomEvent("sp-open-ticket", { detail: { ticketId: parseInt(tId) } }));
+      });
+    });
 
     // Fetch closed today
     fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + groupId + "&ticketStatusName=Cerrado&initDate=" + todayStart + "&endDate=" + todayEnd + "&page=0&size=100", {
@@ -2252,6 +2401,45 @@
           '<div class="sp-team-tickets" data-profile-id="closed" data-area-group="closed" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>';
         containerDiv.appendChild(closedCol);
 
+        // "Pendientes por cerrar" column (only shown if there are pending tickets)
+        var pendingCloseCol = document.createElement("div");
+        pendingCloseCol.id = "sp-team-col-pending-close";
+        pendingCloseCol.style.cssText = "min-width:180px;max-width:220px;border:2px solid #FF8F00;border-radius:8px;overflow:hidden;flex-shrink:0;display:none;";
+        pendingCloseCol.innerHTML = '<div style="background:#FF8F00;color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">🕐 Pendientes <span id="sp-pending-close-count" style="opacity:0.7;">(...)</span></div>' +
+          '<div id="sp-pending-close-list" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>';
+        containerDiv.insertBefore(pendingCloseCol, closedCol);
+
+        // Load pending close tickets
+        fetchPendingCloseTickets(currentUserGroups).then(function (pendingTickets) {
+          if (!pendingTickets.length) return;
+          pendingCloseCol.style.display = "";
+          var countEl = document.getElementById("sp-pending-close-count");
+          if (countEl) countEl.textContent = "(" + pendingTickets.length + ")";
+          var listEl = document.getElementById("sp-pending-close-list");
+          if (!listEl) return;
+          var withinHours = isWithinWorkHours();
+          var html = "";
+          pendingTickets.forEach(function (pt) {
+            var cursor = withinHours ? "cursor:pointer;" : "cursor:not-allowed;opacity:0.6;";
+            html += '<div class="sp-mgr-ticket sp-pending-ticket" data-ticket-id="' + pt.ticketId + '" style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:9px;line-height:1.3;' + cursor + '">' +
+              '<div style="font-weight:600;color:#E65100;">' + esc(pt.ticket) + '</div>' +
+              (!withinHours ? '<div style="color:#888;font-size:8px;">🔒 Fuera de horario</div>' : '') +
+              '</div>';
+          });
+          listEl.innerHTML = html;
+          // Click handler
+          listEl.addEventListener("click", function (e) {
+            if (!isWithinWorkHours()) {
+              showErrorToast("⏰ Fuera de horario laboral. No puedes cerrar tickets ahora.");
+              return;
+            }
+            var ticket = e.target.closest(".sp-pending-ticket");
+            if (!ticket) return;
+            var tId = ticket.dataset.ticketId;
+            if (tId) document.dispatchEvent(new CustomEvent("sp-open-ticket", { detail: { ticketId: parseInt(tId) } }));
+          });
+        });
+
         // Setup drag and drop + click to open
         var dragStartPos = null;
         panel.addEventListener("click", function (e) {
@@ -3046,6 +3234,23 @@
           if (json.success) {
             // If "Ticket realizado" is checked, also close and optionally migrate
             if (doneCheck.checked) {
+              // Check work hours before closing
+              if (!isWithinWorkHours()) {
+                // Save as pending close
+                try {
+                  var storedP = await new Promise(function (r) { chrome.storage.local.get(["notionUsers", "userEmail"], function (d) { r(d); }); });
+                  var pEmail = (storedP.userEmail || "").toLowerCase();
+                  var pUsers = storedP.notionUsers || {};
+                  var pUserPageId = pEmail && pUsers[pEmail] ? pUsers[pEmail].notionPageId : "";
+                  if (pUserPageId) {
+                    await saveTicketPendingClose(info?.uniqueCode || ("T" + ticketId), ticketId, pUserPageId);
+                  }
+                } catch (e) { }
+                showSuccessToast("Ticket tomado. Cierre pendiente (fuera de horario).");
+                originalBtn.textContent = "✅ Tomado";
+                originalBtn.disabled = false;
+                return;
+              }
               // Add close comment if provided
               if (closeComment) {
                 await fetch(SP_API + "/comment/" + ticketId, {
@@ -4044,7 +4249,7 @@
         var timerEl = document.createElement("span");
         timerEl.id = "sp-session-timer";
         timerEl.title = "Tiempo restante de sesión";
-        timerEl.style.cssText = "font-size:11px;color:#fff;opacity:0.8;margin-right:10px;font-family:monospace;white-space:nowrap;";
+        timerEl.style.cssText = "font-size:11px;color:inherit;opacity:0.8;margin-right:10px;font-family:monospace;white-space:nowrap;";
         userWrapper.parentElement.insertBefore(timerEl, userWrapper);
 
         function updateTimer() {
@@ -5200,107 +5405,221 @@
 
     async function handleReportClick() {
       if (reportGenerating) return;
-      reportGenerating = true;
-      var btn = document.getElementById(REPORT_BTN_ID);
-      if (!btn) return;
+
+      // Get user groups from storage
+      var stored = await new Promise(function (r) { chrome.storage.local.get(["notionUsers", "userEmail", "groupNames"], function (d) { r(d); }); });
+      var email = (stored.userEmail || "").toLowerCase();
+      var users = stored.notionUsers || {};
+      var userData = users[email];
+      var userGroups = userData ? (userData.groups || []) : [];
+      var groupNamesMap = stored.groupNames || {};
+
+      if (!userGroups.length) { showErrorToast("No tienes grupos asignados"); return; }
+
+      // Build group options
+      var groupOptions = userGroups.map(function (gId) {
+        var name = groupNamesMap[gId] || (window.SP_CONFIG.GROUP_INFO.find(function (g) { return g.id === gId; }) || {}).name || ("Grupo " + gId);
+        return { id: gId, name: name };
+      });
 
       var now = new Date();
-      var fromDate = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-01T00:00";
-      var toDate = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + "T23:59";
+      var currentMonth = now.getMonth();
+      var currentYear = now.getFullYear();
 
-      btn.disabled = true;
-      btn.style.background = "#999";
-      btn.textContent = "⏳ Obteniendo grupos...";
-
-      var spToken = getToken();
-      if (!spToken) { showErrorToast("No hay token"); btn.textContent = "📥 Reporte Excel"; btn.style.background = "#1565C0"; btn.disabled = false; reportGenerating = false; return; }
-
-      try {
-        // Step 1: Get all resolution groups
-        var groupsRes = await fetch("https://macropayapi.supportplus.mx/resolution-groups/actives-by-attention-channel-id/1", {
-          headers: { accept: "application/json", authorization: "Bearer " + spToken }
-        });
-        if (!groupsRes.ok) throw new Error("HTTP " + groupsRes.status);
-        var groupsJson = await groupsRes.json();
-        var groups = groupsJson.data || groupsJson;
-        if (!Array.isArray(groups)) groups = Object.values(groups);
-
-        // Step 2: For each group, fetch all tickets in date range
-        var workbookData = {};
-
-        for (var i = 0; i < groups.length; i++) {
-          var group = groups[i];
-          var groupName = group.name || group.label || ("Grupo " + (group.id || i));
-          var groupId = group.id || group.value;
-          btn.textContent = "⏳ (" + (i + 1) + "/" + groups.length + ") " + groupName.substring(0, 20);
-
-          var allTickets = [];
-          var page = 0;
-          var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + groupId + "&page=0&size=100";
-          url += "&initDate=" + fromDate + "&endDate=" + toDate;
-          var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
-          if (res.ok) {
-            var json = await res.json();
-            var data = json.data || json;
-            allTickets = data.content || [];
-          }
-
-          if (allTickets.length > 0) {
-            workbookData[groupName] = allTickets;
-          }
-        }
-
-        btn.textContent = "⏳ Generando Excel...";
-
-        // Step 3: Load SheetJS and generate Excel
-        await loadSheetJS();
-
-        var wb = XLSX.utils.book_new();
-        var sheetNames = Object.keys(workbookData);
-
-        if (!sheetNames.length) {
-          showErrorToast("No se encontraron tickets en el rango seleccionado.");
-          btn.textContent = "📥 Reporte Excel";
-          btn.style.background = "#1565C0";
-          btn.disabled = false;
-          reportGenerating = false;
-          return;
-        }
-
-        sheetNames.forEach(function (name) {
-          var tickets = workbookData[name];
-          var rows = tickets.map(function (t) {
-            return {
-              "Folio": t.uniqueCode || "",
-              "Asunto": t.subject || "",
-              "Solicitante": t.requesterName || "",
-              "Responsable": t.responsibleName || "",
-              "Estado": t.ticketStatusName || "",
-              "Prioridad": t.incidentPriorityName || "",
-              "Tipo": t.reportTypeName || "",
-              "Fecha Creación": t.createdAt ? t.createdAt.replace("T", " ").substring(0, 16) : "",
-              "Descripción": (t.description || "").replace(/<[^>]*>/g, "").substring(0, 500)
-            };
-          });
-          var sheetName = name.substring(0, 31);
-          var ws = XLSX.utils.json_to_sheet(rows);
-          XLSX.utils.book_append_sheet(wb, ws, sheetName);
-        });
-
-        var fileName = "Reporte_SupportPlus_" + fromDate.substring(0, 10) + "_a_" + toDate.substring(0, 10) + ".xlsx";
-        XLSX.writeFile(wb, fileName);
-
-        var totalTickets = Object.values(workbookData).reduce(function (sum, arr) { return sum + arr.length; }, 0);
-        showSuccessToast("📥 Reporte listo: " + sheetNames.length + " hojas, " + totalTickets + " tickets");
-
-      } catch (err) {
-        showErrorToast("Error: " + err.message);
+      var monthOpts = window.SP_CONFIG.MONTH_NAMES.map(function (m, i) {
+        return '<option value="' + i + '"' + (i === currentMonth ? ' selected' : '') + '>' + m + '</option>';
+      }).join("");
+      var yearOpts = '';
+      for (var y = currentYear; y >= currentYear - 3; y--) {
+        yearOpts += '<option value="' + y + '"' + (y === currentYear ? ' selected' : '') + '>' + y + '</option>';
       }
 
-      btn.textContent = "📥 Reporte Excel";
-      btn.style.background = "#1565C0";
-      btn.disabled = false;
-      reportGenerating = false;
+      var groupCheckboxes = groupOptions.map(function (g) {
+        return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;font-size:12px;">' +
+          '<input type="checkbox" value="' + g.id + '" checked> ' + esc(g.name) + '</label>';
+      }).join("");
+
+      var m = createModal({
+        id: "sp-report-modal",
+        title: "📥 Exportar Reporte CSV",
+        content:
+          '<div style="margin-bottom:12px;">' +
+          '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">Grupos:</label>' +
+          '<div id="sp-rpt-groups" style="max-height:150px;overflow-y:auto;border:1px solid #ddd;border-radius:6px;padding:8px;">' + groupCheckboxes + '</div>' +
+          '<div style="margin-top:4px;display:flex;gap:8px;"><button id="sp-rpt-select-all" style="font-size:10px;border:none;background:none;color:#1976D2;cursor:pointer;text-decoration:underline;">Seleccionar todos</button><button id="sp-rpt-select-none" style="font-size:10px;border:none;background:none;color:#1976D2;cursor:pointer;text-decoration:underline;">Deseleccionar todos</button></div>' +
+          '</div>' +
+          '<div style="margin-bottom:12px;">' +
+          '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">Periodo:</label>' +
+          '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
+          '<label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px;"><input type="radio" name="sp-rpt-mode" value="month" checked> Por mes</label>' +
+          '<label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px;"><input type="radio" name="sp-rpt-mode" value="range"> Por rango</label>' +
+          '</div>' +
+          '<div id="sp-rpt-month-section" style="display:flex;gap:8px;">' +
+          '<select id="sp-rpt-month" style="flex:1;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px;">' + monthOpts + '</select>' +
+          '<select id="sp-rpt-year" style="width:80px;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px;">' + yearOpts + '</select>' +
+          '</div>' +
+          '<div id="sp-rpt-range-section" style="display:none;">' +
+          '<div style="display:flex;gap:8px;align-items:center;">' +
+          '<input id="sp-rpt-from" type="date" style="flex:1;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px;">' +
+          '<span style="font-size:12px;color:#888;">a</span>' +
+          '<input id="sp-rpt-to" type="date" style="flex:1;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px;">' +
+          '</div>' +
+          '<div id="sp-rpt-range-error" style="color:#D94040;font-size:11px;margin-top:4px;display:none;"></div>' +
+          '</div>' +
+          '</div>' +
+          '<div id="sp-rpt-progress" style="display:none;margin-bottom:12px;padding:8px;background:#f5f5f5;border-radius:6px;font-size:12px;color:#555;text-align:center;"></div>' +
+          '<div style="display:flex;gap:8px;">' +
+          '<button id="sp-rpt-generate" style="flex:1;padding:10px;border:none;border-radius:6px;background:#1565C0;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">📥 Generar CSV</button>' +
+          '<button id="sp-rpt-cancel" style="padding:10px 16px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Cancelar</button>' +
+          '</div>',
+        options: { maxWidth: "480px" }
+      });
+      var overlay = m.overlay;
+
+      // Toggle month/range
+      overlay.querySelectorAll('[name="sp-rpt-mode"]').forEach(function (radio) {
+        radio.addEventListener("change", function () {
+          document.getElementById("sp-rpt-month-section").style.display = radio.value === "month" ? "flex" : "none";
+          document.getElementById("sp-rpt-range-section").style.display = radio.value === "range" ? "block" : "none";
+        });
+      });
+
+      // Select all/none
+      document.getElementById("sp-rpt-select-all").addEventListener("click", function () {
+        overlay.querySelectorAll('#sp-rpt-groups input[type="checkbox"]').forEach(function (cb) { cb.checked = true; });
+      });
+      document.getElementById("sp-rpt-select-none").addEventListener("click", function () {
+        overlay.querySelectorAll('#sp-rpt-groups input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
+      });
+
+      // Cancel
+      document.getElementById("sp-rpt-cancel").addEventListener("click", function () { m.close(); });
+
+      // Generate
+      document.getElementById("sp-rpt-generate").addEventListener("click", async function () {
+        var genBtn = document.getElementById("sp-rpt-generate");
+        var progressDiv = document.getElementById("sp-rpt-progress");
+
+        // Get selected groups
+        var selectedGroups = [];
+        overlay.querySelectorAll('#sp-rpt-groups input[type="checkbox"]:checked').forEach(function (cb) {
+          var gId = parseInt(cb.value);
+          var gName = groupOptions.find(function (g) { return g.id === gId; })?.name || ("Grupo " + gId);
+          selectedGroups.push({ id: gId, name: gName });
+        });
+        if (!selectedGroups.length) { showErrorToast("Selecciona al menos un grupo"); return; }
+
+        // Get date range
+        var fromDate, toDate;
+        var mode = overlay.querySelector('[name="sp-rpt-mode"]:checked').value;
+        if (mode === "month") {
+          var month = parseInt(document.getElementById("sp-rpt-month").value);
+          var year = parseInt(document.getElementById("sp-rpt-year").value);
+          var lastDay = new Date(year, month + 1, 0).getDate();
+          fromDate = year + "-" + String(month + 1).padStart(2, "0") + "-01T00:00";
+          toDate = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(lastDay).padStart(2, "0") + "T23:59";
+        } else {
+          var fromVal = document.getElementById("sp-rpt-from").value;
+          var toVal = document.getElementById("sp-rpt-to").value;
+          var rangeError = document.getElementById("sp-rpt-range-error");
+          if (!fromVal || !toVal) { rangeError.textContent = "Selecciona ambas fechas"; rangeError.style.display = "block"; return; }
+          if (fromVal > toVal) { rangeError.textContent = "La fecha inicio no puede ser mayor a la fecha fin"; rangeError.style.display = "block"; return; }
+          rangeError.style.display = "none";
+          fromDate = fromVal + "T00:00";
+          toDate = toVal + "T23:59";
+        }
+
+        // Close modal, block button, show loader
+        m.close();
+        var reportBtn = document.getElementById(REPORT_BTN_ID);
+        if (reportBtn) { reportBtn.disabled = true; reportBtn.style.opacity = "0.5"; }
+
+        // Inject loader CSS if not present
+        if (!document.getElementById("sp-rpt-loader-style")) {
+          var loaderStyle = document.createElement("style");
+          loaderStyle.id = "sp-rpt-loader-style";
+          loaderStyle.textContent = ".sp-rpt-loader{position:fixed;bottom:20px;z-index:99999;transform:scale(0.6);padding:16px 20px;border-radius:10px;animation:spTruckDrive 15s ease-in-out infinite;}.sp-rpt-loader .loader{display:block;position:relative;width:130px;height:100px;background-repeat:no-repeat;background-image:linear-gradient(#0277bd,#0277bd),linear-gradient(#29b6f6,#4fc3f7),linear-gradient(#29b6f6,#4fc3f7);background-size:80px 70px,30px 50px,30px 30px;background-position:0 0,80px 20px,100px 40px;}.sp-rpt-loader .loader:after{content:\"\";position:absolute;bottom:10px;left:12px;width:10px;height:10px;background:#fff;border-radius:50%;box-sizing:content-box;border:10px solid #000;box-shadow:78px 0 0 -10px #fff,78px 0 #000;animation:wheelSk 0.75s ease-in infinite alternate;}.sp-rpt-loader .loader:before{content:\"\";position:absolute;right:100%;top:0px;height:70px;width:70px;background-image:linear-gradient(#fff 45px,transparent 0),linear-gradient(#fff 45px,transparent 0),linear-gradient(#fff 45px,transparent 0);background-repeat:no-repeat;background-size:30px 4px;background-position:0px 11px,8px 35px,0px 60px;animation:lineDropping 0.75s linear infinite;}@keyframes wheelSk{0%,50%,100%{transform:translatey(0)}30%,90%{transform:translatey(-3px)}}@keyframes lineDropping{0%{background-position:100px 11px,115px 35px,105px 60px;opacity:1}50%{background-position:0px 11px,20px 35px,5px 60px}60%{background-position:-30px 11px,0px 35px,-10px 60px}75%,100%{background-position:-30px 11px,-30px 35px,-30px 60px;opacity:0}}@keyframes spTruckDrive{0%{left:20px;transform:scale(0.6) scaleX(1);}45%{left:calc(100vw - 200px);transform:scale(0.6) scaleX(1);}50%{left:calc(100vw - 200px);transform:scale(0.6) scaleX(-1);}95%{left:20px;transform:scale(0.6) scaleX(-1);}100%{left:20px;transform:scale(0.6) scaleX(1);}}";
+          document.head.appendChild(loaderStyle);
+        }
+
+        // Show loader
+        var loaderDiv = document.createElement("div");
+        loaderDiv.id = "sp-rpt-loader";
+        loaderDiv.className = "sp-rpt-loader";
+        loaderDiv.innerHTML = '<span class="loader"></span>';
+        document.body.appendChild(loaderDiv);
+
+        var spToken = getToken();
+        if (!spToken) { showErrorToast("No hay token"); loaderDiv.remove(); if (reportBtn) { reportBtn.disabled = false; reportBtn.style.opacity = "1"; } return; }
+
+        try {
+          var allTickets = [];
+
+          for (var i = 0; i < selectedGroups.length; i++) {
+            var group = selectedGroups[i];
+
+            var page = 0;
+            var hasMore = true;
+            while (hasMore) {
+              var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + group.id + "&page=" + page + "&size=100&initDate=" + encodeURIComponent(fromDate) + "&endDate=" + encodeURIComponent(toDate);
+              var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+              if (!res.ok) throw new Error("HTTP " + res.status + " en grupo " + group.name);
+              var json = await res.json();
+              var data = json.data || json;
+              var tickets = data.content || [];
+              tickets.forEach(function (t) { t._groupName = group.name; });
+              allTickets = allTickets.concat(tickets);
+              hasMore = tickets.length === 100;
+              page++;
+            }
+          }
+
+          if (!allTickets.length) {
+            showErrorToast("No se encontraron tickets en el rango seleccionado.");
+            loaderDiv.remove();
+            if (reportBtn) { reportBtn.disabled = false; reportBtn.style.opacity = "1"; }
+            return;
+          }
+
+          // Build CSV
+          var headers = ["Folio", "Asunto", "Grupo", "Solicitante", "Responsable", "Estado", "Prioridad", "Tipo", "Canal", "Fecha Creacion", "Fecha Actualizacion"];
+          var csvRows = [headers.join(",")];
+
+          allTickets.forEach(function (t) {
+            var row = [
+              '"' + (t.uniqueCode || "").replace(/"/g, '""') + '"',
+              '"' + (t.subject || "").replace(/"/g, '""') + '"',
+              '"' + (t._groupName || "").replace(/"/g, '""') + '"',
+              '"' + (t.requesterName || t.ticketInfo?.fullName || "").replace(/"/g, '""') + '"',
+              '"' + (t.responsibleName || "").replace(/"/g, '""') + '"',
+              '"' + (t.ticketStatusName || "").replace(/"/g, '""') + '"',
+              '"' + (t.incidentPriorityName || "").replace(/"/g, '""') + '"',
+              '"' + (t.reportTypeName || "").replace(/"/g, '""') + '"',
+              '"' + (t.attentionChannelName || "").replace(/"/g, '""') + '"',
+              '"' + (t.createdAt ? t.createdAt.replace("T", " ").substring(0, 16) : "") + '"',
+              '"' + (t.updatedAt ? t.updatedAt.replace("T", " ").substring(0, 16) : "") + '"'
+            ];
+            csvRows.push(row.join(","));
+          });
+
+          var csvContent = "\uFEFF" + csvRows.join("\n");
+          var blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+          var downloadUrl = URL.createObjectURL(blob);
+          var a = document.createElement("a");
+          a.href = downloadUrl;
+          a.download = "Reporte_SP_" + fromDate.substring(0, 10) + "_a_" + toDate.substring(0, 10) + ".csv";
+          a.click();
+          URL.revokeObjectURL(downloadUrl);
+
+          showSuccessToast("📥 CSV listo: " + allTickets.length + " tickets de " + selectedGroups.length + " grupo(s)");
+
+        } catch (err) {
+          showErrorToast("Error: " + err.message);
+        }
+
+        loaderDiv.remove();
+        if (reportBtn) { reportBtn.disabled = false; reportBtn.style.opacity = "1"; }
+      });
     }
 
     var sheetJSLoaded = false;
@@ -6577,10 +6896,26 @@
 
           // Toggle "Ticket realizado" extras
           takeDoneCheck.addEventListener("change", function () {
-            takeExtraDiv.style.display = takeDoneCheck.checked ? "block" : "none";
-            if (takeDoneCheck.checked) {
-              var takeCloseCommentEl = document.getElementById("sp-qd-take-close-comment");
-              if (takeCloseCommentEl) setTimeout(function () { takeCloseCommentEl.focus(); }, 50);
+            if (takeDoneCheck.checked && !isWithinWorkHours()) {
+              // Outside work hours - show warning instead of close form
+              takeExtraDiv.style.display = "none";
+              var existingWarning = document.getElementById("sp-qd-take-hours-warning");
+              if (!existingWarning) {
+                existingWarning = document.createElement("div");
+                existingWarning.id = "sp-qd-take-hours-warning";
+                existingWarning.style.cssText = "margin-top:8px;padding:10px 14px;background:rgba(255,152,0,0.15);border:1px solid #FF8F00;border-radius:8px;font-size:12px;color:#E65100;";
+                existingWarning.innerHTML = '<b>⚠️ Fuera de horario laboral</b><br>El ticket se tomará pero el cierre quedará pendiente hasta que estés dentro del horario (' + _workSchedule.horaEntrada + ':00 - ' + _workSchedule.horaSalida + ':00, ' + _workSchedule.diaInicio + ' a ' + _workSchedule.diaFinal + ').';
+                takeDoneCheck.closest("label").parentElement.appendChild(existingWarning);
+              }
+            } else {
+              // Within work hours or unchecked - normal behavior
+              var warning = document.getElementById("sp-qd-take-hours-warning");
+              if (warning) warning.remove();
+              takeExtraDiv.style.display = takeDoneCheck.checked ? "block" : "none";
+              if (takeDoneCheck.checked) {
+                var takeCloseCommentEl = document.getElementById("sp-qd-take-close-comment");
+                if (takeCloseCommentEl) setTimeout(function () { takeCloseCommentEl.focus(); }, 50);
+              }
             }
           });
 
@@ -6770,6 +7105,25 @@
                 }
 
                 if (takeDoneCheck.checked) {
+                  // Check work hours before closing
+                  if (!isWithinWorkHours()) {
+                    // Save as pending close - ticket was taken but can't close now
+                    try {
+                      var storedPending = await new Promise(function (r) { chrome.storage.local.get(["notionUsers", "userEmail"], function (d) { r(d); }); });
+                      var pendingEmail = (storedPending.userEmail || "").toLowerCase();
+                      var pendingUsers = storedPending.notionUsers || {};
+                      var pendingUserPageId = pendingEmail && pendingUsers[pendingEmail] ? pendingUsers[pendingEmail].notionPageId : "";
+                      if (pendingUserPageId) {
+                        await saveTicketPendingClose(t.uniqueCode || ("T" + ticketId), ticketId, pendingUserPageId);
+                      }
+                    } catch (e) { }
+                    showSuccessToast("Ticket tomado. Cierre pendiente (fuera de horario).");
+                    updateMondayStatus(ticketId, t.uniqueCode, "Asignado");
+                    chrome.storage.local.get("userEmail", function (r) { if (r.userEmail) updateMondayPerson(ticketId, t.uniqueCode, r.userEmail); });
+                    overlay.remove();
+                    showQuickDetailModal(ticketId);
+                    return;
+                  }
                   var closeComment = document.getElementById("sp-qd-take-close-comment").value.trim();
                   if (closeComment || takeCloseFiles.length > 0) {
                     var closeCommentRes = await fetch(SP_API + "/comment/" + ticketId, {
@@ -6803,6 +7157,7 @@
                   });
                   var selectedGroup = takeGroupSelect ? takeGroupSelect.value : "";
                   showSuccessToast("Ticket tomado y cerrado");
+                  removeTicketPendingClose(ticketId);
                   updateMondayStatus(ticketId, t.uniqueCode, "Cerrado");
                 } else {
                   showSuccessToast("Ticket tomado");
@@ -6874,7 +7229,34 @@
             });
           }
 
-          closeActionBtn.addEventListener("click", function () {
+          closeActionBtn.addEventListener("click", async function () {
+            // Check if within work hours
+            if (!isWithinWorkHours()) {
+              // Outside work hours - save to Notion and show warning
+              closeForm.style.display = "none";
+              var warningDiv = document.getElementById("sp-qd-outside-hours-warning");
+              if (warningDiv) { warningDiv.remove(); }
+              warningDiv = document.createElement("div");
+              warningDiv.id = "sp-qd-outside-hours-warning";
+              warningDiv.style.cssText = "margin-top:8px;padding:10px 14px;background:rgba(255,152,0,0.15);border:1px solid #FF8F00;border-radius:8px;font-size:12px;color:#E65100;";
+              warningDiv.innerHTML = '<b>⚠️ Fuera de horario laboral</b><br>El cierre se registrará como pendiente. Podrás cerrar este ticket cuando estés dentro del horario (' + _workSchedule.horaEntrada + ':00 - ' + _workSchedule.horaSalida + ':00, ' + _workSchedule.diaInicio + ' a ' + _workSchedule.diaFinal + ').<br><span id="sp-qd-saving-pending" style="color:#888;margin-top:4px;display:inline-block;">Guardando...</span>';
+              closeActionBtn.parentElement.appendChild(warningDiv);
+              // Save to Notion
+              try {
+                var userPageId = "";
+                var storedData = await new Promise(function (r) { chrome.storage.local.get(["notionUsers", "userEmail"], function (d) { r(d); }); });
+                var email = (storedData.userEmail || "").toLowerCase();
+                var users = storedData.notionUsers || {};
+                if (email && users[email]) userPageId = users[email].notionPageId || "";
+                if (!userPageId) throw new Error("No se encontró el usuario en Notion");
+                await saveTicketPendingClose(t.uniqueCode || ("T" + ticketId), ticketId, userPageId);
+                document.getElementById("sp-qd-saving-pending").innerHTML = '✅ Registrado como pendiente. Se cerrará en horario laboral.';
+              } catch (err) {
+                document.getElementById("sp-qd-saving-pending").innerHTML = '❌ Error: ' + err.message;
+              }
+              return;
+            }
+            // Within work hours - show close form normally
             closeForm.style.display = closeForm.style.display === "none" ? "block" : "none";
             // Hide bottom comment section when close form is shown
             var bottomComment = document.getElementById("sp-qd-comment-section");
@@ -6999,6 +7381,7 @@
                 if (!closeRes.ok) throw new Error("HTTP " + closeRes.status);
                 // Migrate if selected
                 showSuccessToast("Ticket cerrado");
+                removeTicketPendingClose(ticketId);
                 updateMondayStatus(ticketId, t.uniqueCode, "Cerrado");
                 overlay.remove();
                 showQuickDetailModal(ticketId);
@@ -8069,6 +8452,10 @@
       ensureSyncStarted().then(() => injectButtons());
       if (activeModalRefresh) activeModalRefresh();
       refreshTeamPanel();
+      // Refresh work schedule from storage
+      chrome.storage.local.get("workSchedule", function (r) {
+        if (r.workSchedule) _workSchedule = r.workSchedule;
+      });
     });
 
     // --- Auto-refresh team panel every 60 seconds ---
@@ -8083,6 +8470,8 @@
     if (document.visibilityState === "visible") {
       try {
         chrome.runtime.sendMessage({ type: "sync-notion" }, function () {
+          // Refresh work schedule
+          chrome.storage.local.get("workSchedule", function (ws) { if (ws.workSchedule) _workSchedule = ws.workSchedule; });
           // Refresh suggested comments chips if modal is open
           var suggestedDiv = document.getElementById("sp-qd-suggested");
           if (suggestedDiv) {

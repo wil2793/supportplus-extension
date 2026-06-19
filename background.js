@@ -220,9 +220,24 @@ async function syncNotionData() {
       }
     }
 
+    // 8. Get work schedule from MSP_Configuracion
+    const WORK_SCHEDULE_DB = "38420e0684b9808492a6f7d0d43cf1d1";
+    var workSchedule = { horaEntrada: 9, horaSalida: 19, diaInicio: "Lunes", diaFinal: "Viernes" };
+    try {
+      const scheduleRaw = await notionQueryAll(WORK_SCHEDULE_DB);
+      for (const row of scheduleRaw) {
+        const name = (row.properties.Nombre?.title?.[0]?.plain_text || "").trim();
+        const value = (row.properties.Valor?.rich_text?.[0]?.plain_text || "").trim();
+        if (name === "HorarioEntrada") workSchedule.horaEntrada = parseInt(value) || 9;
+        if (name === "HorarioSalida") workSchedule.horaSalida = parseInt(value) || 19;
+        if (name === "DiaInicio") workSchedule.diaInicio = value || "Lunes";
+        if (name === "DiaFinal") workSchedule.diaFinal = value || "Viernes";
+      }
+    } catch (e) { console.log("[SP Background] Work schedule error:", e.message); }
+
     // Save to storage
-    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, groupNames: groupNamesMap, groupMondayConfig, suggestedComments, mondayToken: mondayTokenFromNotion, latestVersion, latestZipUrl, allVersions, userConfig, notionSyncTime: Date.now() });
-    console.log("[SP Background] Notion synced:", Object.keys(usersMap).length, "users,", rolesList.length, "roles,", commentsRaw.length, "comments, monday token:", mondayTokenFromNotion ? "OK (user)" : "NOT SET", "latest version:", latestVersion, "versions:", allVersions.length);
+    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, groupNames: groupNamesMap, groupMondayConfig, suggestedComments, mondayToken: mondayTokenFromNotion, latestVersion, latestZipUrl, allVersions, userConfig, workSchedule, notionSyncTime: Date.now() });
+    console.log("[SP Background] Notion synced:", Object.keys(usersMap).length, "users,", rolesList.length, "roles,", commentsRaw.length, "comments, monday token:", mondayTokenFromNotion ? "OK (user)" : "NOT SET", "latest version:", latestVersion, "versions:", allVersions.length, "schedule:", workSchedule);
   } catch (e) {
     console.error("[SP Background] Notion sync error:", e);
   }
