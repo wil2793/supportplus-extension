@@ -156,12 +156,20 @@
     var btn = e && e.target ? e.target : null;
     if (btn) { btn.textContent = "⏳ Descargando..."; btn.disabled = true; }
 
+    // Extract filename from URL if possible, otherwise use default
+    var fileName = "v" + version + ".zip";
+    try {
+      var urlPath = new URL(url).pathname;
+      var urlFileName = urlPath.split("/").pop();
+      if (urlFileName && urlFileName.endsWith(".zip")) fileName = urlFileName;
+    } catch (e) { /* use default */ }
+
     window.SP_API_Lib.proxyFetch(url)
       .then(function (byteArray) {
         var blob = new Blob([byteArray], { type: "application/zip" });
         var a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = "supportplus-v" + version + ".zip";
+        a.download = fileName;
         a.click();
         URL.revokeObjectURL(a.href);
         if (btn) btn.textContent = "✅ Descargado";
@@ -170,7 +178,7 @@
         // Fallback: direct link
         var a = document.createElement("a");
         a.href = url;
-        a.download = "supportplus-v" + version + ".zip";
+        a.download = fileName;
         a.target = "_blank";
         a.click();
         if (btn) {

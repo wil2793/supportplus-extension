@@ -184,6 +184,9 @@
   function initExtension() {
     _showQuickDetailModal = showQuickDetailModal;
 
+    // Bridge: downloadZip from header-buttons.js
+    var downloadZip = window.SP_Header.downloadZip;
+
     // Header buttons: inject local buttons once wrapper is available
     SP_DOM.waitForElement('[class*="warapperNameUserAndLogout"]', { maxAttempts: 20, interval: 150 })
       .then(function () {
