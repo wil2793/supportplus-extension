@@ -156,20 +156,20 @@
     const btn = e && e.target ? e.target : null;
     if (btn) { btn.textContent = "⏳ Descargando..."; btn.disabled = true; }
 
-    // Extract filename from URL if possible, otherwise use default
-    const fileName = "v" + version + ".zip";
+    // Determine filename: try to extract from URL, fallback to version-based name
+    const _fnRef = { name: "v" + (version || "update") + ".zip" };
     try {
       const urlPath = new URL(url).pathname;
       const urlFileName = urlPath.split("/").pop();
-      if (urlFileName && urlFileName.endsWith(".zip")) fileName = urlFileName;
-    } catch (e) { /* use default */ }
+      if (urlFileName && urlFileName.endsWith(".zip")) _fnRef.name = urlFileName;
+    } catch (ex) { /* use default */ }
 
     window.SP_API_Lib.proxyFetch(url)
       .then(function (byteArray) {
         const blob = new Blob([byteArray], { type: "application/zip" });
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = fileName;
+        a.download = _fnRef.name;
         a.click();
         URL.revokeObjectURL(a.href);
         if (btn) btn.textContent = "✅ Descargado";
@@ -178,7 +178,7 @@
         // Fallback: direct link
         const a = document.createElement("a");
         a.href = url;
-        a.download = fileName;
+        a.download = _fnRef.name;
         a.target = "_blank";
         a.click();
         if (btn) {
