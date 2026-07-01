@@ -35,7 +35,7 @@
     const container = document.createElement("div");
     container.id = id;
     container.className = "sp-tag-filter";
-    let selectedIds = [];
+    const _filterState = { ids: [] };
 
     function render() {
       container.innerHTML = "";
@@ -46,7 +46,7 @@
         tag.className = "sp-tag-filter-tag";
         tag.innerHTML = esc(item.name) + ' <span class="sp-tag-remove" data-remove="' + sid + '">✕</span>';
         tag.querySelector("[data-remove]").addEventListener("click", function () {
-          selectedIds = selectedIds.filter(function (s) { return s !== sid; });
+          _filterState.ids = _filterState.ids.filter(function (s) { return s !== sid; });
           render();
           onChangeCallback(selectedIds);
         });
@@ -55,7 +55,7 @@
 
       const input = document.createElement("input");
       input.type = "text";
-      input.placeholder = selectedIds.length ? "+ Agregar..." : "🔍 Filtrar grupos...";
+      input.placeholder = _filterState.ids.length ? "+ Agregar..." : "🔍 Filtrar grupos...";
       input.className = "sp-tag-filter-input";
 
       const dropdown = document.createElement("div");
@@ -64,7 +64,7 @@
       function showDropdown() {
         const query = input.value.toLowerCase();
         const available = items.filter(function (i) {
-          return !selectedIds.includes(String(i.id)) && i.name.toLowerCase().includes(query);
+          return !_filterState.ids.includes(String(i.id)) && i.name.toLowerCase().includes(query);
         });
         if (!available.length || !query) { dropdown.style.display = "none"; return; }
         dropdown.innerHTML = "";
@@ -74,7 +74,7 @@
           opt.textContent = item.name;
           opt.addEventListener("mousedown", function (e) {
             e.preventDefault();
-            selectedIds.push(String(item.id));
+            _filterState.ids.push(String(item.id));
             input.value = "";
             render();
             onChangeCallback(selectedIds);
@@ -93,7 +93,7 @@
     }
 
     render();
-    return { element: container, getSelected: function () { return selectedIds; } };
+    return { element: container, getSelected: function () { return _filterState.ids; } };
   }
 
   // ─── Update Ticket List (smooth diff) ─────────────────────
@@ -112,7 +112,7 @@
 
   // ─── Render Group Detail (columns per analyst) ────────────
   function renderGroupDetail(groupId, container, profiles, spToken, canDrag) {
-    let _lastDropTime = 0;
+    const _dropRefs = { lastTime: 0 };
 
     // "Sin asignar" column
     const unassignedCol = document.createElement("div");
@@ -133,12 +133,12 @@
     });
 
     // Click on ticket opens modal (not while dragging)
-    let isDragging = false;
-    container.addEventListener("mousedown", function () { isDragging = false; });
-    container.addEventListener("mousemove", function (e) { if (e.buttons) isDragging = true; });
+    const _dragState = { dragging: false };
+    container.addEventListener("mousedown", function () { _dragState.dragging = false; });
+    container.addEventListener("mousemove", function (e) { if (e.buttons) _dragState.dragging = true; });
     container.addEventListener("click", function (e) {
-      if (isDragging) return;
-      if (Date.now() - _lastDropTime < 1500) return;
+      if (_dragState.dragging) return;
+      if (Date.now() - _dropRefs.lastTime < 1500) return;
       const ticket = e.target.closest(".sp-mgr-ticket");
       if (!ticket) return;
       const ticketId = ticket.dataset.ticketId;
@@ -199,7 +199,7 @@
         // Optimistic UI: move immediately
         const srcZoneRef = src ? src.closest(".sp-mgr-ptickets") : null;
         const targetZone = container.querySelector('.sp-mgr-ptickets[data-profile-id="' + targetProfileId + '"]');
-        _lastDropTime = Date.now();
+        _dropRefs.lastTime = Date.now();
 
         if (src && targetZone) {
           // Remove "Sin tickets" placeholder from target
@@ -363,8 +363,8 @@
     fetch(SP_API_BASE + "/active-profiles-by-resolution-group/" + groupId, {
       headers: { accept: "application/json", authorization: "Bearer " + spToken }
     }).then(function (r) { return r.json(); }).then(function (json) {
-      let profiles = json.data || json;
-      if (!Array.isArray(profiles)) {
+      const ctx = { profiles: json.data || json };
+      if (!Array.isArray(ctx.profiles)) {
         container.innerHTML = '<div style="color:#888;font-size:11px;">Sin miembros</div>';
         return;
       }
@@ -382,9 +382,9 @@
         })).then(function (blacklistedIds) {
           blacklistedIds = blacklistedIds.filter(Boolean);
           if (blacklistedIds.length > 0) {
-            profiles = profiles.filter(function (p) { return !blacklistedIds.includes(p.profileId); });
+            ctx.profiles = ctx.profiles.filter(function (p) { return !blacklistedIds.includes(p.profileId); });
           }
-          renderGroupDetail(groupId, container, profiles, spToken, canDrag);
+          renderGroupDetail(groupId, container, ctx.profiles, spToken, canDrag);
         });
       } else {
         renderGroupDetail(groupId, container, profiles, spToken, canDrag);
@@ -544,43 +544,43 @@
     const groups = SP_Session.state.groups;
     if (!groups || !groups.length) return;
     const canDrag = SP_Session.state.canDragDrop;
-    let mgrLoading = false;
+    const _mgrState = { loading: false, attempts: 0, debounceTimer: null };
 
     function tryInject() {
-      if (mgrLoading) return;
+      if (_mgrState.loading) return;
       if (!window.location.pathname.includes("/dashboard/tickets-mesa")) return;
       const grid = document.querySelector(".MuiDataGrid-root");
       if (!grid) return;
       if (document.getElementById("sp-manager-panel")) return;
-      mgrLoading = true;
+      _mgrState.loading = true;
       loadManagerPanel(grid, groups, canDrag);
     }
 
     // Initial inject with retry
-    let attempts = 0;
+    
     const interval = setInterval(function () {
       if (!window.location.pathname.includes("/dashboard/tickets-mesa")) {
-        attempts++;
-        if (attempts > 40) clearInterval(interval);
+        _mgrState.attempts++;
+        if (_mgrState.attempts > 40) clearInterval(interval);
         return;
       }
       const grid = document.querySelector(".MuiDataGrid-root");
-      if (!grid && attempts < 40) { attempts++; return; }
+      if (!grid && _mgrState.attempts < 40) { _mgrState.attempts++; return; }
       clearInterval(interval);
       if (!grid) return;
       if (document.getElementById("sp-manager-panel")) return;
-      mgrLoading = true;
+      _mgrState.loading = true;
       loadManagerPanel(grid, groups, canDrag);
     }, 500);
 
     // Observer for SPA re-navigation
-    let mgrDebounceTimer = null;
+    
     const mgrObserver = new MutationObserver(function () {
-      if (mgrDebounceTimer) clearTimeout(mgrDebounceTimer);
-      mgrDebounceTimer = setTimeout(function () {
+      if (_mgrState.debounceTimer) clearTimeout(_mgrState.debounceTimer);
+      _mgrState.debounceTimer = setTimeout(function () {
         if (!window.location.pathname.includes("/dashboard/tickets-mesa")) {
           const existing = document.getElementById("sp-manager-panel");
-          if (existing) { existing.remove(); mgrLoading = false; }
+          if (existing) { existing.remove(); _mgrState.loading = false; }
           return;
         }
         tryInject();

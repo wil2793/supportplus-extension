@@ -10,7 +10,7 @@
 
   const REPORT_BTN_ID = "sp-report-btn";
   const MONDAY_STATS_BTN_ID = "sp-monday-stats-btn";
-  let reportGenerating = false;
+  const _reportState = { generating: false };
 
   // ─── Inject Report Button ─────────────────────────────────
 
@@ -27,7 +27,7 @@
   // ─── Report Modal ─────────────────────────────────────────
 
   async function handleReportClick() {
-    if (reportGenerating) return;
+    if (_reportState.generating) return;
 
     const stored = await SP_Storage.getMultiple(["notionUsers", "userEmail", "groupNames"]);
     const email = (stored.userEmail || "").toLowerCase();
@@ -50,10 +50,11 @@
     const monthOpts = SP_CONFIG.MONTH_NAMES.map(function (m, i) {
       return '<option value="' + i + '"' + (i === currentMonth ? ' selected' : '') + '>' + m + '</option>';
     }).join("");
-    let yearOpts = '';
+    const yearOptParts = [];
     for (var y = currentYear; y >= currentYear - 3; y--) {
-      yearOpts += '<option value="' + y + '"' + (y === currentYear ? ' selected' : '') + '>' + y + '</option>';
+      yearOptParts.push('<option value="' + y + '"' + (y === currentYear ? ' selected' : '') + '>' + y + '</option>');
     }
+    const yearOpts = yearOptParts.join("");
 
     const groupCheckboxes = groupOptions.map(function (g) {
       return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;font-size:12px;">' +
@@ -121,14 +122,14 @@
       });
       if (!selectedGroups.length) { window.showErrorToast("Selecciona al menos un grupo"); return; }
 
-      let fromDate, toDate;
+      const range = { from: "", to: "" };
       const mode = overlay.querySelector('[name="sp-rpt-mode"]:checked').value;
       if (mode === "month") {
         const month = parseInt(document.getElementById("sp-rpt-month").value);
         const year = parseInt(document.getElementById("sp-rpt-year").value);
         const lastDay = new Date(year, month + 1, 0).getDate();
-        fromDate = year + "-" + String(month + 1).padStart(2, "0") + "-01T00:00";
-        toDate = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(lastDay).padStart(2, "0") + "T23:59";
+        range.from = year + "-" + String(month + 1).padStart(2, "0") + "-01T00:00";
+        range.to = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(lastDay).padStart(2, "0") + "T23:59";
       } else {
         const fromVal = document.getElementById("sp-rpt-from").value;
         const toVal = document.getElementById("sp-rpt-to").value;
@@ -136,12 +137,12 @@
         if (!fromVal || !toVal) { rangeError.textContent = "Selecciona ambas fechas"; rangeError.style.display = "block"; return; }
         if (fromVal > toVal) { rangeError.textContent = "La fecha inicio no puede ser mayor a la fecha fin"; rangeError.style.display = "block"; return; }
         rangeError.style.display = "none";
-        fromDate = fromVal + "T00:00";
-        toDate = toVal + "T23:59";
+        range.from = fromVal + "T00:00";
+        range.to = toVal + "T23:59";
       }
 
       m.close();
-      reportGenerating = true;
+      _reportState.generating = true;
       const reportBtn = document.getElementById(REPORT_BTN_ID);
       if (reportBtn) { reportBtn.disabled = true; reportBtn.style.opacity = "0.5"; }
 
@@ -149,13 +150,12 @@
       const spToken = window.SP_API_Lib.getSpToken();
 
       try {
-        let allTickets = [];
+        const allTickets = [];
         for (var i = 0; i < selectedGroups.length; i++) {
           const group = selectedGroups[i];
-          let page = 0;
-          let hasMore = true;
-          while (hasMore) {
-            const url = SP_CONFIG.SP_SEARCH_API + "?resolutionGroupId=" + group.id + "&page=" + page + "&size=100&initDate=" + encodeURIComponent(fromDate) + "&endDate=" + encodeURIComponent(toDate);
+          const loop = { page: 0, hasMore: true };
+          while (loop.hasMore) {
+            const url = SP_CONFIG.SP_SEARCH_API + "?resolutionGroupId=" + group.id + "&page=" + loop.page + "&size=100&initDate=" + encodeURIComponent(range.from) + "&endDate=" + encodeURIComponent(range.to);
             const res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
             if (!res.ok) throw new Error("HTTP " + res.status + " en grupo " + group.name);
             const json = await res.json();
@@ -163,14 +163,14 @@
             const tickets = data.content || [];
             tickets.forEach(function (t) { t._groupName = group.name; });
             allTickets = allTickets.concat(tickets);
-            hasMore = tickets.length === 100;
-            page++;
+            loop.hasMore = tickets.length === 100;
+            loop.page++;
           }
         }
 
         if (!allTickets.length) {
           window.showErrorToast("No se encontraron tickets en el rango seleccionado.");
-          reportGenerating = false;
+          _reportState.generating = false;
           if (reportBtn) { reportBtn.disabled = false; reportBtn.style.opacity = "1"; }
           return;
         }
@@ -200,7 +200,7 @@
         const downloadUrl = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = downloadUrl;
-        a.download = "Reporte_SP_" + fromDate.substring(0, 10) + "_a_" + toDate.substring(0, 10) + ".csv";
+        a.download = "Reporte_SP_" + range.from.substring(0, 10) + "_a_" + range.to.substring(0, 10) + ".csv";
         a.click();
         URL.revokeObjectURL(downloadUrl);
 
@@ -209,7 +209,7 @@
         window.showErrorToast("Error: " + err.message);
       }
 
-      reportGenerating = false;
+      _reportState.generating = false;
       if (reportBtn) { reportBtn.disabled = false; reportBtn.style.opacity = "1"; }
     });
   }
@@ -245,23 +245,22 @@
       const boardId = await window.SP_API_Lib.getMondayBoardId();
       if (!mondayToken || !boardId) throw new Error("Configura Monday");
 
-      let allItems = [];
+      const allItems = [];
       const firstPage = await window.SP_API_Lib.mondayQuery(mondayToken,
         'query ($boardId: [ID!]!) { boards(ids: $boardId) { name items_page(limit: 500) { cursor items { id name column_values { id text value } } } } }',
         { boardId: boardId });
       const board = firstPage.boards[0];
       const boardName = board.name;
-      let page = board.items_page;
-      allItems = allItems.concat(page.items);
+      const pageData = { current: board.items_page, cursor: board.items_page.cursor };
+      allItems.push.apply(allItems, pageData.current.items);
 
-      let cursor = page.cursor;
-      while (cursor) {
+      while (pageData.cursor) {
         btn.textContent = "⏳ " + allItems.length + " items...";
         const next = await window.SP_API_Lib.mondayQuery(mondayToken,
           'query ($cursor: String!) { next_items_page(limit: 500, cursor: $cursor) { cursor items { id name column_values { id text value } } } }',
-          { cursor: cursor });
-        allItems = allItems.concat(next.next_items_page.items);
-        cursor = next.next_items_page.cursor;
+          { cursor: pageData.cursor });
+        allItems.push.apply(allItems, next.next_items_page.items);
+        pageData.cursor = next.next_items_page.cursor;
       }
 
       // Parse stats

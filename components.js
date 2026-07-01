@@ -18,10 +18,9 @@
 
   // ─── Deterministic color from string ──────────────────────
   window.stringToColor = function (str) {
-    let hash = 0;
-    for (var i = 0; i < str.length; i++) {
-      hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
+    const hash = Array.from(str).reduce(function (h, c) {
+      return c.charCodeAt(0) + ((h << 5) - h);
+    }, 0);
     const hue = Math.abs(hash) % 360;
     return {
       bg: "hsl(" + hue + ",35%,90%)",
@@ -175,9 +174,7 @@
    */
   window.spinnerHTML = function (size, text) {
     const s = size || 12;
-    let html = '<span class="sp-spinner" style="width:' + s + 'px;height:' + s + 'px;"></span>';
-    if (text) html += " " + text;
-    return html;
+    return '<span class="sp-spinner" style="width:' + s + 'px;height:' + s + 'px;"></span>' + (text ? " " + text : "");
   };
 
 })();

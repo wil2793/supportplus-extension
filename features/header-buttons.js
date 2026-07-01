@@ -81,11 +81,11 @@
   // Re-inject buttons when SPA navigation rebuilds the header
 
   function startHeaderObserver() {
-    let debounceTimer = null;
+    const _headerRefs = { timer: null };
 
     const observer = new MutationObserver(function () {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(function () {
+      if (_headerRefs.timer) clearTimeout(_headerRefs.timer);
+      _headerRefs.timer = setTimeout(function () {
         const wrapper = document.querySelector(HEADER_SELECTOR);
         if (!wrapper) return;
         // Check if our buttons are gone (SPA re-rendered the header)
@@ -211,25 +211,31 @@
   }
 
   function startRowColorObserver() {
-    const debounced = SP_DOM.debounce(colorRows, 100);
+    // Run immediately and on every DOM change near the grid
+    colorRows();
+
+    // Use a short debounce for the body-level observer
+    const debounced = SP_DOM.debounce(colorRows, 50);
     const observer = new MutationObserver(debounced);
     observer.observe(document.body, { childList: true, subtree: true });
-    colorRows();
+
+    // Also run on scroll events in the grid (virtual scroll recreates rows)
+    document.addEventListener("scroll", SP_DOM.throttle(colorRows, 300), true);
   }
 
   // ─── GROUP_INFO loader ────────────────────────────────────
-  let GROUP_INFO = window.SP_CONFIG.GROUP_INFO;
+  const _groupRefs = { info: window.SP_CONFIG.GROUP_INFO };
 
   function loadGroupInfo() {
     SP_Storage.get("groupNames").then(function (groupNames) {
       if (groupNames && Object.keys(groupNames).length > 0) {
-        GROUP_INFO = Object.keys(groupNames).map(function (id) {
+        _groupRefs.info = Object.keys(groupNames).map(function (id) {
           return { id: parseInt(id), name: groupNames[id] };
         });
-        window.SP_GroupInfo = GROUP_INFO;
+        window.SP_GroupInfo = _groupRefs.info;
       }
     }).catch(function () { });
-    window.SP_GroupInfo = GROUP_INFO;
+    window.SP_GroupInfo = _groupRefs.info;
   }
 
   // ─── Initialize ───────────────────────────────────────────
@@ -278,7 +284,7 @@
     injectButtons: injectButtons,
     checkVersion: checkVersion,
     downloadZip: downloadZip,
-    getGroupInfo: function () { return window.SP_GroupInfo || GROUP_INFO; }
+    getGroupInfo: function () { return window.SP_GroupInfo || _groupRefs.info; }
   };
 
 })();

@@ -107,7 +107,7 @@
       if (!res.ok) return "usuario";
 
       const data = await res.json();
-      let email = (data && data.user && data.user.email) ? data.user.email.toLowerCase() : "";
+      const email = (data && data.user && data.user.email) ? data.user.email.toLowerCase() : "";
       state.userName = (data && data.user && data.user.name) ? data.user.name : "";
       state.userEmail = email;
 
@@ -129,9 +129,9 @@
       if (stored.workSchedule) state.workSchedule = stored.workSchedule;
 
       const notionUsers = stored.notionUsers || {};
-      let userData = notionUsers[email];
+      const ctx = { userData: notionUsers[email] };
 
-      if (!userData) {
+      if (!ctx.userData) {
         // Check directly in Notion before creating
         try {
           const checkData = await notionQuery(SP_CONFIG.NOTION_USERS_DB, {
@@ -142,8 +142,8 @@
             // User exists but not in cache - re-sync
             await triggerNotionSync();
             const freshStored = await SP_Storage.get("notionUsers");
-            userData = (freshStored || {})[email];
-            if (!userData) return null;
+            ctx.userData = (freshStored || {})[email];
+            if (!ctx.userData) return null;
           } else {
             // Create user as inactive
             await notionCreate({
@@ -161,29 +161,29 @@
         }
       }
 
-      if (!userData.active) return "inactive";
+      if (!ctx.userData.active) return "inactive";
 
-      // Set state from userData
-      if (userData.profileId) state.profileId = userData.profileId;
-      state.notionPageId = userData.notionPageId;
+      // Set state from ctx.userData
+      if (ctx.userData.profileId) state.profileId = ctx.userData.profileId;
+      state.notionPageId = ctx.userData.notionPageId;
 
-      if (userData.groups && userData.groups.length > 0) {
-        state.groups = userData.groups;
-        if (!state.teamArea) state.teamArea = String(userData.groups[0]);
+      if (ctx.userData.groups && ctx.userData.groups.length > 0) {
+        state.groups = ctx.userData.groups;
+        if (!state.teamArea) state.teamArea = String(ctx.userData.groups[0]);
       }
 
       // Set permissions
-      state.canMigrateMonday = !!userData.canMigrate;
-      state.btnDashboard = userData.btnDashboard !== false;
-      state.btnComments = userData.btnComments !== false;
-      state.btnReports = userData.btnReports !== false;
-      state.btnReassignApp = !!userData.canReassignApp;
-      state.btnAddIAM = !!userData.canAddIAM;
-      state.canShowLabels = !!userData.canShowLabels;
-      state.canReopenTickets = !!userData.canReopenTickets;
-      state.canCommentClosed = !!userData.canCommentClosed;
-      state.canRejectTickets = !!userData.canRejectTickets;
-      state.canDragDrop = !!userData.canDragDrop;
+      state.canMigrateMonday = !!ctx.userData.canMigrate;
+      state.btnDashboard = ctx.userData.btnDashboard !== false;
+      state.btnComments = ctx.userData.btnComments !== false;
+      state.btnReports = ctx.userData.btnReports !== false;
+      state.btnReassignApp = !!ctx.userData.canReassignApp;
+      state.btnAddIAM = !!ctx.userData.canAddIAM;
+      state.canShowLabels = !!ctx.userData.canShowLabels;
+      state.canReopenTickets = !!ctx.userData.canReopenTickets;
+      state.canCommentClosed = !!ctx.userData.canCommentClosed;
+      state.canRejectTickets = !!ctx.userData.canRejectTickets;
+      state.canDragDrop = !!ctx.userData.canDragDrop;
 
       if (stored.userConfig) state.userConfig = stored.userConfig;
 
@@ -202,10 +202,10 @@
         }
       });
 
-      const role = (userData.roleName && userData.roleName.toLowerCase().includes("admin")) ? "admin" : "usuario";
+      const role = (ctx.userData.roleName && ctx.userData.roleName.toLowerCase().includes("admin")) ? "admin" : "usuario";
       state.userRole = role;
 
-      return { role: role, roleName: userData.roleName || "usuario", notionPageId: userData.notionPageId };
+      return { role: role, roleName: ctx.userData.roleName || "usuario", notionPageId: ctx.userData.notionPageId };
     } catch (e) {
       return { role: "usuario", roleName: "Usuario" };
     }

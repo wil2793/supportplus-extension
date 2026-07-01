@@ -7,7 +7,7 @@
   "use strict";
 
   const SP_SEARCH_API = "https://macropayapi.supportplus.mx/tickets/search-by-level-and-resolution-groups";
-  let _syncing = false;
+  const _state = { syncing: false };
 
   // Use shared API library
   const mondayQuery = window.SP_API_Lib.mondayQuery;
@@ -16,32 +16,31 @@
   const getSpToken = window.SP_API_Lib.getSpToken;
 
   const runSync = async function () {
-    if (_syncing) return;
-    _syncing = true;
+    if (_state.syncing) return;
+    _state.syncing = true;
 
     try {
       const spToken = getSpToken();
       const mondayToken = await getMondayToken();
-      if (!spToken || !mondayToken) { _syncing = false; return; }
+      if (!spToken || !mondayToken) { _state.syncing = false; return; }
 
       // Get logged user email - only sync tickets assigned to me
-      let userEmail = await SP_Storage.get("userEmail");
-      userEmail = (userEmail || "").toLowerCase();
-      if (!userEmail) { _syncing = false; return; }
+      const userEmail = ((await SP_Storage.get("userEmail")) || "").toLowerCase();
+      if (!userEmail) { _state.syncing = false; return; }
 
       const stored = await SP_Storage.get("groupMondayConfig");
       const config = stored || {};
       const gId = Object.keys(config)[0];
-      if (!gId || !config[gId]) { _syncing = false; return; }
+      if (!gId || !config[gId]) { _state.syncing = false; return; }
       const workspaceId = config[gId].workspaceId;
       const etiqueta = config[gId].etiqueta;
-      if (!workspaceId || !etiqueta) { _syncing = false; return; }
+      if (!workspaceId || !etiqueta) { _state.syncing = false; return; }
 
       // Fetch tickets from SP
       const res = await fetch(SP_SEARCH_API + "?page=0&size=50", {
         headers: { accept: "application/json", authorization: "Bearer " + spToken }
       });
-      if (!res.ok) { _syncing = false; return; }
+      if (!res.ok) { _state.syncing = false; return; }
       const json = await res.json();
       const allTickets = (json.data || json).content || [];
 
@@ -49,17 +48,16 @@
       const tickets = allTickets.filter(function (t) {
         return (t.responsibleEmail || "").toLowerCase() === userEmail;
       });
-      if (!tickets.length) { _syncing = false; return; }
+      if (!tickets.length) { _state.syncing = false; return; }
 
       // Get boards in workspace matching etiqueta
       const boardsRes = await mondayQuery(mondayToken, "{ boards(workspace_ids: [" + workspaceId + "], limit: 50) { id name } }", {});
       const ticketBoards = (boardsRes.boards || []).filter(function (b) {
         return b.name.includes(etiqueta) && !b.name.includes("Subelementos");
       });
-      if (!ticketBoards.length) { _syncing = false; return; }
+      if (!ticketBoards.length) { _state.syncing = false; return; }
 
-      let mondayUsers = null;
-      let synced = 0;
+      const syncCtx = { mondayUsers: null, synced: 0 };
       const TICKET_COL_ID = window.SP_CONFIG.MONDAY_TICKET_COL_ID;
 
       for (var i = 0; i < tickets.length; i++) {
@@ -68,8 +66,7 @@
         if (!uniqueCode) continue;
 
         // Find the ticket in Monday boards
-        let mondayItemId = null;
-        let foundBoardId = null;
+        const find = { itemId: null, boardId: null };
         for (var j = 0; j < ticketBoards.length; j++) {
           try {
             const itemRes = await mondayQuery(
@@ -79,13 +76,13 @@
             );
             const items = (itemRes.items_page_by_column_values && itemRes.items_page_by_column_values.items) || [];
             if (items.length) {
-              mondayItemId = items[0].id;
-              foundBoardId = ticketBoards[j].id;
+              find.itemId = items[0].id;
+              find.boardId = ticketBoards[j].id;
               break;
             }
           } catch (e) { continue; }
         }
-        if (!mondayItemId) continue;
+        if (!find.itemId) continue;
 
         // Build column values to update
         const spStatus = (t.ticketStatusName || "").toLowerCase();
@@ -95,8 +92,8 @@
         // Update person
         const holderEmail = t.responsibleEmail || "";
         if (holderEmail) {
-          if (!mondayUsers) mondayUsers = await getMondayUsers(mondayToken);
-          const userId = mondayUsers[holderEmail.toLowerCase()];
+          if (!syncCtx.mondayUsers) syncCtx.mondayUsers = await getMondayUsers(mondayToken);
+          const userId = syncCtx.mondayUsers[holderEmail.toLowerCase()];
           if (userId) {
             colValues.multiple_person_mm25nvfq = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
           }
@@ -107,9 +104,9 @@
           await mondayQuery(
             mondayToken,
             'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }',
-            { boardId: foundBoardId, itemId: mondayItemId, columnValues: JSON.stringify(colValues) }
+            { boardId: find.boardId, itemId: find.itemId, columnValues: JSON.stringify(colValues) }
           );
-          synced++;
+          syncCtx.synced++;
         } catch (e) {
           // If rate limited, stop processing remaining tickets
           if (e.message && e.message.includes("rate")) {
@@ -119,13 +116,13 @@
         }
       }
 
-      if (synced > 0) {
+      if (syncCtx.synced > 0) {
         SP_Log.info("Monday Sync: Updated", synced, "tickets");
       }
     } catch (e) {
       SP_Log.warn("Monday Sync Error:", e.message);
     } finally {
-      _syncing = false;
+      _state.syncing = false;
     }
   };
 
