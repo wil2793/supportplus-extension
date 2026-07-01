@@ -5,22 +5,22 @@
 (function () {
   "use strict";
 
-  var esc = window.esc;
-  var SP_CONFIG = window.SP_CONFIG;
+  const esc = window.esc;
+  const SP_CONFIG = window.SP_CONFIG;
 
-  var REPORT_BTN_ID = "sp-report-btn";
-  var MONDAY_STATS_BTN_ID = "sp-monday-stats-btn";
-  var reportGenerating = false;
+  const REPORT_BTN_ID = "sp-report-btn";
+  const MONDAY_STATS_BTN_ID = "sp-monday-stats-btn";
+  let reportGenerating = false;
 
   // ─── Inject Report Button ─────────────────────────────────
 
   function injectReportButton() {
     if (!window.SP_Session.state.btnReports) return;
     if (document.getElementById(REPORT_BTN_ID)) return;
-    var refBtn = document.getElementById("sp-dashboard-btn") || document.getElementById("sp-search-btn");
+    const refBtn = document.getElementById("sp-dashboard-btn") || document.getElementById("sp-search-btn");
     if (!refBtn) return;
 
-    var btn = window.createHeaderButton({ id: REPORT_BTN_ID, icon: "📥", label: "Reporte Excel", color: "#1565C0", onClick: handleReportClick });
+    const btn = window.createHeaderButton({ id: REPORT_BTN_ID, icon: "📥", label: "Reporte Excel", color: "#1565C0", onClick: handleReportClick });
     refBtn.parentElement.insertBefore(btn, refBtn.nextSibling);
   }
 
@@ -29,38 +29,38 @@
   async function handleReportClick() {
     if (reportGenerating) return;
 
-    var stored = await SP_Storage.getMultiple(["notionUsers", "userEmail", "groupNames"]);
-    var email = (stored.userEmail || "").toLowerCase();
-    var users = stored.notionUsers || {};
-    var userData = users[email];
-    var userGroups = userData ? (userData.groups || []) : [];
-    var groupNamesMap = stored.groupNames || {};
+    const stored = await SP_Storage.getMultiple(["notionUsers", "userEmail", "groupNames"]);
+    const email = (stored.userEmail || "").toLowerCase();
+    const users = stored.notionUsers || {};
+    const userData = users[email];
+    const userGroups = userData ? (userData.groups || []) : [];
+    const groupNamesMap = stored.groupNames || {};
 
     if (!userGroups.length) { window.showErrorToast("No tienes grupos asignados"); return; }
 
-    var groupOptions = userGroups.map(function (gId) {
-      var name = groupNamesMap[gId] || (SP_CONFIG.GROUP_INFO.find(function (g) { return g.id === gId; }) || {}).name || ("Grupo " + gId);
+    const groupOptions = userGroups.map(function (gId) {
+      const name = groupNamesMap[gId] || (SP_CONFIG.GROUP_INFO.find(function (g) { return g.id === gId; }) || {}).name || ("Grupo " + gId);
       return { id: gId, name: name };
     });
 
-    var now = new Date();
-    var currentMonth = now.getMonth();
-    var currentYear = now.getFullYear();
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
 
-    var monthOpts = SP_CONFIG.MONTH_NAMES.map(function (m, i) {
+    const monthOpts = SP_CONFIG.MONTH_NAMES.map(function (m, i) {
       return '<option value="' + i + '"' + (i === currentMonth ? ' selected' : '') + '>' + m + '</option>';
     }).join("");
-    var yearOpts = '';
+    let yearOpts = '';
     for (var y = currentYear; y >= currentYear - 3; y--) {
       yearOpts += '<option value="' + y + '"' + (y === currentYear ? ' selected' : '') + '>' + y + '</option>';
     }
 
-    var groupCheckboxes = groupOptions.map(function (g) {
+    const groupCheckboxes = groupOptions.map(function (g) {
       return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;font-size:12px;">' +
         '<input type="checkbox" value="' + g.id + '" checked> ' + esc(g.name) + '</label>';
     }).join("");
 
-    var m = window.createModal({
+    const m = window.createModal({
       id: "sp-report-modal",
       title: "📥 Exportar Reporte CSV",
       content:
@@ -94,7 +94,7 @@
         '</div>',
       options: { maxWidth: "480px" }
     });
-    var overlay = m.overlay;
+    const overlay = m.overlay;
 
     // Toggle month/range
     overlay.querySelectorAll('[name="sp-rpt-mode"]').forEach(function (radio) {
@@ -113,26 +113,26 @@
     document.getElementById("sp-rpt-cancel").addEventListener("click", function () { m.close(); });
 
     document.getElementById("sp-rpt-generate").addEventListener("click", async function () {
-      var selectedGroups = [];
+      const selectedGroups = [];
       overlay.querySelectorAll('#sp-rpt-groups input[type="checkbox"]:checked').forEach(function (cb) {
-        var gId = parseInt(cb.value);
-        var gName = groupOptions.find(function (g) { return g.id === gId; });
+        const gId = parseInt(cb.value);
+        const gName = groupOptions.find(function (g) { return g.id === gId; });
         selectedGroups.push({ id: gId, name: gName ? gName.name : ("Grupo " + gId) });
       });
       if (!selectedGroups.length) { window.showErrorToast("Selecciona al menos un grupo"); return; }
 
-      var fromDate, toDate;
-      var mode = overlay.querySelector('[name="sp-rpt-mode"]:checked').value;
+      let fromDate, toDate;
+      const mode = overlay.querySelector('[name="sp-rpt-mode"]:checked').value;
       if (mode === "month") {
-        var month = parseInt(document.getElementById("sp-rpt-month").value);
-        var year = parseInt(document.getElementById("sp-rpt-year").value);
-        var lastDay = new Date(year, month + 1, 0).getDate();
+        const month = parseInt(document.getElementById("sp-rpt-month").value);
+        const year = parseInt(document.getElementById("sp-rpt-year").value);
+        const lastDay = new Date(year, month + 1, 0).getDate();
         fromDate = year + "-" + String(month + 1).padStart(2, "0") + "-01T00:00";
         toDate = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(lastDay).padStart(2, "0") + "T23:59";
       } else {
-        var fromVal = document.getElementById("sp-rpt-from").value;
-        var toVal = document.getElementById("sp-rpt-to").value;
-        var rangeError = document.getElementById("sp-rpt-range-error");
+        const fromVal = document.getElementById("sp-rpt-from").value;
+        const toVal = document.getElementById("sp-rpt-to").value;
+        const rangeError = document.getElementById("sp-rpt-range-error");
         if (!fromVal || !toVal) { rangeError.textContent = "Selecciona ambas fechas"; rangeError.style.display = "block"; return; }
         if (fromVal > toVal) { rangeError.textContent = "La fecha inicio no puede ser mayor a la fecha fin"; rangeError.style.display = "block"; return; }
         rangeError.style.display = "none";
@@ -142,25 +142,25 @@
 
       m.close();
       reportGenerating = true;
-      var reportBtn = document.getElementById(REPORT_BTN_ID);
+      const reportBtn = document.getElementById(REPORT_BTN_ID);
       if (reportBtn) { reportBtn.disabled = true; reportBtn.style.opacity = "0.5"; }
 
       window.showLoadingToast("Generando reporte...");
-      var spToken = window.SP_API_Lib.getSpToken();
+      const spToken = window.SP_API_Lib.getSpToken();
 
       try {
-        var allTickets = [];
+        let allTickets = [];
         for (var i = 0; i < selectedGroups.length; i++) {
-          var group = selectedGroups[i];
-          var page = 0;
-          var hasMore = true;
+          const group = selectedGroups[i];
+          let page = 0;
+          let hasMore = true;
           while (hasMore) {
-            var url = SP_CONFIG.SP_SEARCH_API + "?resolutionGroupId=" + group.id + "&page=" + page + "&size=100&initDate=" + encodeURIComponent(fromDate) + "&endDate=" + encodeURIComponent(toDate);
-            var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+            const url = SP_CONFIG.SP_SEARCH_API + "?resolutionGroupId=" + group.id + "&page=" + page + "&size=100&initDate=" + encodeURIComponent(fromDate) + "&endDate=" + encodeURIComponent(toDate);
+            const res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
             if (!res.ok) throw new Error("HTTP " + res.status + " en grupo " + group.name);
-            var json = await res.json();
-            var data = json.data || json;
-            var tickets = data.content || [];
+            const json = await res.json();
+            const data = json.data || json;
+            const tickets = data.content || [];
             tickets.forEach(function (t) { t._groupName = group.name; });
             allTickets = allTickets.concat(tickets);
             hasMore = tickets.length === 100;
@@ -176,10 +176,10 @@
         }
 
         // Build CSV
-        var headers = ["Folio", "Asunto", "Grupo", "Solicitante", "Responsable", "Estado", "Prioridad", "Tipo", "Canal", "Fecha Creacion", "Fecha Actualizacion"];
-        var csvRows = [headers.join(",")];
+        const headers = ["Folio", "Asunto", "Grupo", "Solicitante", "Responsable", "Estado", "Prioridad", "Tipo", "Canal", "Fecha Creacion", "Fecha Actualizacion"];
+        const csvRows = [headers.join(",")];
         allTickets.forEach(function (t) {
-          var row = [
+          const row = [
             '"' + (t.uniqueCode || "").replace(/"/g, '""') + '"',
             '"' + (t.subject || "").replace(/"/g, '""') + '"',
             '"' + (t._groupName || "").replace(/"/g, '""') + '"',
@@ -195,10 +195,10 @@
           csvRows.push(row.join(","));
         });
 
-        var csvContent = "\uFEFF" + csvRows.join("\n");
-        var blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-        var downloadUrl = URL.createObjectURL(blob);
-        var a = document.createElement("a");
+        const csvContent = "\uFEFF" + csvRows.join("\n");
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
         a.href = downloadUrl;
         a.download = "Reporte_SP_" + fromDate.substring(0, 10) + "_a_" + toDate.substring(0, 10) + ".csv";
         a.click();
@@ -219,7 +219,7 @@
   function injectMondayStatsButton() {
     if (!window.SP_Session.state.canMigrateMonday) return;
     if (document.getElementById(MONDAY_STATS_BTN_ID)) return;
-    var refBtn = document.getElementById(REPORT_BTN_ID) || document.getElementById("sp-dashboard-btn") || document.getElementById("sp-search-btn");
+    const refBtn = document.getElementById(REPORT_BTN_ID) || document.getElementById("sp-dashboard-btn") || document.getElementById("sp-search-btn");
     if (!refBtn) return;
 
     window.SP_API_Lib.getMondayToken().then(function (token) {
@@ -227,37 +227,37 @@
       window.SP_API_Lib.getMondayBoardId().then(function (boardId) {
         if (!boardId) return;
         if (document.getElementById(MONDAY_STATS_BTN_ID)) return;
-        var btn = window.createHeaderButton({ id: MONDAY_STATS_BTN_ID, icon: "📈", label: "Monday Stats", color: "#1565C0", onClick: handleMondayStats });
+        const btn = window.createHeaderButton({ id: MONDAY_STATS_BTN_ID, icon: "📈", label: "Monday Stats", color: "#1565C0", onClick: handleMondayStats });
         refBtn.parentElement.insertBefore(btn, refBtn.nextSibling);
       });
     });
   }
 
   async function handleMondayStats() {
-    var btn = document.getElementById(MONDAY_STATS_BTN_ID);
+    const btn = document.getElementById(MONDAY_STATS_BTN_ID);
     if (!btn || btn.disabled) return;
     btn.disabled = true;
     btn.textContent = "⏳ Cargando...";
     btn.style.background = "#999";
 
     try {
-      var mondayToken = await window.SP_API_Lib.getMondayToken();
-      var boardId = await window.SP_API_Lib.getMondayBoardId();
+      const mondayToken = await window.SP_API_Lib.getMondayToken();
+      const boardId = await window.SP_API_Lib.getMondayBoardId();
       if (!mondayToken || !boardId) throw new Error("Configura Monday");
 
-      var allItems = [];
-      var firstPage = await window.SP_API_Lib.mondayQuery(mondayToken,
+      let allItems = [];
+      const firstPage = await window.SP_API_Lib.mondayQuery(mondayToken,
         'query ($boardId: [ID!]!) { boards(ids: $boardId) { name items_page(limit: 500) { cursor items { id name column_values { id text value } } } } }',
         { boardId: boardId });
-      var board = firstPage.boards[0];
-      var boardName = board.name;
-      var page = board.items_page;
+      const board = firstPage.boards[0];
+      const boardName = board.name;
+      let page = board.items_page;
       allItems = allItems.concat(page.items);
 
-      var cursor = page.cursor;
+      let cursor = page.cursor;
       while (cursor) {
         btn.textContent = "⏳ " + allItems.length + " items...";
-        var next = await window.SP_API_Lib.mondayQuery(mondayToken,
+        const next = await window.SP_API_Lib.mondayQuery(mondayToken,
           'query ($cursor: String!) { next_items_page(limit: 500, cursor: $cursor) { cursor items { id name column_values { id text value } } } }',
           { cursor: cursor });
         allItems = allItems.concat(next.next_items_page.items);
@@ -265,9 +265,9 @@
       }
 
       // Parse stats
-      var statsByPerson = {};
+      const statsByPerson = {};
       allItems.forEach(function (item) {
-        var person = "Sin asignar";
+        const person = "Sin asignar";
         item.column_values.forEach(function (col) {
           if (col.id === "multiple_person_mm25nvfq" && col.text) person = col.text;
         });
@@ -276,15 +276,15 @@
       });
 
       // Show modal
-      var personSorted = Object.entries(statsByPerson).sort(function (a, b) { return b[1] - a[1]; });
-      var maxTotal = personSorted[0] ? personSorted[0][1] : 1;
-      var colors = ["#1976D2", "#2E7D32", "#D94040", "#7B1FA2", "#E65100", "#00796B"];
+      const personSorted = Object.entries(statsByPerson).sort(function (a, b) { return b[1] - a[1]; });
+      const maxTotal = personSorted[0] ? personSorted[0][1] : 1;
+      const colors = ["#1976D2", "#2E7D32", "#D94040", "#7B1FA2", "#E65100", "#00796B"];
 
-      var barsHTML = personSorted.map(function (entry, idx) {
-        var name = entry[0];
-        var total = entry[1];
-        var barWidth = Math.round((total / maxTotal) * 100);
-        var color = colors[idx % colors.length];
+      const barsHTML = personSorted.map(function (entry, idx) {
+        const name = entry[0];
+        const total = entry[1];
+        const barWidth = Math.round((total / maxTotal) * 100);
+        const color = colors[idx % colors.length];
         return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
           '<div style="width:140px;font-size:12px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(name) + '">' + esc(name) + '</div>' +
           '<div style="flex:1;background:#f0f0f0;border-radius:4px;height:30px;overflow:hidden;"><div style="width:' + barWidth + '%;background:' + color + ';height:100%;border-radius:4px;"></div></div>' +

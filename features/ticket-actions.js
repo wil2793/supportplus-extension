@@ -5,8 +5,8 @@
 (function () {
   "use strict";
 
-  var SP_CONFIG = window.SP_CONFIG;
-  var SP_API_Lib = window.SP_API_Lib;
+  const SP_CONFIG = window.SP_CONFIG;
+  const SP_API_Lib = window.SP_API_Lib;
 
   // ─── Take / Reassign Ticket ───────────────────────────────
 
@@ -21,8 +21,8 @@
    * @returns {Promise<Object>} - API response
    */
   async function reassignTicket(ticketId, options) {
-    var spToken = SP_API_Lib.getSpToken();
-    var body = {
+    const spToken = SP_API_Lib.getSpToken();
+    const body = {
       resolutionGroupId: options.resolutionGroupId,
       serviceId: null,
       responsibleProfileId: options.profileId,
@@ -32,13 +32,13 @@
       body.ticketCommentRequest = { internal: false, content: options.comment };
     }
 
-    var res = await fetch(SP_CONFIG.SP_API + "/reassign/" + ticketId, {
+    const res = await fetch(SP_CONFIG.SP_API + "/reassign/" + ticketId, {
       method: "PUT",
       headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
       body: JSON.stringify(body)
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
-    var json = await res.json();
+    const json = await res.json();
     if (!json.success) throw new Error("Reassign failed");
     return json;
   }
@@ -51,8 +51,8 @@
    * @returns {Promise<void>}
    */
   async function closeTicket(ticketId) {
-    var spToken = SP_API_Lib.getSpToken();
-    var res = await fetch(SP_CONFIG.SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
+    const spToken = SP_API_Lib.getSpToken();
+    const res = await fetch(SP_CONFIG.SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
       body: JSON.stringify({ nextTicketStatusId: SP_CONFIG.SP_STATUSES.CERRADO, ticketCommentRequest: null })
@@ -70,8 +70,8 @@
    * @returns {Promise<void>}
    */
   async function addComment(ticketId, content, internal) {
-    var spToken = SP_API_Lib.getSpToken();
-    var res = await fetch(SP_CONFIG.SP_API + "/comment/" + ticketId, {
+    const spToken = SP_API_Lib.getSpToken();
+    const res = await fetch(SP_CONFIG.SP_API + "/comment/" + ticketId, {
       method: "POST",
       headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
       body: JSON.stringify({ content: content, internal: !!internal })
@@ -87,18 +87,18 @@
    * @returns {Promise<Object>}
    */
   async function fetchTicketDetail(ticketId) {
-    var spToken = SP_API_Lib.getSpToken();
-    var res = await fetch(SP_CONFIG.SP_API + "/" + ticketId, {
+    const spToken = SP_API_Lib.getSpToken();
+    const res = await fetch(SP_CONFIG.SP_API + "/" + ticketId, {
       headers: { accept: "application/json", authorization: "Bearer " + spToken }
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
-    var json = await res.json();
+    const json = await res.json();
     return json.data || json;
   }
 
   // ─── Get Profiles for Group ───────────────────────────────
 
-  var _profilesCache = {};
+  const _profilesCache = {};
 
   /**
    * Get active profiles for a resolution group (cached)
@@ -107,15 +107,15 @@
    */
   async function getProfilesForGroup(groupId) {
     if (_profilesCache[groupId]) return _profilesCache[groupId];
-    var spToken = SP_API_Lib.getSpToken();
+    const spToken = SP_API_Lib.getSpToken();
     if (!spToken) return [];
     try {
-      var res = await fetch(SP_CONFIG.SP_API + "/active-profiles-by-resolution-group/" + groupId, {
+      const res = await fetch(SP_CONFIG.SP_API + "/active-profiles-by-resolution-group/" + groupId, {
         headers: { accept: "application/json", authorization: "Bearer " + spToken }
       });
       if (!res.ok) return [];
-      var json = await res.json();
-      var profiles = json.data || json;
+      const json = await res.json();
+      const profiles = json.data || json;
       if (Array.isArray(profiles)) {
         _profilesCache[groupId] = profiles;
         return profiles;
@@ -134,14 +134,14 @@
    */
   async function resolveMyProfileId(groupId, userName) {
     if (!userName) return null;
-    var profiles = await getProfilesForGroup(groupId);
-    var me = profiles.find(function (p) { return p.profileFullName === userName; });
+    const profiles = await getProfilesForGroup(groupId);
+    const me = profiles.find(function (p) { return p.profileFullName === userName; });
     return me ? me.profileId : null;
   }
 
   // ─── Save/Remove Pending Close (Notion) ───────────────────
 
-  var TICKETS_POR_CERRAR_DB = "38420e0684b980d682ccfac983fc1780";
+  const TICKETS_POR_CERRAR_DB = "38420e0684b980d682ccfac983fc1780";
 
   /**
    * Save a ticket as pending close in Notion
@@ -184,30 +184,30 @@
    */
   async function fetchPendingCloseTickets(userGroups) {
     try {
-      var data = await SP_API_Lib.notionQuery(TICKETS_POR_CERRAR_DB, {});
+      const data = await SP_API_Lib.notionQuery(TICKETS_POR_CERRAR_DB, {});
       if (!data || !data.results) return [];
 
-      var stored = await SP_Storage.get("notionUsers");
-      var users = stored || {};
-      var pending = [];
+      const stored = await SP_Storage.get("notionUsers");
+      const users = stored || {};
+      const pending = [];
 
       data.results.forEach(function (page) {
-        var ticket = "";
+        const ticket = "";
         try { ticket = page.properties.Ticket.title[0].plain_text; } catch (e) { }
-        var spId = 0;
+        const spId = 0;
         try { spId = page.properties.IdSupporPlus.number; } catch (e) { }
-        var userRel = [];
+        const userRel = [];
         try { userRel = page.properties.MSP_Usuarios.relation; } catch (e) { }
         if (!spId || !userRel.length) return;
 
-        var creatorPageId = userRel[0].id;
-        var creatorEmail = "";
+        const creatorPageId = userRel[0].id;
+        const creatorEmail = "";
         for (var email in users) {
           if (users[email].notionPageId === creatorPageId) { creatorEmail = email; break; }
         }
         if (!creatorEmail || !users[creatorEmail]) return;
-        var creatorGroups = users[creatorEmail].groups || [];
-        var sharedGroup = creatorGroups.some(function (g) { return userGroups.includes(g); });
+        const creatorGroups = users[creatorEmail].groups || [];
+        const sharedGroup = creatorGroups.some(function (g) { return userGroups.includes(g); });
         if (sharedGroup) {
           pending.push({ ticket: ticket, ticketId: spId, pageId: page.id });
         }
@@ -226,22 +226,22 @@
    * @returns {Object} - Column values object
    */
   function buildMondayColumnValues(ticket, mondayUsers) {
-    var ticketId = ticket.id;
-    var holderEmail = (ticket.ticketHolder && ticket.ticketHolder.ticketHolderLog && ticket.ticketHolder.ticketHolderLog.email) || "";
-    var personValue = {};
+    const ticketId = ticket.id;
+    const holderEmail = (ticket.ticketHolder && ticket.ticketHolder.ticketHolderLog && ticket.ticketHolder.ticketHolderLog.email) || "";
+    const personValue = {};
     if (holderEmail && mondayUsers) {
-      var userId = mondayUsers[holderEmail.toLowerCase()];
+      const userId = mondayUsers[holderEmail.toLowerCase()];
       if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
     }
 
-    var url = "https://macropay.supportplus.mx/es/dashboard/tickets/" + ticketId;
-    var desc = (ticket.description || "").replace(/<[^>]*>/g, "");
-    var itemName = ticket.subject || "Sin asunto";
-    var createdDate = new Date(ticket.createdAt).toISOString().slice(0, 10);
-    var spPriority = (ticket.incidentPriorityName || (ticket.incidentPriority && ticket.incidentPriority.name) || "").toLowerCase().trim();
-    var priorityIndex = SP_CONFIG.PRIORITY_MAP[spPriority] !== undefined ? SP_CONFIG.PRIORITY_MAP[spPriority] : SP_CONFIG.PRIORITY_MAP["medio"];
+    const url = "https://macropay.supportplus.mx/es/dashboard/tickets/" + ticketId;
+    const desc = (ticket.description || "").replace(/<[^>]*>/g, "");
+    const itemName = ticket.subject || "Sin asunto";
+    const createdDate = new Date(ticket.createdAt).toISOString().slice(0, 10);
+    const spPriority = (ticket.incidentPriorityName || (ticket.incidentPriority && ticket.incidentPriority.name) || "").toLowerCase().trim();
+    const priorityIndex = SP_CONFIG.PRIORITY_MAP[spPriority] !== undefined ? SP_CONFIG.PRIORITY_MAP[spPriority] : SP_CONFIG.PRIORITY_MAP["medio"];
 
-    var colValues = {
+    const colValues = {
       descripci_n_mkn9e5f4: { text: desc },
       status: { index: 1 },
       priority_mkn9kbe9: { index: priorityIndex },
