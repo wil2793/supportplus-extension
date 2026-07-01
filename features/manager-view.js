@@ -124,6 +124,7 @@
 
     // Member columns
     profiles.forEach(function (p) {
+      if (!p.profileId) return; // Skip profiles without ID
       var col = document.createElement("div");
       col.className = "sp-mgr-column";
       col.innerHTML = '<div class="sp-col-header sp-col-header-member">' + esc(p.profileFullName.split(" ")[0]) + ' <span class="sp-mgr-pcount">(...)</span></div>' +
@@ -260,6 +261,7 @@
 
     // Fetch tickets per member
     profiles.forEach(function (p) {
+      if (!p.profileId) return; // Skip profiles without ID
       fetchProfileTickets(p.profileId, spToken).then(function (tickets) {
         var listEl = container.querySelector('.sp-mgr-ptickets[data-profile-id="' + p.profileId + '"]');
         if (!listEl) return;

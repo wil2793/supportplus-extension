@@ -194,20 +194,25 @@
   function colorRows() {
     var STATUS_CLASS_MAP = window.SP_Styles.STATUS_CLASS_MAP;
     document.querySelectorAll('.MuiDataGrid-row').forEach(function (row) {
-      if (row.dataset.spColored) return;
       var cell = row.querySelector('[data-field="ticketStatusName"]');
       if (!cell) return;
       var status = cell.textContent.trim();
-      var cls = STATUS_CLASS_MAP[status];
-      if (cls) {
-        row.classList.add(cls);
-        row.dataset.spColored = "1";
+      // Skip if status hasn't changed since last paint
+      if (row.dataset.spStatus === status) return;
+      // Remove previous status class
+      if (row.dataset.spStatus && STATUS_CLASS_MAP[row.dataset.spStatus]) {
+        row.classList.remove(STATUS_CLASS_MAP[row.dataset.spStatus]);
       }
+      // Apply new class
+      var cls = STATUS_CLASS_MAP[status];
+      if (cls) row.classList.add(cls);
+      row.dataset.spStatus = status;
     });
   }
 
   function startRowColorObserver() {
-    var observer = new MutationObserver(SP_DOM.throttle(colorRows, 200));
+    var debounced = SP_DOM.debounce(colorRows, 100);
+    var observer = new MutationObserver(debounced);
     observer.observe(document.body, { childList: true, subtree: true });
     colorRows();
   }
