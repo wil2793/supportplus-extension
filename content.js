@@ -3627,95 +3627,18 @@
           });
         }
 
-        // Guardias tab logic
-        var guardiasMonthOffset = 0;
+        // Guardias tab logic — delegated to features/guardias.js
         function loadGuardias(offset) {
-          guardiasMonthOffset = offset;
-          var gContent = document.getElementById("sp-dba-guardias-content");
-          if (!gContent) return;
-          gContent.innerHTML = '<div style="text-align:center;color:#888;padding:20px;">Cargando...</div>';
-
-          var today = new Date();
-          var targetMonth = new Date(today.getFullYear(), today.getMonth() + offset, 1);
-          var year = targetMonth.getFullYear();
-          var month = targetMonth.getMonth();
-          var startStr = year + "-" + String(month + 1).padStart(2, "0") + "-01";
-          var lastDay = new Date(year, month + 1, 0).getDate();
-          var endStr = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(lastDay).padStart(2, "0");
-
-          var meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-
-          chrome.runtime.sendMessage({
-            type: "notion-query", dbId: GUARDIAS_DB, body: {
-              filter: {
-                and: [
-                  { property: "Fecha", date: { on_or_after: startStr } },
-                  { property: "Fecha", date: { on_or_before: endStr } }
-                ]
-              },
-              sorts: [{ property: "Fecha", direction: "ascending" }]
+          // Resolve current user name and pageId for highlighting and swap logic
+          var currentUserName = "";
+          var currentUserPageId = "";
+          Object.keys(allUserPages).forEach(function (pid) {
+            if (allUserPages[pid].correo === currentEmail) {
+              currentUserName = allUserPages[pid].nombre;
+              currentUserPageId = pid;
             }
-          }, function (resp) {
-            var entries = {};
-            if (resp && resp.success && resp.data.results) {
-              resp.data.results.forEach(function (p) {
-                var date = p.properties.Fecha?.date?.start || "";
-                var name = p.properties.Nombre?.title?.[0]?.plain_text || "";
-                if (date) entries[date] = name;
-              });
-            }
-
-            var todayStr = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
-
-            // Build calendar grid (7 days including weekends)
-            var firstDayOfWeek = new Date(year, month, 1).getDay(); // 0=Sun
-            // Adjust to Mon=0
-            var startOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
-
-            var headerHTML = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;margin-bottom:2px;">';
-            var dias = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-            dias.forEach(function (d, i) { headerHTML += '<div style="text-align:center;font-size:10px;font-weight:600;color:' + (i >= 5 ? '#E65100' : '#888') + ';padding:4px;">' + d + '</div>'; });
-            headerHTML += '</div>';
-
-            var calHTML = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">';
-            // Fill empty cells for days before the 1st
-            for (var s = 0; s < startOffset; s++) {
-              calHTML += '<div style="padding:6px;min-height:50px;"></div>';
-            }
-
-            // Get current user's name to highlight their days
-            var currentUserName = "";
-            Object.keys(allUserPages).forEach(function (pid) {
-              if (allUserPages[pid].correo === currentEmail) currentUserName = allUserPages[pid].nombre;
-            });
-
-            for (var day = 1; day <= lastDay; day++) {
-              var d = new Date(year, month, day);
-              var dow = d.getDay();
-
-              var dStr = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
-              var entry = entries[dStr] || "";
-              var isToday = dStr === todayStr;
-              var isWeekend = dow === 0 || dow === 6;
-              var isMyDay = entry && currentUserName && entry.toLowerCase().includes(currentUserName.split(" ")[0].toLowerCase());
-              var bgColor = isToday ? "#E3F2FD" : isMyDay ? "#E8F5E9" : isWeekend ? "#FFF3E0" : "#f9f9f9";
-              var borderColor = isToday ? "#1976D2" : isMyDay ? "#4CAF50" : "#e0e0e0";
-              var firstName = entry ? entry.split(" ")[0] : "";
-
-              calHTML += '<div style="padding:4px 6px;min-height:50px;background:' + bgColor + ';border:1px solid ' + borderColor + ';border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;">' +
-                '<div style="font-size:13px;font-weight:' + (isToday ? '700' : '600') + ';color:' + (isToday ? '#1976D2' : isWeekend ? '#E65100' : '#333') + ';">' + day + '</div>' +
-                '<div style="font-size:9px;color:#555;text-align:center;margin-top:2px;' + (isMyDay ? 'font-weight:700;color:#2E7D32;' : '') + '">' + firstName + '</div>' +
-                '</div>';
-            }
-            calHTML += '</div>';
-
-            gContent.innerHTML = '<div style="text-align:center;font-weight:600;margin-bottom:10px;font-size:14px;">' + meses[month] + ' ' + year + '</div>' + headerHTML + calHTML;
-
-            var prevBtn = document.getElementById("sp-dba-guardias-prev");
-            var nextBtn = document.getElementById("sp-dba-guardias-next");
-            if (prevBtn) { prevBtn.onclick = function () { loadGuardias(guardiasMonthOffset - 1); }; }
-            if (nextBtn) { nextBtn.onclick = function () { loadGuardias(guardiasMonthOffset + 1); }; }
           });
+          window.SP_Guardias.load(offset, { currentUserName: currentUserName, currentUserPageId: currentUserPageId });
         }
 
         // Handle check clicks
@@ -3875,9 +3798,6 @@
         }
       });
     }
-
-    // --- Guardias DB constant ---
-    const GUARDIAS_DB = "36d20e0684b98004b687c452ab2367a2";
 
     // --- Suggested Comments Button ---
     const SUGGESTED_BTN_ID = "sp-suggested-btn";
