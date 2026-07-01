@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SupportPlus Ticket Exporter",
-  "version": "5.8.0",
+  "version": "5.9.0",
   "description": "SupportPlus → Monday.com: Migra tickets con un click. Desarrollado por el equipo de Base de Datos (DBA).",
   "permissions": [
     "activeTab",
@@ -54,7 +54,19 @@
         "pdf.min.js",
         "pdf.worker.min.js",
         "config.js",
+        "styles.js",
+        "lib/storage.js",
+        "lib/logger.js",
+        "lib/dom-utils.js",
+        "lib/templates.js",
         "components.js",
+        "lib/api.js",
+        "features/session.js",
+        "features/header-buttons.js",
+        "features/manager-view.js",
+        "features/detail-view.js",
+        "features/ticket-actions.js",
+        "features/reports.js",
         "content.js",
         "monday-sync.js"
       ],

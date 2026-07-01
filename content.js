@@ -1,572 +1,161 @@
 (function () {
-  console.log("[SP] Extension loading...");
+  SP_Log.info("Extension loading...");
 
-  // Reference components from components.js (loaded before this script)
+  // ─── Module health check ──────────────────────────────────
+  var _modules = ["SP_Storage", "SP_DOM", "SP_Templates", "SP_API_Lib", "SP_Session", "SP_Header", "SP_ManagerView", "SP_DetailView", "SP_TicketActions"];
+  var _missing = _modules.filter(function (m) { return !window[m]; });
+  if (_missing.length) {
+    SP_Log.error("Missing modules:", _missing.join(", "));
+  }
+
+  // ─── Bridge to new modules (backward compatibility) ───────
+  // These references allow legacy code in this file to keep working
+  // as we progressively extract features to separate modules.
   var createModal = window.createModal;
   var createHeaderButton = window.createHeaderButton;
   var esc = window.esc;
   var stringToColor = window.stringToColor;
 
-  // Version check against Notion
-  var _currentVersion = chrome.runtime.getManifest().version;
-  var _versionBlocked = false;
-  var _latestVersion = "";
-  var _latestZipUrl = "";
-  function checkVersion() {
-    chrome.storage.local.get(["latestVersion", "latestZipUrl"], function (r) {
-      var latest = r.latestVersion || "";
-      var zipUrl = r.latestZipUrl || "";
-      if (!latest || latest === _currentVersion) {
-        // Same version - hide buttons
-        var btn = document.getElementById("sp-update-btn");
-        if (btn) btn.style.display = "none";
-        return;
-      }
-      _latestVersion = latest;
-      _latestZipUrl = zipUrl;
-      var cur = _currentVersion.split(".").map(Number);
-      var lat = latest.split(".").map(Number);
-      if (lat[0] > cur[0]) {
-        // Major version change - block everything
-        _versionBlocked = true;
-        var blocker = document.createElement("div");
-        blocker.id = "sp-version-blocker";
-        blocker.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:999999;display:flex;align-items:center;justify-content:center;";
-        var downloadBtn = zipUrl ? '<button id="sp-blocker-download" style="margin-top:10px;padding:8px 16px;background:#1976D2;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">📥 Descargar v' + latest + '</button>' : '';
-        blocker.innerHTML = '<div style="background:#fff;padding:30px;border-radius:12px;text-align:center;max-width:400px;font-family:system-ui;"><h2 style="margin:0 0 12px;color:#D32F2F;">⚠️ Actualización requerida</h2><p style="margin:0 0 8px;font-size:14px;">Tu versión (<b>' + _currentVersion + '</b>) está muy desactualizada.<br>La versión actual es <b>' + latest + '</b>.</p><p style="margin:0;font-size:13px;color:#555;">Actualiza la extensión para continuar usando SupportPlus Tools.</p>' + downloadBtn + '</div>';
-        document.body.appendChild(blocker);
-        if (zipUrl) document.getElementById("sp-blocker-download").addEventListener("click", function (e) { downloadZip(zipUrl, latest, e); });
-      } else {
-        // Show update button in header if available
-        var btn = document.getElementById("sp-update-btn");
-        if (btn) btn.style.display = "inline-block";
-      }
-    });
-  }
-  function downloadZip(url, version, e) {
-    var btn = e && e.target ? e.target : null;
-    if (btn) { btn.textContent = "⏳ Descargando..."; btn.disabled = true; }
-    // Try proxy via background first, fallback to direct link
-    if (chrome.runtime && chrome.runtime.sendMessage) {
-      chrome.runtime.sendMessage({ type: "proxy-fetch", url: url }, function (resp) {
-        if (resp && resp.success) {
-          var byteArray = new Uint8Array(resp.data);
-          var blob = new Blob([byteArray], { type: "application/zip" });
-          var a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
-          a.download = "supportplus-v" + version + ".zip";
-          a.click();
-          URL.revokeObjectURL(a.href);
-          if (btn) { btn.textContent = "✅ Descargado"; }
-        } else {
-          // Fallback: direct link open (no CORS issue with navigation)
-          var a = document.createElement("a");
-          a.href = url;
-          a.download = "supportplus-v" + version + ".zip";
-          a.target = "_blank";
-          a.click();
-          if (btn) { btn.textContent = "📥 Abriendo..."; setTimeout(function () { btn.textContent = "📥 Descargar"; btn.disabled = false; }, 3000); }
-        }
-      });
-    } else {
-      // No background available - direct link
-      var a = document.createElement("a");
-      a.href = url;
-      a.download = "supportplus-v" + version + ".zip";
-      a.target = "_blank";
-      a.click();
-      if (btn) { btn.textContent = "📥 Abriendo..."; setTimeout(function () { btn.textContent = "📥 Descargar"; btn.disabled = false; }, 3000); }
-    }
-  }
-  // Check on load (after a delay to let sync finish)
-  setTimeout(checkVersion, 3000);
-  // Check on focus
-  document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible" && !_versionBlocked) checkVersion();
-  });
+  // Version check, backdrop CSS, and row coloring are now handled by:
+  // - styles.js (CSS injection)
+  // - features/header-buttons.js (version check, row coloring, header observer)
 
-  // Make loading backdrop less invasive - thin top bar instead of fullscreen (all users)
-  const hideBackdrop = document.createElement("style");
-  hideBackdrop.textContent = ".MuiBackdrop-root { background: transparent !important; top: 0 !important; bottom: auto !important; height: 3px !important; opacity: 1 !important; } .MuiBackdrop-root .MuiCircularProgress-root { display: none !important; } .MuiBackdrop-root::after { content: ''; position: absolute; top: 0; left: 0; width: 30%; height: 100%; background: #D94040; animation: sp-loading-bar 1.2s ease-in-out infinite; } @keyframes sp-loading-bar { 0% { left: -30%; } 100% { left: 100%; } }";
-  document.head.appendChild(hideBackdrop);
+  // Row coloring is now handled by features/header-buttons.js (startRowColorObserver)
 
-  // Colorear filas por estatus (inmediato, sin esperar Notion - usa MutationObserver ligero)
-  const STATUS_BG_COLORS = {
-    "Asignado": "rgba(33,150,243,0.18)",
-    "En validación": "rgba(156,39,176,0.18)",
-    "En atención": "rgba(255,152,0,0.18)",
-    "Por aprobador": "rgba(121,85,72,0.18)",
-    "Por ejecutar": "rgba(0,150,136,0.18)",
-    "Por revisar": "rgba(63,81,181,0.18)",
-    "En aplicaciones": "rgba(233,30,99,0.18)",
-    "Por confirmar": "rgba(255,193,7,0.20)",
-    "Cerrado": "rgba(76,175,80,0.18)",
-    "Rechazado": "rgba(244,67,54,0.18)",
-    "Cancelado": "rgba(158,158,158,0.20)",
-    "Reabierto": "rgba(255,87,34,0.18)",
-    "En espera": "rgba(255,235,59,0.20)"
-  };
-  function colorRowsImmediate() {
-    document.querySelectorAll('.MuiDataGrid-row').forEach(function (row) {
-      if (row.dataset.spColored) return;
-      var cell = row.querySelector('[data-field="ticketStatusName"]');
-      if (!cell) return;
-      var status = cell.textContent.trim();
-      var color = STATUS_BG_COLORS[status];
-      if (color) { row.style.backgroundColor = color; row.dataset.spColored = "1"; }
-    });
-  }
-  var _colorObserver = new MutationObserver(colorRowsImmediate);
-  _colorObserver.observe(document.body, { childList: true, subtree: true });
-  // Also run on load
-  colorRowsImmediate();
+  // GROUP_INFO: now loaded by features/header-buttons.js (loadGroupInfo)
+  var GROUP_INFO = window.SP_GroupInfo || window.SP_CONFIG.GROUP_INFO;
 
-  // GROUP_INFO: loaded from Notion (groupNames in storage), fallback to config
-  var GROUP_INFO = window.SP_CONFIG.GROUP_INFO;
-  try {
-    chrome.storage.local.get("groupNames", function (r) {
-      if (r.groupNames && Object.keys(r.groupNames).length > 0) {
-        GROUP_INFO = Object.keys(r.groupNames).map(function (id) {
-          return { id: parseInt(id), name: r.groupNames[id] };
-        });
-      }
-    });
-  } catch (e) { }
+  // ─── State bridge: read from SP_Session.state ──────────────
+  // Legacy code in this file reads these variables. They're populated by features/session.js.
+  var _ss = window.SP_Session.state;
+  var currentUserRole = _ss.userRole;
+  var currentUserGroups = _ss.groups;
+  var canMigrateMonday = _ss.canMigrateMonday;
+  var canDragDrop = _ss.canDragDrop;
+  var _btnDashboard = _ss.btnDashboard;
+  var _btnComments = _ss.btnComments;
+  var _btnReports = _ss.btnReports;
+  var _btnReassignApp = _ss.btnReassignApp;
+  var _btnAddIAM = _ss.btnAddIAM;
+  var _canShowLabels = _ss.canShowLabels;
+  var _canReopenTickets = _ss.canReopenTickets;
+  var _canCommentClosed = _ss.canCommentClosed;
+  var _canRejectTickets = _ss.canRejectTickets;
+  var _lastDropTime = 0;
+  var _mondayGroupCache = {};
+  var _autoMigrateQueue = Promise.resolve();
+  var _userConfig = _ss.userConfig;
+  var _workSchedule = _ss.workSchedule;
 
-  var currentUserRole = "usuario";
-  var currentUserGroups = []; // Groups from Notion
-  var canMigrateMonday = false; // Permission from Notion role
-  var canDragDrop = false; // Permission from sub-group "Drag And Drop"
-  var _btnDashboard = true; // Show dashboard button
-  var _btnComments = true; // Show comments button
-  var _btnReports = true; // Show reports button
-  var _btnReassignApp = false; // Show reassign to apps button (from sub-group)
-  var _btnAddIAM = false; // Show add IAM button (from sub-group)
-  var _canShowLabels = false; // Show labels/tags (from sub-group)
-  var _canReopenTickets = false; // Show reopen button (from sub-group)
-  var _canCommentClosed = false; // Allow commenting on closed tickets (from sub-group)
-  var _canRejectTickets = false; // Show reject button (from sub-group)
-  var _lastDropTime = 0; // Timestamp of last drag-and-drop to prevent accidental modal opens
-  var _mondayGroupCache = {}; // Cache of created Monday groups: groupName -> groupId
-  var _autoMigrateQueue = Promise.resolve(); // Serial queue for auto-migrations
-  var _userConfig = {}; // User config from Notion (blacklist, onlyWithTickets)
-  var _workSchedule = { horaEntrada: 9, horaSalida: 19, diaInicio: "Lunes", diaFinal: "Viernes" }; // Work schedule from Notion
+  // isWithinWorkHours: delegate to session module
+  function isWithinWorkHours() { return window.SP_Session.isWithinWorkHours(); }
 
-  // Work schedule helper
-  var DAY_MAP = { "Domingo": 0, "Lunes": 1, "Martes": 2, "Miercoles": 3, "Miércoles": 3, "Jueves": 4, "Viernes": 5, "Sabado": 6, "Sábado": 6 };
-  function isWithinWorkHours() {
-    var now = new Date();
-    var currentHour = now.getHours();
-    var currentDay = now.getDay(); // 0=Sunday
-    var startDay = DAY_MAP[_workSchedule.diaInicio] || 1;
-    var endDay = DAY_MAP[_workSchedule.diaFinal] || 5;
-    var inDayRange = currentDay >= startDay && currentDay <= endDay;
-    var inHourRange = currentHour >= _workSchedule.horaEntrada && currentHour < _workSchedule.horaSalida;
-    console.log("[SP] isWithinWorkHours:", { currentHour, currentDay, schedule: _workSchedule, inDayRange, inHourRange, result: inDayRange && inHourRange });
-    return inDayRange && inHourRange;
-  }
+  // Ticket pending close operations: delegate to features/ticket-actions.js
+  var saveTicketPendingClose = window.SP_TicketActions.saveTicketPendingClose;
+  var removeTicketPendingClose = window.SP_TicketActions.removeTicketPendingClose;
+  var fetchPendingCloseTickets = window.SP_TicketActions.fetchPendingCloseTickets;
 
-  // Save ticket to MSP_TicketsPorCerrar in Notion
-  var TICKETS_POR_CERRAR_DB = "38420e0684b980d682ccfac983fc1780";
-  function saveTicketPendingClose(uniqueCode, ticketId, userNotionPageId) {
-    return new Promise(function (resolve, reject) {
-      chrome.runtime.sendMessage({
-        type: "notion-create",
-        body: {
-          parent: { database_id: TICKETS_POR_CERRAR_DB },
-          properties: {
-            "Ticket": { title: [{ text: { content: uniqueCode } }] },
-            "IdSupporPlus": { number: ticketId },
-            "MSP_Usuarios": { relation: [{ id: userNotionPageId }] }
-          }
-        }
-      }, function (resp) {
-        if (resp && resp.success) resolve(resp.data);
-        else reject(new Error(resp?.error || "Error al guardar ticket pendiente"));
-      });
-    });
-  }
+  // Persisted state now loaded by features/session.js (loadPersistedState)
 
-  // Check and remove ticket from MSP_TicketsPorCerrar after successful close
-  function removeTicketPendingClose(ticketId) {
-    chrome.runtime.sendMessage({
-      type: "notion-query",
-      dbId: TICKETS_POR_CERRAR_DB,
-      body: { filter: { property: "IdSupporPlus", number: { equals: ticketId } } }
-    }, function (resp) {
-      if (resp && resp.success && resp.data && resp.data.results) {
-        resp.data.results.forEach(function (page) {
-          chrome.runtime.sendMessage({ type: "notion-delete", pageId: page.id });
-        });
-      }
-    });
-  }
-
-  // Fetch pending tickets for user's groups
-  function fetchPendingCloseTickets(userGroups) {
-    return new Promise(function (resolve) {
-      chrome.runtime.sendMessage({
-        type: "notion-query",
-        dbId: TICKETS_POR_CERRAR_DB,
-        body: {}
-      }, function (resp) {
-        if (!resp || !resp.success || !resp.data) { resolve([]); return; }
-        var results = resp.data.results || [];
-        // Filter: only tickets whose user belongs to one of my groups
-        chrome.storage.local.get("notionUsers", function (r) {
-          var users = r.notionUsers || {};
-          var pending = [];
-          results.forEach(function (page) {
-            var ticket = page.properties.Ticket?.title?.[0]?.plain_text || "";
-            var spId = page.properties.IdSupporPlus?.number || 0;
-            var userRel = page.properties.MSP_Usuarios?.relation || [];
-            if (!spId || !userRel.length) return;
-            // Check if the user who created this pending belongs to one of my groups
-            var creatorPageId = userRel[0].id;
-            var creatorEmail = "";
-            for (var email in users) {
-              if (users[email].notionPageId === creatorPageId) { creatorEmail = email; break; }
-            }
-            if (!creatorEmail || !users[creatorEmail]) return;
-            var creatorGroups = users[creatorEmail].groups || [];
-            var sharedGroup = creatorGroups.some(function (g) { return userGroups.includes(g); });
-            if (sharedGroup) {
-              pending.push({ ticket: ticket, ticketId: spId, pageId: page.id });
-            }
-          });
-          resolve(pending);
-        });
-      });
-    });
-  }
-
-  // Load persisted state from storage immediately (like useState initial value)
-  try {
-    chrome.storage.local.get(["subgroupPerms", "userConfig", "notionUsers", "userEmail", "workSchedule"], function (r) {
-      // Try subgroupPerms first (set by checkSession)
-      if (r.subgroupPerms) {
-        canDragDrop = r.subgroupPerms.canDragDrop || false;
-        _btnReassignApp = r.subgroupPerms.canReassignApp || false;
-        _btnAddIAM = r.subgroupPerms.canAddIAM || false;
-        _canShowLabels = r.subgroupPerms.canShowLabels || false;
-        _canReopenTickets = r.subgroupPerms.canReopenTickets || false;
-        _canCommentClosed = r.subgroupPerms.canCommentClosed || false;
-        _canRejectTickets = r.subgroupPerms.canRejectTickets || false;
-      } else if (r.notionUsers && r.userEmail) {
-        // Fallback: read directly from notionUsers (set by background sync)
-        var u = r.notionUsers[(r.userEmail || "").toLowerCase()];
-        if (u) {
-          canDragDrop = !!u.canDragDrop;
-          _btnReassignApp = !!u.canReassignApp;
-          _btnAddIAM = !!u.canAddIAM;
-          _canShowLabels = !!u.canShowLabels;
-          _canReopenTickets = !!u.canReopenTickets;
-          _canCommentClosed = !!u.canCommentClosed;
-          _canRejectTickets = !!u.canRejectTickets;
-        }
-      }
-      if (r.userConfig) _userConfig = r.userConfig;
-      if (r.workSchedule) _workSchedule = r.workSchedule;
-    });
-  } catch (e) { }
-
-  // Update Monday item person when analyst changes
+  // updateMondayPerson & updateMondayStatus: delegate to lib/api.js
   async function updateMondayPerson(ticketId, uniqueCode, analystEmail) {
     try {
-      var mondayToken = await getMondayToken();
+      var mondayToken = await window.SP_API_Lib.getMondayToken();
       if (!mondayToken || !analystEmail) return;
       var code = uniqueCode || String(ticketId);
-      // Search across all ticket boards
-      var ticketBoards = await getMondayTicketBoards(mondayToken);
+      var ticketBoards = await window.SP_API_Lib.getMondayTicketBoards(mondayToken);
       var mondayItemId = null, foundBoardId = null;
       for (var b of ticketBoards) {
-        var itemRes = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: code });
-        var items = itemRes.items_page_by_column_values?.items || [];
+        var itemRes = await window.SP_API_Lib.mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: window.SP_CONFIG.MONDAY_TICKET_COL_ID, value: code });
+        var items = (itemRes.items_page_by_column_values && itemRes.items_page_by_column_values.items) || [];
         if (items.length) { mondayItemId = items[0].id; foundBoardId = b.id; break; }
       }
       if (!mondayItemId) return;
-      var users = await getMondayUsers(mondayToken);
+      var users = await window.SP_API_Lib.getMondayUsers(mondayToken);
       var userId = users[analystEmail.toLowerCase()];
       if (!userId) return;
       var personValue = JSON.stringify({ multiple_person_mm25nvfq: { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] } });
-      await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: foundBoardId, itemId: mondayItemId, columnValues: personValue });
-      console.log("[SP] Monday person updated:", code, "->", analystEmail);
-    } catch (e) { console.log("[SP] Monday person update failed:", e.message); }
+      await window.SP_API_Lib.mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: foundBoardId, itemId: mondayItemId, columnValues: personValue });
+      SP_Log.info("Monday person updated:", code, "->", analystEmail);
+    } catch (e) { SP_Log.warn("Monday person update failed:", e.message); }
   }
 
-  // Update Monday item status when SP ticket status changes
   async function updateMondayStatus(ticketId, uniqueCode, newStatusName) {
     try {
-      var mondayToken = await getMondayToken();
+      var mondayToken = await window.SP_API_Lib.getMondayToken();
       if (!mondayToken) return;
       var code = uniqueCode || String(ticketId);
-      // Search across all ticket boards in workspace
-      var ticketBoards = await getMondayTicketBoards(mondayToken);
-      // Search for the item in each board
+      var ticketBoards = await window.SP_API_Lib.getMondayTicketBoards(mondayToken);
       var mondayItemId = null, foundBoardId = null;
       for (var b of ticketBoards) {
-        var itemRes = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: code });
-        var items = itemRes.items_page_by_column_values?.items || [];
+        var itemRes = await window.SP_API_Lib.mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: window.SP_CONFIG.MONDAY_TICKET_COL_ID, value: code });
+        var items = (itemRes.items_page_by_column_values && itemRes.items_page_by_column_values.items) || [];
         if (items.length) { mondayItemId = items[0].id; foundBoardId = b.id; break; }
       }
       if (!mondayItemId) return;
-      var spStatus = (newStatusName || "").toLowerCase();
-      var mondayStatusIndex = mapStatusToMonday(spStatus);
-      await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: foundBoardId, itemId: mondayItemId, columnValues: JSON.stringify({ status: { index: mondayStatusIndex } }) });
-      console.log("[SP] Monday status updated:", code, "->", newStatusName);
-    } catch (e) { console.log("[SP] Monday status update failed:", e.message); }
+      var mondayStatusIndex = window.mapStatusToMonday(newStatusName);
+      await window.SP_API_Lib.mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: foundBoardId, itemId: mondayItemId, columnValues: JSON.stringify({ status: { index: mondayStatusIndex } }) });
+      SP_Log.info("Monday status updated:", code, "->", newStatusName);
+    } catch (e) { SP_Log.warn("Monday status update failed:", e.message); }
   }
 
 
 
-  // --- Session check ---
-  var sessionUserName = ""; // Full name from session API, cached globally
-  var sessionProfileId = null; // profileId resolved at startup
+  // ─── Session & Header: now delegated to features/session.js and features/header-buttons.js ───
+  // Legacy bridges for backward compatibility
+  var sessionUserName = "";
+  var sessionProfileId = null;
 
-  async function checkSession() {
-    try {
-      var res = await fetch("https://macropay.supportplus.mx/api/auth/session", {
-        headers: { accept: "application/json", authorization: "Bearer " + (localStorage.getItem("token") || "") }
-      });
-      if (!res.ok) return "usuario";
-      var data = await res.json();
-      var email = data?.user?.email?.toLowerCase() || "";
-      sessionUserName = data?.user?.name || "";
-      _loggedUserEmail = email;
+  // Delegate checkSession to SP_Session module
+  var checkSession = window.SP_Session.checkSession;
 
-      if (!email) return null;
+  // Delegate resolveSessionProfileId
+  async function resolveSessionProfileId() { return window.SP_Session.resolveProfileId(); }
 
-      // Save email to storage BEFORE triggering sync (background needs it to find user config)
-      try { chrome.storage.local.set({ userEmail: email }); } catch (e) { }
+  // Delegate getLoggedUserNameFromDOM
+  function getLoggedUserNameFromDOM() { return window.SP_Session.getLoggedUserName(); }
 
-      // Trigger background sync and wait (with timeout)
-      try {
-        await Promise.race([
-          new Promise(function (resolve) {
-            chrome.runtime.sendMessage({ type: "sync-notion" }, function (resp) { resolve(resp); });
-          }),
-          new Promise(function (resolve) { setTimeout(function () { resolve({ timeout: true }); }, 15000); })
-        ]);
-      } catch (e) { }
+  // Header injection and SPA observer are now handled by features/header-buttons.js
 
-      // Read synced data from storage
-      var stored = await new Promise(function (resolve) {
-        chrome.storage.local.get(["notionUsers", "notionRoles", "notionRolesGroups", "suggestedComments", "userConfig", "workSchedule"], function (r) { resolve(r); });
-      });
-      if (stored.workSchedule) _workSchedule = stored.workSchedule;
-
-      var notionUsers = stored.notionUsers || {};
-      var userData = notionUsers[email];
-
-      if (!userData) {
-        // Check directly in Notion before creating (avoid duplicates)
-        try {
-          var checkResp = await new Promise(function (resolve) {
-            chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b98051a190e51d38d97288", body: { filter: { property: "Correo", rich_text: { equals: email } }, page_size: 1 } }, function (resp) { resolve(resp); });
-          });
-          if (checkResp && checkResp.success && checkResp.data.results && checkResp.data.results.length > 0) {
-            // User exists in Notion but wasn't in cache - trigger re-sync and wait
-            await new Promise(function(resolve) {
-              chrome.runtime.sendMessage({ type: "sync-notion" }, function() { resolve(); });
-            });
-            // Re-read from storage after sync
-            var freshStored = await new Promise(function(resolve) {
-              chrome.storage.local.get(["notionUsers"], function(r) { resolve(r); });
-            });
-            var freshUsers = freshStored.notionUsers || {};
-            userData = freshUsers[email];
-            if (!userData) return null; // Still not found after sync
-          } else {
-            // User truly doesn't exist - create as inactive
-            chrome.runtime.sendMessage({
-              type: "notion-create", body: {
-                parent: { database_id: "36620e0684b98051a190e51d38d97288" },
-                properties: {
-                  "Nombre": { title: [{ text: { content: sessionUserName || email } }] },
-                  "Correo": { rich_text: [{ text: { content: email } }] },
-                  "Activo": { checkbox: false }
-                }
-              }
-            });
-          }
-        } catch (e) { }
-        if (!userData) return null;
-      }
-      if (!userData.active) return "inactive";
-
-      // Set profileId
-      if (userData.profileId) sessionProfileId = userData.profileId;
-
-      // Set groups
-      if (userData.groups && userData.groups.length > 0) {
-        currentUserGroups = userData.groups;
-        if (!currentTeamArea) currentTeamArea = String(userData.groups[0]);
-      }
-
-      // Set permissions from synced data
-      canMigrateMonday = !!userData.canMigrate;
-      _btnDashboard = userData.btnDashboard !== false;
-      _btnComments = userData.btnComments !== false;
-      _btnReports = userData.btnReports !== false;
-      _btnReassignApp = !!userData.canReassignApp;
-      _btnAddIAM = !!userData.canAddIAM;
-      _canShowLabels = !!userData.canShowLabels;
-      _canReopenTickets = !!userData.canReopenTickets;
-      _canCommentClosed = !!userData.canCommentClosed;
-      _canRejectTickets = !!userData.canRejectTickets;
-      canDragDrop = !!userData.canDragDrop;
-
-      // Set user config
-      if (stored.userConfig) _userConfig = stored.userConfig;
-
-      // Persist to storage for immediate use by other functions
-      try {
-        chrome.storage.local.set({
-          userEmail: email,
-          myProfileId: sessionProfileId,
-          subgroupPerms: { canDragDrop: canDragDrop, canReassignApp: _btnReassignApp, canAddIAM: _btnAddIAM, canShowLabels: _canShowLabels, canReopenTickets: _canReopenTickets, canCommentClosed: _canCommentClosed, canRejectTickets: _canRejectTickets }
-        });
-      } catch (e) { }
-
-      return { role: userData.roleName && userData.roleName.toLowerCase().includes("admin") ? "admin" : "usuario", roleName: userData.roleName || "usuario", notionPageId: userData.notionPageId };
-    } catch (e) { return { role: "usuario", roleName: "Usuario" }; }
-  }
-
-  // Resolve profileId from session name at startup (called once after teamArea is loaded)
-  async function resolveSessionProfileId() {
-    if (sessionProfileId) return sessionProfileId;
-    var name = sessionUserName || getLoggedUserNameFromDOM();
-    if (!name) return null;
-    var spToken = localStorage.getItem("token");
-    if (!spToken) return null;
-    var groupId = currentTeamArea || "19";
-    try {
-      var res = await fetch("https://macropayapi.supportplus.mx/tickets/web/active-profiles-by-resolution-group/" + groupId, {
-        headers: { accept: "application/json", authorization: "Bearer " + spToken }
-      });
-      if (!res.ok) return null;
-      var json = await res.json();
-      var profiles = json.data || json;
-      if (!Array.isArray(profiles)) return null;
-      var me = profiles.find(function (p) { return p.profileFullName === name; });
-      if (me) {
-        sessionProfileId = me.profileId;
-        try { chrome.storage.local.set({ sessionProfileId: me.profileId }); } catch (e) { }
-      }
-      return sessionProfileId;
-    } catch (e) { return null; }
-  }
-
-  // Helper to get name from DOM (fallback if session name not available yet)
-  function getLoggedUserNameFromDOM() {
-    var el = document.querySelector('[class*="warapperNameUserAndLogout"] p');
-    return el ? el.textContent.trim() : "";
-  }
-
-  // Inject header buttons independently of session (retry until wrapper appears)
-  (function retryHeaderIndependent(attempts) {
-    setTimeout(function() {
-      var wrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
-      if (wrapper) {
-        if (typeof injectConfigButton === "function") injectConfigButton();
-        if (typeof injectSearchButton === "function") injectSearchButton();
-        if (typeof injectQuickSearch === "function") injectQuickSearch();
-        if (typeof injectUpdateButton === "function") injectUpdateButton();
-        if (typeof injectSessionTimer === "function") injectSessionTimer();
-      } else if (attempts < 50) {
-        retryHeaderIndependent(attempts + 1);
-      }
-    }, 100);
-  })(0);
-
-  // Persistent observer: re-inject header buttons when SPA navigation rebuilds the header
-  (function () {
-    var _headerDebounce = null;
-    var _headerObserver = new MutationObserver(function () {
-      if (_headerDebounce) clearTimeout(_headerDebounce);
-      _headerDebounce = setTimeout(function () {
-        var wrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
-        if (!wrapper) return;
-        if (!document.getElementById("sp-config-btn")) {
-          if (typeof injectConfigButton === "function") injectConfigButton();
-          if (typeof injectSearchButton === "function") injectSearchButton();
-          if (typeof injectQuickSearch === "function") injectQuickSearch();
-          if (typeof injectUpdateButton === "function") injectUpdateButton();
-          if (typeof injectSessionTimer === "function") injectSessionTimer();
-          if (typeof injectDashboardButton === "function") injectDashboardButton();
-          if (typeof injectReportButton === "function") injectReportButton();
-          if (typeof injectSuggestedCommentsButton === "function") injectSuggestedCommentsButton();
-          if (typeof injectQuickFilterButton === "function") injectQuickFilterButton();
-        }
-      }, 300);
-    });
-    _headerObserver.observe(document.body, { childList: true, subtree: true });
-  })();
-
+  // ─── Session initialization ───────────────────────────────
   checkSession().then(function (result) {
-    if (result === null) { showAccessMessage("⚠️ Usuario no registrado en SupportPlus Tools. Solicite su alta con el administrador."); return; }
-    if (result === "inactive") { showAccessMessage("⚠️ Usuario inactivo en SupportPlus Tools. Solicite su reactivación con el administrador."); return; }
-    currentUserRole = result.role || result;
-    initByRole();
+    if (result === null) { window.SP_Session.showAccessMessage("⚠️ Usuario no registrado en SupportPlus Tools. Solicite su alta con el administrador."); return; }
+    if (result === "inactive") { window.SP_Session.showAccessMessage("⚠️ Usuario inactivo en SupportPlus Tools. Solicite su reactivación con el administrador."); return; }
 
-    // Inject role label (independent, after everything loads)
-    chrome.storage.local.get("userEmail", function (r) {
-      var email = (r.userEmail || "").toLowerCase();
-      if (!email) return;
-      chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b98051a190e51d38d97288", body: { filter: { property: "Correo", rich_text: { equals: email } }, page_size: 1 } }, function (resp) {
-        if (!resp || !resp.success || !resp.data.results || !resp.data.results[0]) return;
-        var rolRel = resp.data.results[0].properties.Rol?.relation || [];
-        if (!rolRel.length) return;
-        chrome.runtime.sendMessage({ type: "notion-page", pageId: rolRel[0].id }, function (roleResp) {
-          if (!roleResp || !roleResp.success) return;
-          var rn = roleResp.data?.properties?.Nombre?.title?.[0]?.plain_text || "";
-          if (!rn) return;
-          var iv = setInterval(function () {
-            var wrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
-            if (!wrapper) return;
-            clearInterval(iv);
-            if (document.getElementById("sp-role-label")) return;
-            var nameEl = wrapper.querySelector("p");
-            if (!nameEl) return;
-            var rl = document.createElement("span");
-            rl.id = "sp-role-label";
-            rl.textContent = rn;
-            rl.style.cssText = "display:block;font-size:11px;color:inherit;opacity:0.6;font-weight:400;margin-top:2px;text-transform:uppercase;text-align:right;";
-            nameEl.appendChild(document.createElement("br"));
-            nameEl.appendChild(rl);
-          }, 300);
-        });
-      });
-    });
+    // Sync local vars from session state (after checkSession updates them)
+    var ss = window.SP_Session.state;
+    currentUserRole = ss.userRole;
+    currentUserGroups = ss.groups;
+    canMigrateMonday = ss.canMigrateMonday;
+    canDragDrop = ss.canDragDrop;
+    _btnDashboard = ss.btnDashboard;
+    _btnComments = ss.btnComments;
+    _btnReports = ss.btnReports;
+    _btnReassignApp = ss.btnReassignApp;
+    _btnAddIAM = ss.btnAddIAM;
+    _canShowLabels = ss.canShowLabels;
+    _canReopenTickets = ss.canReopenTickets;
+    _canCommentClosed = ss.canCommentClosed;
+    _canRejectTickets = ss.canRejectTickets;
+    _userConfig = ss.userConfig;
+    _workSchedule = ss.workSchedule;
+    sessionUserName = ss.userName;
+    sessionProfileId = ss.profileId;
+
+    initByRole();
+    window.SP_Session.injectRoleLabel();
   });
 
-  function showAccessMessage(text) {
-    var attempts = 0;
-    var interval = setInterval(function () {
-      var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
-      if (!userWrapper && attempts < 30) { attempts++; return; }
-      clearInterval(interval);
-      if (!userWrapper) return;
-      if (document.getElementById("sp-inactive-msg")) return;
-      var msg = document.createElement("div");
-      msg.id = "sp-inactive-msg";
-      msg.style.cssText = "padding:4px 12px;font-size:11px;border-radius:4px;background:rgba(217,64,64,0.15);color:#D94040;border:1px solid rgba(217,64,64,0.3);margin-right:8px;font-weight:600;";
-      msg.textContent = text;
-      userWrapper.parentElement.insertBefore(msg, userWrapper);
-    }, 500);
-  }
+  function showAccessMessage(text) { window.SP_Session.showAccessMessage(text); }
 
   function initByRole() {
     // Update Monday config based on canMigrateMonday permission and group config
-    try {
-      chrome.storage.local.get(["groupMondayConfig"], function (r) {
-        try {
-          var config = r.groupMondayConfig || {};
-          var groupId = (typeof currentTeamArea !== "undefined" ? currentTeamArea : "") || (currentUserGroups && currentUserGroups.length ? currentUserGroups[0] : "");
-          hasMondayConfig = !!(groupId && config[groupId] && config[groupId].etiqueta) && canMigrateMonday;
-        } catch(e) {}
-      });
-    } catch (e) { }
+    SP_Storage.get("groupMondayConfig").then(function (config) {
+      config = config || {};
+      var groupId = (window.SP_Session.state.teamArea) || (currentUserGroups.length ? currentUserGroups[0] : "");
+      hasMondayConfig = !!(groupId && config[groupId] && config[groupId].etiqueta) && canMigrateMonday;
+    }).catch(function () { });
+
     // Always init extension (for config, buttons, etc.)
     initExtension();
     // Always show manager view (unified) - groups determine if filter/counter shows
@@ -581,662 +170,50 @@
   document.addEventListener("sp-open-config", function () { if (_showConfigModal) _showConfigModal(); });
   document.addEventListener("sp-open-ticket", function (e) { if (e.detail && e.detail.ticketId && _showQuickDetailModal) _showQuickDetailModal(e.detail.ticketId); });
 
-  // --- Manager view ---
+  // --- Manager view: delegated to features/manager-view.js ---
   function initManagerView() {
-    var groups = currentUserGroups.length > 0 ? currentUserGroups : [];
-    if (!groups.length) return;
-    var canDrag = canDragDrop;
-    var mgrLoading = false;
-
-    function tryInject() {
-      if (mgrLoading) return;
-      if (!window.location.pathname.includes("/dashboard/tickets-mesa")) return;
-      var grid = document.querySelector(".MuiDataGrid-root");
-      if (!grid) return;
-      if (document.getElementById("sp-manager-panel")) return;
-      mgrLoading = true;
-      loadManagerPanel(grid, groups, canDrag);
+    // Connect fetchPendingCloseTickets to the manager view module
+    if (window.SP_ManagerView) {
+      window.SP_ManagerView._fetchPendingClose = window.SP_TicketActions.fetchPendingCloseTickets;
     }
-
-    // Initial inject with retry
-    var attempts = 0;
-    var interval = setInterval(function () {
-      if (!window.location.pathname.includes("/dashboard/tickets-mesa")) { attempts++; if (attempts > 40) clearInterval(interval); return; }
-      var grid = document.querySelector(".MuiDataGrid-root");
-      if (!grid && attempts < 40) { attempts++; return; }
-      clearInterval(interval);
-      if (!grid) return;
-      if (document.getElementById("sp-manager-panel")) return;
-      mgrLoading = true;
-      loadManagerPanel(grid, groups, canDrag);
-    }, 500);
-
-    // Observer to re-inject when navigating back (debounced)
-    var mgrDebounceTimer = null;
-    var mgrObserver = new MutationObserver(function () {
-      if (mgrDebounceTimer) clearTimeout(mgrDebounceTimer);
-      mgrDebounceTimer = setTimeout(function () {
-        // Remove panel if not on the right page
-        if (!window.location.pathname.includes("/dashboard/tickets-mesa")) {
-          var existing = document.getElementById("sp-manager-panel");
-          if (existing) { existing.remove(); mgrLoading = false; }
-          return;
-        }
-        tryInject();
-      }, 500);
-    });
-    mgrObserver.observe(document.body, { childList: true, subtree: true });
+    window.SP_ManagerView.init();
   }
 
-  function loadManagerPanel(grid, groups, canDrag) {
-    var spToken = localStorage.getItem("token");
-    if (!spToken) return;
-
-    // Inject config button for manager views
-    var cfgAttempts = 0;
-    var cfgInterval = setInterval(function () {
-      if (document.getElementById("sp-config-btn") || cfgAttempts > 20) { clearInterval(cfgInterval); return; }
-      var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
-      if (!userWrapper) { cfgAttempts++; return; }
-      clearInterval(cfgInterval);
-      var btn = document.createElement("button");
-      btn.id = "sp-config-btn";
-      btn.textContent = "⚙️";
-      btn.title = "Configuración SupportPlus Tools";
-      btn.style.cssText = "padding:4px 10px;font-size:14px;cursor:pointer;border:none;border-radius:6px;background:rgba(255,255,255,0.15);color:#fff;margin-right:8px;";
-      btn.addEventListener("click", function () {
-        // Dispatch custom event to open config
-        document.dispatchEvent(new CustomEvent("sp-open-config"));
-      });
-      userWrapper.parentElement.insertBefore(btn, userWrapper);
-    }, 500);
-
-    var panel = document.createElement("div");
-    panel.id = "sp-manager-panel";
-    panel.style.cssText = "margin-bottom:12px;font-family:system-ui;";
-    grid.parentElement.insertBefore(panel, grid);
-
-    var singleGroup = (groups.length === 1);
-
-    // Summary row (no drag) - only if multiple groups
-    var summaryDiv = document.createElement("div");
-    summaryDiv.style.cssText = "display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:12px;";
-    if (!singleGroup) panel.appendChild(summaryDiv);
-
-    var groupsInfo = groups.map(function (gId) {
-      return GROUP_INFO.find(function (g) { return g.id === gId; }) || { id: gId, name: "Grupo " + gId };
-    });
-
-    // --- Tag filter component ---
-    function createTagFilter(id, items, onChangeCallback) {
-      var container = document.createElement("div");
-      container.id = id;
-      container.style.cssText = "margin-bottom:8px;padding:6px 8px;border:1px solid #ddd;border-radius:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;position:relative;";
-
-      var selectedIds = []; // Empty = show all
-
-      function render() {
-        container.innerHTML = "";
-        selectedIds.forEach(function (sid) {
-          var item = items.find(function (i) { return String(i.id) === sid; });
-          if (!item) return;
-          var tag = document.createElement("span");
-          tag.style.cssText = "display:inline-flex;align-items:center;gap:3px;padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:4px;font-size:10px;color:#1976D2;";
-          tag.innerHTML = item.name + ' <span data-remove="' + sid + '" style="cursor:pointer;color:#D94040;font-weight:700;">✕</span>';
-          tag.querySelector("[data-remove]").addEventListener("click", function () {
-            selectedIds = selectedIds.filter(function (s) { return s !== sid; });
-            render();
-            onChangeCallback(selectedIds);
-          });
-          container.appendChild(tag);
-        });
-        // Add input for searching
-        var input = document.createElement("input");
-        input.type = "text";
-        input.placeholder = selectedIds.length ? "+ Agregar..." : "🔍 Filtrar grupos...";
-        input.style.cssText = "border:none;outline:none;font-size:11px;flex:1;min-width:120px;padding:2px 4px;";
-
-        var dropdown = document.createElement("div");
-        dropdown.style.cssText = "position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:4px;max-height:150px;overflow-y:auto;z-index:10;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.1);";
-
-        function showDropdown() {
-          var query = input.value.toLowerCase();
-          var available = items.filter(function (i) { return !selectedIds.includes(String(i.id)) && i.name.toLowerCase().includes(query); });
-          if (!available.length || !query) { dropdown.style.display = "none"; return; }
-          dropdown.innerHTML = "";
-          available.slice(0, 10).forEach(function (item) {
-            var opt = document.createElement("div");
-            opt.style.cssText = "padding:6px 8px;cursor:pointer;font-size:11px;border-bottom:1px solid #f0f0f0;";
-            opt.textContent = item.name;
-            opt.addEventListener("mousedown", function (e) {
-              e.preventDefault();
-              selectedIds.push(String(item.id));
-              input.value = "";
-              render();
-              onChangeCallback(selectedIds);
-            });
-            opt.addEventListener("mouseenter", function () { opt.style.background = "#e3f2fd"; });
-            opt.addEventListener("mouseleave", function () { opt.style.background = ""; });
-            dropdown.appendChild(opt);
-          });
-          dropdown.style.display = "block";
-        }
-
-        input.addEventListener("input", showDropdown);
-        input.addEventListener("focus", function () { if (input.value) showDropdown(); });
-        input.addEventListener("blur", function () { setTimeout(function () { dropdown.style.display = "none"; }, 150); });
-
-        container.appendChild(input);
-        container.appendChild(dropdown);
-      }
-
-      render();
-      return { element: container, getSelected: function () { return selectedIds; } };
-    }
-
-    // Summary filter - only if multiple groups
-    if (!singleGroup) {
-      var summaryTagFilter = createTagFilter("sp-mgr-summary-filter", groupsInfo, function (selected) {
-        summaryDiv.querySelectorAll("[id^='sp-mgr-summary-']").forEach(function (el) {
-          var gId = el.id.replace("sp-mgr-summary-", "");
-          el.style.display = (!selected.length || selected.includes(gId)) ? "" : "none";
-        });
-      });
-      panel.insertBefore(summaryTagFilter.element, summaryDiv);
-
-      groupsInfo.forEach(function (dept) {
-        var col = document.createElement("div");
-        col.id = "sp-mgr-summary-" + dept.id;
-        col.style.cssText = "min-width:160px;border:2px solid #1976D2;border-radius:8px;overflow:hidden;flex-shrink:0;text-align:center;";
-        col.innerHTML = '<div style="background:#1976D2;color:#fff;padding:6px 10px;font-size:10px;font-weight:700;">' + dept.name + '</div>' +
-          '<div class="sp-mgr-count" style="padding:12px;font-size:24px;font-weight:700;color:#1976D2;">...</div>';
-        summaryDiv.appendChild(col);
-      });
-    }
-
-    // Collapse filter - only if multiple groups
-    if (!singleGroup) {
-      var collapseTagFilter = createTagFilter("sp-mgr-collapse-filter", groupsInfo, function (selected) {
-        panel.querySelectorAll("[id^='sp-mgr-section-']").forEach(function (el) {
-          var gId = el.id.replace("sp-mgr-section-", "");
-          el.style.display = (!selected.length || selected.includes(gId)) ? "" : "none";
-        });
-      });
-      panel.appendChild(collapseTagFilter.element);
-    }
-
-    // Collapsible detail per group
-    groupsInfo.forEach(function (dept) {
-      var section = document.createElement("div");
-      section.id = "sp-mgr-section-" + dept.id;
-      section.style.cssText = "margin-bottom:8px;border:1px solid #ddd;border-radius:8px;overflow:hidden;";
-
-      var header = document.createElement("div");
-      header.style.cssText = "padding:8px 12px;background:#f5f5f5;cursor:pointer;font-size:12px;font-weight:600;display:flex;justify-content:space-between;align-items:center;";
-      header.innerHTML = '<span>📂 ' + dept.name + '</span><span class="sp-mgr-toggle" style="font-size:14px;">' + (singleGroup ? '▼' : '▶') + '</span>';
-
-      var body = document.createElement("div");
-      body.className = "sp-mgr-body";
-      body.style.cssText = (singleGroup ? "display:block;" : "display:none;") + "padding:8px;overflow-x:auto;";
-      body.innerHTML = '<div class="sp-mgr-columns" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;"></div>';
-
-      // If single group, auto-load and hide header
-      if (singleGroup) {
-        body.dataset.loaded = "true";
-        header.style.display = "none";
-        loadManagerGroupDetail(dept.id, body.querySelector(".sp-mgr-columns"), spToken, canDrag);
-      }
-
-      header.addEventListener("click", function () {
-        var isOpen = body.style.display !== "none";
-        body.style.display = isOpen ? "none" : "block";
-        header.querySelector(".sp-mgr-toggle").textContent = isOpen ? "▶" : "▼";
-        if (!isOpen && !body.dataset.loaded) {
-          body.dataset.loaded = "true";
-          loadManagerGroupDetail(dept.id, body.querySelector(".sp-mgr-columns"), spToken, canDrag);
-        }
-      });
-
-      section.appendChild(header);
-      section.appendChild(body);
-      panel.appendChild(section);
-    });
-
-    // Fetch summary counts
-    groupsInfo.forEach(function (dept) {
-      Promise.all([
-        fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + dept.id + "&ticketStatusName=Asignado", {
-          headers: { accept: "application/json", authorization: "Bearer " + spToken }
-        }).then(function (r) { return r.json(); }),
-        fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + dept.id + "&ticketStatusName=En%20atenci%C3%B3n", {
-          headers: { accept: "application/json", authorization: "Bearer " + spToken }
-        }).then(function (r) { return r.json(); })
-      ]).then(function (results) {
-        var count = ((results[0].data || results[0]).content || []).length + ((results[1].data || results[1]).content || []).length;
-        var col = document.getElementById("sp-mgr-summary-" + dept.id);
-        if (col) col.querySelector(".sp-mgr-count").textContent = count;
-      }).catch(function () { });
-    });
-
-    // Auto-refresh summary every 60s (with cleanup reference)
-    var _summaryInterval = setInterval(function () {
-      if (!document.getElementById("sp-manager-panel")) { clearInterval(_summaryInterval); return; }
-      groupsInfo.forEach(function (dept) {
-        Promise.all([
-          fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + dept.id + "&ticketStatusName=Asignado", {
-            headers: { accept: "application/json", authorization: "Bearer " + spToken }
-          }).then(function (r) { return r.json(); }),
-          fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + dept.id + "&ticketStatusName=En%20atenci%C3%B3n", {
-            headers: { accept: "application/json", authorization: "Bearer " + spToken }
-          }).then(function (r) { return r.json(); })
-        ]).then(function (results) {
-          var count = ((results[0].data || results[0]).content || []).length + ((results[1].data || results[1]).content || []).length;
-          var col = document.getElementById("sp-mgr-summary-" + dept.id);
-          if (col) col.querySelector(".sp-mgr-count").textContent = count;
-        }).catch(function () { });
-      });
-    }, 60000);
-
-    // Refresh open collapsibles on focus or after actions (smooth, no flash)
-    function refreshOpenCollapsibles() {
-      panel.querySelectorAll(".sp-mgr-body").forEach(function (body) {
-        if (body.style.display !== "none" && body.dataset.loaded) {
-          var section = body.parentElement;
-          var groupId = section.id.replace("sp-mgr-section-", "");
-          // Re-fetch tickets for each profile column without clearing
-          body.querySelectorAll(".sp-mgr-ptickets").forEach(function (listEl) {
-            var profileId = listEl.dataset.profileId;
-            var gId = listEl.dataset.groupId || groupId;
-            if (profileId === "unassigned") {
-              // Refresh unassigned
-              fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + gId + "&ticketStatusName=En%20espera&page=0&size=100", {
-                headers: { accept: "application/json", authorization: "Bearer " + spToken }
-              }).then(function (r) { return r.json(); }).then(function (json) {
-                var tickets = (json.data || json).content || [];
-                updateTicketList(listEl, tickets, true);
-              }).catch(function () { });
-            } else {
-              // Refresh assigned per profile
-              Promise.all([
-                fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + profileId + "&ticketStatusName=Asignado", {
-                  headers: { accept: "application/json", authorization: "Bearer " + spToken }
-                }).then(function (r) { return r.json(); }),
-                fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + profileId + "&ticketStatusName=En%20atenci%C3%B3n", {
-                  headers: { accept: "application/json", authorization: "Bearer " + spToken }
-                }).then(function (r) { return r.json(); })
-              ]).then(function (results) {
-                var tickets = ((results[0].data || results[0]).content || []).concat((results[1].data || results[1]).content || []);
-                updateTicketList(listEl, tickets, false);
-              }).catch(function () { });
-            }
-          });
-        }
-      });
-    }
-
-    // Update ticket list without clearing (smooth diff)
-    function updateTicketList(listEl, tickets, isUnassigned) {
-      var countEl = listEl.previousElementSibling ? listEl.previousElementSibling.querySelector(".sp-mgr-pcount") : null;
-      if (countEl) countEl.textContent = "(" + tickets.length + ")";
-      if (!tickets.length) {
-        listEl.innerHTML = '<div style="text-align:center;padding:6px;color:#aaa;font-size:10px;">Sin tickets</div>';
-        return;
-      }
-      // Build new HTML and only replace if different
-      var html = "";
-      tickets.forEach(function (t) {
-        var statusColor = t.ticketStatusName === "En espera" ? "#FF8F00" : t.ticketStatusName === "Asignado" ? "#1976D2" : "#4CAF50";
-        html += '<div ' + (canDrag ? 'draggable="true" ' : '') + 'data-ticket-id="' + t.id + '" class="sp-mgr-ticket" style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:9px;line-height:1.3;' + (canDrag ? 'cursor:grab;' : '') + '">';
-        html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
-        html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + esc((t.subject || "").substring(0, 25)) + '</div>';
-        html += '<div style="display:flex;justify-content:space-between;"><span style="color:' + statusColor + ';font-weight:600;font-size:8px;">' + (t.ticketStatusName || "") + '</span><span style="color:#888;font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60px;" title="' + (isUnassigned ? (t.requesterName || "") : (t.requesterName || "")) + '">' + esc((t.requesterName || "").split(" ")[0]) + '</span></div>';
-        html += '</div>';
-      });
-      if (listEl.innerHTML !== html) listEl.innerHTML = html;
-    }
-
-    document.addEventListener("visibilitychange", function () {
-      if (document.visibilityState === "visible") refreshOpenCollapsibles();
-    });
-    document.addEventListener("sp-refresh-panel", refreshOpenCollapsibles);
-  }
-
-  function loadManagerGroupDetail(groupId, container, spToken, canDrag) {
-    // Fetch members of this group
-    fetch("https://macropayapi.supportplus.mx/tickets/web/active-profiles-by-resolution-group/" + groupId, {
-      headers: { accept: "application/json", authorization: "Bearer " + spToken }
-    }).then(function (r) { return r.json(); }).then(function (json) {
-      var profiles = json.data || json;
-      if (!Array.isArray(profiles)) { container.innerHTML = '<div style="color:#888;font-size:11px;">Sin miembros</div>'; return; }
-
-      // Read blacklist: first from memory, fallback to storage
-      function applyBlacklistAndRender(blacklistNotionIds) {
-        if (blacklistNotionIds.length > 0) {
-          Promise.all(blacklistNotionIds.map(function (pageId) {
-            return new Promise(function (resolve) {
-              chrome.runtime.sendMessage({ type: "notion-page", pageId: pageId }, function (resp) {
-                if (resp && resp.success) {
-                  resolve(resp.data.properties?.["Id Support Plus"]?.number || null);
-                } else { resolve(null); }
-              });
-            });
-          })).then(function (blacklistedProfileIds) {
-            blacklistedProfileIds = blacklistedProfileIds.filter(Boolean);
-            if (blacklistedProfileIds.length > 0) {
-              profiles = profiles.filter(function (p) {
-                return !blacklistedProfileIds.includes(p.profileId);
-              });
-            }
-            renderGroupDetail(groupId, container, profiles, spToken, canDrag);
-          });
-        } else {
-          renderGroupDetail(groupId, container, profiles, spToken, canDrag);
-        }
-      }
-
-      var blacklist = _userConfig.blacklist || [];
-      if (blacklist.length > 0) {
-        applyBlacklistAndRender(blacklist);
-      } else {
-        // Fallback: read from storage in case _userConfig hasn't been set yet
-        chrome.storage.local.get("userConfig", function (stored) {
-          var storedCfg = stored.userConfig || {};
-          applyBlacklistAndRender(storedCfg.blacklist || []);
-        });
-      }
-    }).catch(function () { container.innerHTML = '<div style="color:#888;font-size:11px;">Error al cargar</div>'; });
-  }
-
-  function renderGroupDetail(groupId, container, profiles, spToken, canDrag) {
-
-    // Create "Sin asignar" column at the left
-    var unassignedCol = document.createElement("div");
-    unassignedCol.style.cssText = "min-width:160px;max-width:200px;border:1px solid #FF8F00;border-radius:6px;overflow:hidden;flex-shrink:0;";
-    unassignedCol.innerHTML = '<div style="background:#FF8F00;color:#fff;padding:4px 8px;font-size:10px;font-weight:700;text-align:center;">⏳ Sin asignar <span class="sp-mgr-pcount">(...)</span></div>' +
-      '<div class="sp-mgr-ptickets" data-profile-id="unassigned" data-group-id="' + groupId + '" style="padding:3px;max-height:180px;overflow-y:auto;background:#fafafa;min-height:25px;"></div>';
-    container.appendChild(unassignedCol);
-
-    // Create columns per member
-    profiles.forEach(function (p) {
-      var col = document.createElement("div");
-      col.style.cssText = "min-width:160px;max-width:200px;border:1px solid #ddd;border-radius:6px;overflow:hidden;flex-shrink:0;";
-      col.innerHTML = '<div style="background:#2196F3;color:#fff;padding:4px 8px;font-size:10px;font-weight:700;text-align:center;">' + esc(p.profileFullName.split(" ")[0]) + ' <span class="sp-mgr-pcount">(...)</span></div>' +
-        '<div class="sp-mgr-ptickets" data-profile-id="' + p.profileId + '" data-group-id="' + groupId + '" style="padding:3px;max-height:180px;overflow-y:auto;background:#fafafa;min-height:25px;"></div>';
-      container.appendChild(col);
-    });
-
-    // Click on ticket opens modal (only if not dragging)
-    var isDragging = false;
-    container.addEventListener("mousedown", function (e) { isDragging = false; });
-    container.addEventListener("mousemove", function (e) { if (e.buttons) isDragging = true; });
-    container.addEventListener("click", function (e) {
-      if (isDragging) return;
-      if (Date.now() - _lastDropTime < 1500) return;
-      var ticket = e.target.closest(".sp-mgr-ticket");
-      if (!ticket) return;
-      var ticketId = ticket.dataset.ticketId;
-      if (ticketId) document.dispatchEvent(new CustomEvent("sp-open-ticket", { detail: { ticketId: parseInt(ticketId) } }));
-    });
-
-    // Setup drag and drop if allowed
-    if (canDrag) {
-      container.addEventListener("dragstart", function (e) {
-        var ticket = e.target.closest(".sp-mgr-ticket");
-        if (!ticket) return;
-        e.dataTransfer.setData("text/plain", ticket.dataset.ticketId);
-        ticket.style.opacity = "0.4";
-      });
-      container.addEventListener("dragend", function (e) {
-        var ticket = e.target.closest(".sp-mgr-ticket");
-        if (ticket) ticket.style.opacity = "1";
-      });
-      container.addEventListener("dragover", function (e) {
-        e.preventDefault();
-        var col = e.target.closest("[style*='border-radius:6px']");
-        var zone = e.target.closest(".sp-mgr-ptickets") || (col ? col.querySelector(".sp-mgr-ptickets") : null);
-        if (zone) { zone.style.background = "#e3f2fd"; zone.style.outline = "2px dashed #1976D2"; }
-      });
-      container.addEventListener("dragleave", function (e) {
-        var col = e.target.closest("[style*='border-radius:6px']");
-        var zone = e.target.closest(".sp-mgr-ptickets") || (col ? col.querySelector(".sp-mgr-ptickets") : null);
-        if (zone && !zone.contains(e.relatedTarget)) { zone.style.background = "#fafafa"; zone.style.outline = "none"; }
-      });
-      container.addEventListener("drop", async function (e) {
-        e.preventDefault();
-        var zone = e.target.closest(".sp-mgr-ptickets") || (e.target.closest("[style*='border-radius:6px']") ? e.target.closest("[style*='border-radius:6px']").querySelector(".sp-mgr-ptickets") : null);
-        if (!zone) return;
-        zone.style.background = "#fafafa";
-        zone.style.outline = "none";
-        var ticketId = e.dataTransfer.getData("text/plain");
-        var targetProfileId = zone.dataset.profileId;
-        var targetGroupId = zone.dataset.groupId;
-        if (!ticketId || !targetProfileId) return;
-
-        // Check same column
-        var src = container.querySelector('.sp-mgr-ticket[data-ticket-id="' + ticketId + '"]');
-        if (src) {
-          var srcZone = src.closest(".sp-mgr-ptickets");
-          if (srcZone && srcZone.dataset.profileId === targetProfileId) return;
-        }
-
-        // Move ticket visually immediately (optimistic UI)
-        var srcZoneRef = src ? src.closest(".sp-mgr-ptickets") : null;
-        if (src) {
-          src._srcZone = srcZoneRef;
-          src.style.opacity = "0.5";
-          src.style.border = "1px dashed #1976D2";
-        }
-        _lastDropTime = Date.now();
-
-        // API call
-        try {
-          var res = await fetch("https://macropayapi.supportplus.mx/tickets/web/reassign/" + ticketId, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
-            body: JSON.stringify({ resolutionGroupId: parseInt(targetGroupId), serviceId: null, responsibleProfileId: parseInt(targetProfileId), resolutionGroup: { label: "", value: parseInt(targetGroupId) } }),
-          });
-          if (!res.ok) throw new Error("HTTP " + res.status);
-          var json2 = await res.json();
-          if (json2.success) {
-            // Move ticket to target column visually (no reload)
-            if (src) {
-              src.style.opacity = "1";
-              src.style.border = "1px solid #eee";
-              var targetZone = container.querySelector('.sp-mgr-ptickets[data-profile-id="' + targetProfileId + '"]');
-              if (targetZone) {
-                // Remove "Sin tickets" placeholder if present
-                var placeholder = targetZone.querySelector('div[style*="color:#aaa"]');
-                if (placeholder) placeholder.remove();
-                targetZone.appendChild(src);
-              }
-              // Update source count
-              var srcZone = src._srcZone;
-              if (srcZone) {
-                var srcCount = srcZone.querySelectorAll(".sp-mgr-ticket").length;
-                var srcCountEl = srcZone.previousElementSibling?.querySelector(".sp-mgr-pcount");
-                if (srcCountEl) srcCountEl.textContent = "(" + srcCount + ")";
-                if (!srcCount) srcZone.innerHTML = '<div style="text-align:center;padding:6px;color:#aaa;font-size:10px;">Sin tickets</div>';
-              }
-              // Update target count
-              if (targetZone) {
-                var tgtCount = targetZone.querySelectorAll(".sp-mgr-ticket").length;
-                var tgtCountEl = targetZone.previousElementSibling?.querySelector(".sp-mgr-pcount");
-                if (tgtCountEl) tgtCountEl.textContent = "(" + tgtCount + ")";
-              }
-            }
-          }
-        } catch (err) {
-          // Revert visual on error
-          if (src) { src.style.opacity = "1"; src.style.border = "1px solid #eee"; }
-        }
-      });
-    }
-
-    // Fetch tickets per member
-    profiles.forEach(function (p) {
-      Promise.all([
-        fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + p.profileId + "&ticketStatusName=Asignado", {
-          headers: { accept: "application/json", authorization: "Bearer " + spToken }
-        }).then(function (r) { return r.json(); }),
-        fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + p.profileId + "&ticketStatusName=En%20atenci%C3%B3n", {
-          headers: { accept: "application/json", authorization: "Bearer " + spToken }
-        }).then(function (r) { return r.json(); })
-      ]).then(function (results) {
-        var tickets = ((results[0].data || results[0]).content || []).concat((results[1].data || results[1]).content || []);
-        var listEl = container.querySelector('.sp-mgr-ptickets[data-profile-id="' + p.profileId + '"]');
-        if (!listEl) return;
-        var countEl = listEl.previousElementSibling.querySelector(".sp-mgr-pcount");
-        if (countEl) countEl.textContent = "(" + tickets.length + ")";
-
-        // Hide column if "only with tickets" is enabled and no tickets
-        if (!tickets.length && _userConfig.onlyWithTickets) {
-          var col = listEl.parentElement;
-          if (col) col.style.display = "none";
-        }
-
-        if (!tickets.length) {
-          listEl.innerHTML = '<div style="text-align:center;padding:6px;color:#aaa;font-size:10px;">Sin tickets</div>';
-        } else {
-          var html = "";
-          tickets.forEach(function (t) {
-            html += '<div ' + (canDrag ? 'draggable="true" ' : '') + 'data-ticket-id="' + t.id + '" class="sp-mgr-ticket" style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:9px;line-height:1.3;' + (canDrag ? 'cursor:grab;' : '') + '">';
-            html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
-            html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + esc((t.subject || "").substring(0, 25)) + '</div>';
-            html += '<div style="color:#888;font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(t.requesterName || "") + '">' + esc((t.requesterName || "").split(" ")[0]) + '</div>';
-            html += '</div>';
-          });
-          listEl.innerHTML = html;
-        }
-      }).catch(function () { });
-    });
-
-    // Fetch "Sin asignar" (En espera)
-    fetch("https://macropayapi.supportplus.mx/tickets/search-by-level-and-resolution-groups?page=0&size=50&resolutionGroupId=" + groupId + "&ticketStatusName=En%20espera", {
-      headers: { accept: "application/json", authorization: "Bearer " + spToken }
-    }).then(function (r) { return r.json(); }).then(function (json) {
-      var tickets = (json.data || json).content || [];
-      var listEl = container.querySelector('.sp-mgr-ptickets[data-profile-id="unassigned"]');
-      if (!listEl) return;
-      var countEl = listEl.previousElementSibling.querySelector(".sp-mgr-pcount");
-      if (countEl) countEl.textContent = "(" + tickets.length + ")";
-      if (!tickets.length) {
-        listEl.innerHTML = '<div style="text-align:center;padding:6px;color:#aaa;font-size:10px;">Sin tickets</div>';
-      } else {
-        var html = "";
-        tickets.forEach(function (t) {
-          html += '<div ' + (canDrag ? 'draggable="true" ' : '') + 'data-ticket-id="' + t.id + '" class="sp-mgr-ticket" style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:9px;line-height:1.3;' + (canDrag ? 'cursor:grab;' : '') + '">';
-          html += '<div style="font-weight:600;color:#E65100;">' + (t.uniqueCode || "") + '</div>';
-          html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + esc((t.subject || "").substring(0, 25)) + '</div>';
-          html += '<div style="color:#888;font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(t.requesterName || "") + '">' + esc((t.requesterName || "").split(" ")[0]) + '</div>';
-          html += '</div>';
-        });
-        listEl.innerHTML = html;
-      }
-    }).catch(function () { });
-
-    // Create "Cerrados hoy" column at the right
-    var today = new Date();
-    var todayStart = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0") + "T00:00";
-    var todayEnd = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0") + "T23:59";
-
-    var closedCol = document.createElement("div");
-    closedCol.style.cssText = "min-width:160px;max-width:200px;border:1px solid #2E7D32;border-radius:6px;overflow:hidden;flex-shrink:0;";
-    closedCol.innerHTML = '<div style="background:#2E7D32;color:#fff;padding:4px 8px;font-size:10px;font-weight:700;text-align:center;">✅ Cerrados hoy <span class="sp-mgr-closed-count">(...)</span></div>' +
-      '<div class="sp-mgr-closed-list" style="padding:3px;max-height:180px;overflow-y:auto;background:#fafafa;min-height:25px;"></div>';
-    closedCol.addEventListener("click", function (e) {
-      var ticket = e.target.closest(".sp-mgr-ticket");
-      if (!ticket) return;
-      var ticketId = ticket.dataset.ticketId;
-      if (ticketId) document.dispatchEvent(new CustomEvent("sp-open-ticket", { detail: { ticketId: parseInt(ticketId) } }));
-    });
-    container.appendChild(closedCol);
-
-    // "Pendientes por cerrar" column (first manager panel)
-    var pendingCol1 = document.createElement("div");
-    pendingCol1.className = "sp-mgr-pending-close-col";
-    pendingCol1.style.cssText = "min-width:160px;max-width:200px;border:1px solid #FF8F00;border-radius:6px;overflow:hidden;flex-shrink:0;display:none;";
-    pendingCol1.innerHTML = '<div style="background:#FF8F00;color:#fff;padding:4px 8px;font-size:10px;font-weight:700;text-align:center;">🕐 Pendientes <span class="sp-mgr-pending-count">(...)</span></div>' +
-      '<div class="sp-mgr-pending-list" style="padding:3px;max-height:180px;overflow-y:auto;background:#fafafa;min-height:25px;"></div>';
-    container.insertBefore(pendingCol1, closedCol);
-
-    fetchPendingCloseTickets(currentUserGroups).then(function (pendingTickets) {
-      if (!pendingTickets.length) return;
-      pendingCol1.style.display = "";
-      var countEl = pendingCol1.querySelector(".sp-mgr-pending-count");
-      if (countEl) countEl.textContent = "(" + pendingTickets.length + ")";
-      var listEl = pendingCol1.querySelector(".sp-mgr-pending-list");
-      if (!listEl) return;
-      var withinHours = isWithinWorkHours();
-      var html = "";
-      pendingTickets.forEach(function (pt) {
-        var cursor = withinHours ? "cursor:pointer;" : "cursor:not-allowed;opacity:0.6;";
-        html += '<div class="sp-mgr-ticket sp-pending-ticket" data-ticket-id="' + pt.ticketId + '" style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:9px;line-height:1.3;' + cursor + '">' +
-          '<div style="font-weight:600;color:#E65100;">' + esc(pt.ticket) + '</div>' +
-          (!withinHours ? '<div style="color:#888;font-size:8px;">🔒 Fuera de horario</div>' : '') +
-          '</div>';
-      });
-      listEl.innerHTML = html;
-      listEl.addEventListener("click", function (e) {
-        if (!isWithinWorkHours()) { showErrorToast("⏰ Fuera de horario laboral. No puedes cerrar tickets ahora."); return; }
-        var ticket = e.target.closest(".sp-pending-ticket");
-        if (!ticket) return;
-        var tId = ticket.dataset.ticketId;
-        if (tId) document.dispatchEvent(new CustomEvent("sp-open-ticket", { detail: { ticketId: parseInt(tId) } }));
-      });
-    });
-
-    // Fetch closed today
-    fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + groupId + "&ticketStatusName=Cerrado&initDate=" + todayStart + "&endDate=" + todayEnd + "&page=0&size=100", {
-      headers: { accept: "application/json", authorization: "Bearer " + spToken }
-    }).then(function (r) { return r.json(); }).then(function (json) {
-      var tickets = (json.data || json).content || [];
-      var countEl = closedCol.querySelector(".sp-mgr-closed-count");
-      if (countEl) countEl.textContent = "(" + tickets.length + ")";
-      var listEl = closedCol.querySelector(".sp-mgr-closed-list");
-      if (!listEl) return;
-      if (!tickets.length) {
-        listEl.innerHTML = '<div style="text-align:center;padding:6px;color:#aaa;font-size:10px;">Sin tickets</div>';
-      } else {
-        var html = "";
-        tickets.forEach(function (t) {
-          html += '<div style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #2E7D32;font-size:9px;line-height:1.3;">';
-          html += '<div style="font-weight:600;color:#2E7D32;">' + (t.uniqueCode || "") + '</div>';
-          html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + esc((t.subject || "").substring(0, 25)) + '</div>';
-          html += '<div style="color:#888;font-size:8px;">' + (t.responsibleName || "").split(" ")[0] + '</div>';
-          html += '</div>';
-        });
-        listEl.innerHTML = html;
-      }
-    }).catch(function () { });
-  }
+  // loadManagerPanel, loadManagerGroupDetail, renderGroupDetail: now in features/manager-view.js
 
   function initExtension() {
     _showQuickDetailModal = showQuickDetailModal;
 
-    // Inject basic buttons with retry (deferred via setTimeout to avoid temporal dead zone)
-    // NOTE: Also triggered independently below (outside session check)
-    setTimeout(function () {
-      (function retryInjectHeader(attempts) {
-        var wrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
-        if (wrapper || attempts >= 20) {
-          injectConfigButton();
-          injectSearchButton();
-          injectQuickSearch();
-          injectUpdateButton();
-        } else {
-          setTimeout(function () { retryInjectHeader(attempts + 1); }, 100);
-        }
-      })(0);
-    }, 0);
+    // Header buttons: inject local buttons once wrapper is available
+    SP_DOM.waitForElement('[class*="warapperNameUserAndLogout"]', { maxAttempts: 20, interval: 150 })
+      .then(function () {
+        if (typeof injectConfigButton === "function") injectConfigButton();
+        if (typeof injectSearchButton === "function") injectSearchButton();
+        if (typeof injectQuickSearch === "function") injectQuickSearch();
+        if (typeof injectUpdateButton === "function") injectUpdateButton();
+      });
 
     // --- Toast helpers (from components.js window globals) ---
-    const ensureToastStyles = window.ensureToastStyles;
     const showLoadingToast = window.showLoadingToast;
     const showSuccessToast = window.showSuccessToast;
     const showErrorToast = window.showErrorToast;
 
     const SP_API = window.SP_CONFIG.SP_API;
-    const MONDAY_API = "https://api.monday.com/v2";
+
+    // Helper: build auth headers for SP API calls
+    function spHeaders(token) {
+      return { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + (token || getToken()) };
+    }
+    function spGetHeaders(token) {
+      return { accept: "application/json", authorization: "Bearer " + (token || getToken()) };
+    }
+
+    // Helper: add hover text toggle to a button (disabled-aware)
+    function hoverText(btn, normal, hover) {
+      btn.addEventListener("mouseenter", function () { if (!btn.disabled) btn.textContent = hover; });
+      btn.addEventListener("mouseleave", function () { if (!btn.disabled) btn.textContent = normal; });
+    }
+
     const BTN_CLASS = "sp-monday-btn";
     const SYNCED_CLASS = "sp-monday-synced";
     const TAKE_BTN_CLASS = "sp-take-btn";
@@ -1249,8 +226,32 @@
     const CACHE_TTL = 1000 * 60 * 30;
 
     const PRIORITY_MAP = window.SP_CONFIG.PRIORITY_MAP;
-
     const MONTH_NAMES = window.SP_CONFIG.MONTH_NAMES;
+
+    // ─── Monday API: delegate to shared lib/api.js ──────────
+    // These wrappers maintain the local interface but use the centralized implementation.
+    function getToken() { return window.SP_API_Lib.getSpToken(); }
+    var getMondayToken = window.SP_API_Lib.getMondayToken;
+    var getMondayWorkspaceId = window.SP_API_Lib.getMondayWorkspaceId;
+    var getMondayConfigForGroup = window.SP_API_Lib.getMondayConfigForGroup;
+    var getMondayTicketBoards = function (token) { return window.SP_API_Lib.getMondayTicketBoards(token); };
+    var getMondayBoardForMonth = function (year, month, groupId) {
+      var gId = groupId || window.SP_Session.state.teamArea || (currentUserGroups.length ? currentUserGroups[0] : "");
+      return window.SP_API_Lib.getMondayBoardForMonth(year, month, gId);
+    };
+    var getMondayBoardId = function (groupId) {
+      var gId = groupId || window.SP_Session.state.teamArea || (currentUserGroups.length ? currentUserGroups[0] : "");
+      return window.SP_API_Lib.getMondayBoardId(gId);
+    };
+    var checkTicketExistsInMonday = function (token, uniqueCode) { return window.SP_API_Lib.checkTicketInMonday(token, uniqueCode); };
+
+    function mondayQuery(token, query, variables) {
+      return window.SP_API_Lib.mondayQuery(token, query, variables);
+    }
+
+    async function getMondayUsers(token) {
+      return window.SP_API_Lib.getMondayUsers(token);
+    }
 
     // Extract month (0-indexed) and year from board name like "Tickets DBA - Abril - 2026"
     function parseBoardDate(boardName) {
@@ -1270,91 +271,10 @@
         var boardData = await mondayQuery(mondayToken, 'query ($boardId: [ID!]!) { boards(ids: $boardId) { name } }', { boardId });
         var boardName = boardData.boards[0]?.name || "";
         var boardDate = parseBoardDate(boardName);
-        if (!boardDate) return true; // No date pattern, allow
+        if (!boardDate) return true;
         var ticketDate = new Date(ticketCreatedAt);
         return ticketDate.getMonth() === boardDate.month && ticketDate.getFullYear() === boardDate.year;
-      } catch (e) { return true; } // On error, allow
-    }
-
-    function getToken() { return localStorage.getItem("token"); }
-    var _mondayTokenCache = "";
-    function getMondayToken() {
-      if (_mondayTokenCache) return Promise.resolve(_mondayTokenCache);
-      return new Promise(function (resolve) {
-        chrome.storage.local.get("mondayToken", function (r) {
-          _mondayTokenCache = r.mondayToken || "";
-          resolve(_mondayTokenCache);
-        });
-      });
-    }
-    var _mondayWorkspaceCache = "";
-    function getMondayWorkspaceId() {
-      if (_mondayWorkspaceCache) return Promise.resolve(_mondayWorkspaceCache);
-      return new Promise(function (resolve) {
-        chrome.storage.local.get(["groupMondayConfig"], function (r) {
-          var config = r.groupMondayConfig || {};
-          // Get first group that has monday config
-          var groupId = currentTeamArea || (currentUserGroups.length ? currentUserGroups[0] : "");
-          if (groupId && config[groupId]) {
-            _mondayWorkspaceCache = config[groupId].workspaceId;
-          }
-          resolve(_mondayWorkspaceCache);
-        });
-      });
-    }
-
-    // Get Monday config for a specific group (workspace, folder, etiqueta)
-    function getMondayConfigForGroup(groupId) {
-      return new Promise(function (resolve) {
-        chrome.storage.local.get(["groupMondayConfig"], function (r) {
-          var config = r.groupMondayConfig || {};
-          resolve(config[groupId] || null);
-        });
-      });
-    }
-    var _mondayBoardsCache = {}; // month -> boardId
-
-    // Get all ticket boards for the user's workspace (filters by configured groups' etiquetas)
-    async function getMondayTicketBoards(mondayToken) {
-      var wsId = await getMondayWorkspaceId();
-      if (!wsId) return [];
-      var boardsData = await mondayQuery(mondayToken, '{ boards(workspace_ids: [' + wsId + '], limit: 50) { id name } }', {});
-      return (boardsData.boards || []).filter(function (b) { return !b.name.includes("Subelementos"); });
-    }
-
-    // Check if a ticket already exists in Monday (by uniqueCode). Returns itemId if found, null if not.
-    async function checkTicketExistsInMonday(mondayToken, uniqueCode) {
-      if (!uniqueCode) return null;
-      var boards = await getMondayTicketBoards(mondayToken);
-      for (var b of boards) {
-        try {
-          var res = await mondayQuery(mondayToken, 'query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }', { boardId: b.id, columnId: "text_mm2c9nhc", value: uniqueCode });
-          var items = res.items_page_by_column_values?.items || [];
-          if (items.length) return items[0].id;
-        } catch (e) { continue; }
-      }
-      return null;
-    }
-
-    async function getMondayBoardForMonth(year, month, groupId) {
-      var gId = groupId || currentTeamArea || (currentUserGroups.length ? currentUserGroups[0] : "");
-      var mondayConfig = await getMondayConfigForGroup(gId);
-      if (!mondayConfig || !mondayConfig.etiqueta) return null;
-      var key = gId + "-" + year + "-" + String(month + 1).padStart(2, "0");
-      if (_mondayBoardsCache[key]) return _mondayBoardsCache[key];
-      var mondayToken = await getMondayToken();
-      if (!mondayToken) return null;
-      var meses = window.SP_CONFIG.MONTH_NAMES;
-      var boardName = mondayConfig.etiqueta + " - " + meses[month] + " - " + year;
-      var boards = await getMondayTicketBoards(mondayToken);
-      var board = boards.find(function (b) { return b.name.trim().toLowerCase() === boardName.trim().toLowerCase(); });
-      if (board) { _mondayBoardsCache[key] = board.id; return board.id; }
-      return null;
-    }
-
-    function getMondayBoardId(groupId) {
-      var now = new Date();
-      return getMondayBoardForMonth(now.getFullYear(), now.getMonth(), groupId);
+      } catch (e) { return true; }
     }
 
     // Parse "19/03/2026 - 17:51" → board name using group's EtiquetaMonday
@@ -1382,17 +302,6 @@
       setCache(ids);
     }
 
-    // --- Monday API ---
-    async function mondayQuery(token, query, variables) {
-      return new Promise(function (resolve, reject) {
-        chrome.runtime.sendMessage({ type: "monday-query", token: token, query: query, variables: variables }, function (resp) {
-          if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
-          if (!resp || !resp.success) return reject(new Error(resp?.error || "Monday query failed"));
-          resolve(resp.data);
-        });
-      });
-    }
-
     // --- Sync ---
     let syncPromise = null;
     async function fetchSyncedTickets() {
@@ -1401,7 +310,6 @@
       const mondayToken = await getMondayToken();
       if (!mondayToken) return {};
       try {
-        // Always search ALL ticket boards
         const ticketBoards = await getMondayTicketBoards(mondayToken);
         const boardIds = ticketBoards.map((b) => b.id);
         if (!boardIds.length) return {};
@@ -1430,38 +338,13 @@
         setCache(synced);
         return synced;
       } catch (err) {
-        console.warn("[SP Monday] Sync error:", err);
+        SP_Log.warn("Monday sync error:", err);
         return {};
       }
     }
     function ensureSyncStarted() {
       if (!syncPromise) syncPromise = fetchSyncedTickets();
       return syncPromise;
-    }
-
-    // --- Monday users & boards cache ---
-    let mondayUsersPromise = null;
-    async function getMondayUsers(token) {
-      if (!mondayUsersPromise) {
-        mondayUsersPromise = mondayQuery(token, `{ users(limit:500) { id email } }`)
-          .then((d) => {
-            var map = (d.users || []).reduce((m, u) => { if (u.email) m[u.email.toLowerCase()] = u.id; return m; }, {});
-            console.log("[SP] Monday users loaded:", Object.keys(map).length);
-            return map;
-          })
-          .catch(function (e) { console.log("[SP] Monday users failed:", e.message); mondayUsersPromise = null; return {}; });
-      }
-      return mondayUsersPromise;
-    }
-
-    let mondayBoardsCache = null;
-    async function getMondayBoards(token) {
-      if (!mondayBoardsCache) {
-        const data = await mondayQuery(token, `{ boards(limit:500) { id name } }`);
-        mondayBoardsCache = data.boards.filter((b) => b.name.startsWith("Tickets DBA") && !b.name.includes("Subelementos"));
-        console.log("[SP Monday] Boards:", mondayBoardsCache.map(b => b.name));
-      }
-      return mondayBoardsCache;
     }
 
     // --- UI ---
@@ -1480,22 +363,7 @@
     }
 
     function createCopyButton(text) {
-      const btn = document.createElement("button");
-      btn.className = "sp-copy-btn";
-      btn.innerHTML = "📋";
-      btn.title = "Copiar folio";
-      btn.style.cssText = "padding:1px 4px;font-size:12px;cursor:pointer;border:none;background:transparent;margin-left:4px;opacity:0.6;";
-      btn.addEventListener("mouseenter", function () { btn.style.opacity = "1"; });
-      btn.addEventListener("mouseleave", function () { btn.style.opacity = "0.6"; });
-      btn.addEventListener("click", function (e) {
-        e.stopPropagation();
-        e.preventDefault();
-        navigator.clipboard.writeText(text).then(function () {
-          btn.innerHTML = "✅";
-          setTimeout(function () { btn.innerHTML = "📋"; }, 1500);
-        });
-      });
-      return btn;
+      return window.SP_DetailView.createCopyButton(text);
     }
 
     function createButton(ticketId) {
@@ -1505,8 +373,7 @@
       btn.title = "Migrar a Monday";
       btn.style.cssText =
         "padding:2px 8px;font-size:11px;cursor:pointer;border:1px solid #D94040;border-radius:4px;background:#D94040;color:#fff;margin-left:6px;white-space:nowrap;";
-      btn.addEventListener("mouseenter", () => { if (!btn.disabled) btn.textContent = "🫡 Migrar"; });
-      btn.addEventListener("mouseleave", () => { if (!btn.disabled) btn.textContent = "🙂 Migrar"; });
+      hoverText(btn, "🙂 Migrar", "🫡 Migrar");
       btn.addEventListener("click", (e) => {
         e.stopPropagation(); e.preventDefault();
         btn.textContent = "⏳";
@@ -1575,7 +442,7 @@
         let ticketGroupId = null;
         try {
           const res = await fetch(SP_API + "/" + ticketId, {
-            headers: { accept: "application/json", authorization: "Bearer " + spToken },
+            headers: spGetHeaders(),
           });
           if (!res.ok) return;
           const json = await res.json();
@@ -1586,7 +453,7 @@
           isAssigned = ticket.ticketStatus?.name === "Asignado" || ticket.ticketStatus?.name === "En atención";
           holderName = ticket.ticketHolder?.ticketHolderLog?.fullName || "";
           ticketGroupId = ticket.resolutionGroup?.id || null;
-          console.log("[SP Monday] Detail ticket status:", ticket.ticketStatus?.name, "| type:", ticket.ticketStatus?.type?.name, "| closed:", isClosed, "| waiting:", isWaiting, "| assigned:", isAssigned, "| holder:", holderName, "| groupId:", ticketGroupId);
+          SP_Log.debug("Detail ticket status:", ticket.ticketStatus?.name, "| closed:", isClosed, "| waiting:", isWaiting, "| assigned:", isAssigned, "| holder:", holderName);
         } catch (e) { return; }
 
         const synced = await ensureSyncStarted();
@@ -1676,7 +543,7 @@
               e.stopPropagation();
               e.preventDefault();
               closeBtnIndep.disabled = true;
-              closeBtnIndep.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
+              closeBtnIndep.innerHTML = spinnerHTML(12);
               await showCloseModal(ticketId, closeBtnIndep);
               closeBtnIndep.textContent = "🔒 Cerrar ticket";
               closeBtnIndep.disabled = false;
@@ -1743,8 +610,7 @@
       btn.style.cssText = "width:100%;padding:10px;font-size:13px;cursor:pointer;border:none;border-radius:6px;background:#1976D2;color:#fff;font-weight:600;margin-top:8px;";
       btn.addEventListener("click", async function () {
         btn.disabled = true;
-        btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Agregando...';
-        ensureToastStyles();
+        btn.innerHTML = spinnerHTML(14, 'Agregando...');
 
         // Re-check existing names at click time
         var currentNames = [];
@@ -1768,7 +634,7 @@
           try {
             var res = await fetch(IAM_API, {
               method: "POST",
-              headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+              headers: spHeaders(),
               body: JSON.stringify({ profileId: missing[i], ticketId: parseInt(ticketId), isParticipant: false }),
             });
             if (!res.ok) throw new Error("HTTP " + res.status);
@@ -1809,104 +675,11 @@
       var subjectText = subjectEl ? subjectEl.textContent : "";
       var fullText = subjectText + " " + descText;
 
-      // Detect SL and PR codes
-      var slMatches = [];
-      var slRaw = fullText.match(/(?:SL|PR)\d{10,}/g);
-      if (slRaw) slMatches = slRaw.filter(function (v, i, a) { return a.indexOf(v) === i; });
-
-      // Detect users
-      var userMatches = [];
-      var userRaw = fullText.match(/(?:mp-|srv-|usr_|dba-|app-)[a-zA-Z0-9_\-]+/g);
-      if (userRaw) {
-        var seen = {};
-        userMatches = userRaw.map(function (v) {
-          var m = v.match(/(.*?(?:_dev\d|_qa\d|_t\d|_prod))/i);
-          return m ? m[1] : v;
-        }).filter(function (v) { var low = v.toLowerCase(); if (seen[low]) return false; seen[low] = true; return true; });
-      }
-
-      // Detect DB objects (tables, views, stored procedures, functions)
-      var dbMatches = [];
-      // Pattern 1: schema.object (e.g. HANA_Plata.HN_ZVW_PEDIDOS_CENT)
-      var dbSchemaRaw = fullText.match(/[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]{3,}/g);
-      if (dbSchemaRaw) dbSchemaRaw.forEach(function (v) {
-        // Exclude common false positives (emails, urls, file extensions)
-        if (v.match(/\.(com|mx|net|org|jpg|png|pdf|xlsx|csv|txt|html|js|css)$/i)) return;
-        dbMatches.push(v);
-      });
-      // Pattern 2: SP/USP prefixed (stored procedures)
-      var dbSpRaw = fullText.match(/\b(?:sp_|usp_|SP_|USP_)[A-Za-z0-9_]{3,}/g);
-      if (dbSpRaw) dbSpRaw.forEach(function (v) { dbMatches.push(v); });
-      // Pattern 3: Common DB prefixes (HN_, VW_, ZVW_, FN_, TBL_, V_, T_)
-      var dbPrefixRaw = fullText.match(/\b(?:HN_|VW_|ZVW_|FN_|TBL_|V_|T_)[A-Za-z0-9_]{3,}/g);
-      if (dbPrefixRaw) dbPrefixRaw.forEach(function (v) { dbMatches.push(v); });
-      // Pattern 4: Contextual - word after "tabla", "vista", "procedimiento", "store procedure", "view", "trigger", "function"
-      var dbContextRaw = fullText.match(/(?:tabla|vista|procedimiento|store\s*procedure|view|trigger|function|función|índice|index)\s*[:\-]?\s*([A-Za-z_][A-Za-z0-9_.]{3,})/gi);
-      if (dbContextRaw) {
-        dbContextRaw.forEach(function (match) {
-          var obj = match.replace(/^(?:tabla|vista|procedimiento|store\s*procedure|view|trigger|function|función|índice|index)\s*[:\-]?\s*/i, "").trim();
-          if (obj && obj.length > 3) dbMatches.push(obj);
-        });
-      }
-      // Pattern 5: UPPER_CASE words with underscores (3+ segments, likely DB objects)
-      var dbUpperRaw = fullText.match(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+){2,}\b/g);
-      if (dbUpperRaw) dbUpperRaw.forEach(function (v) {
-        // Exclude things that are clearly not DB objects
-        if (v.length < 8) return;
-        dbMatches.push(v);
-      });
-      // Deduplicate
-      var dbSeen = {};
-      dbMatches = dbMatches.filter(function (v) { var low = v.toLowerCase(); if (dbSeen[low]) return false; dbSeen[low] = true; return true; });
-
-      if (!slMatches.length && !userMatches.length && !dbMatches.length) return;
-
-      var container = document.createElement("div");
+      // Use centralized detection engine
+      var detections = window.SP_DetailView.detectAll(fullText);
+      var container = window.SP_DetailView.renderDetections(detections, { showLabels: _canShowLabels });
+      if (!container) return;
       container.id = DETAIL_DETECTIONS_ID;
-      container.style.cssText = "margin-bottom:12px;";
-
-      if (slMatches.length && _canShowLabels) {
-        var slDiv = document.createElement("div");
-        slDiv.style.cssText = "padding:8px 10px;background:#E3F2FD;border-radius:6px;margin-bottom:8px;";
-        slDiv.innerHTML = '<b style="font-size:12px;color:#1976D2;">SL/PR detectadas:</b> ';
-        slMatches.forEach(function (sl) {
-          var span = document.createElement("span");
-          span.style.cssText = "display:inline-flex;align-items:center;gap:2px;margin:2px 4px;padding:2px 8px;background:#fff;border:1px solid #1976D2;border-radius:4px;font-weight:600;font-size:12px;";
-          span.textContent = sl;
-          span.appendChild(createCopyButton(sl));
-          slDiv.appendChild(span);
-        });
-        container.appendChild(slDiv);
-      }
-
-      if (userMatches.length) {
-        var userDiv = document.createElement("div");
-        userDiv.style.cssText = "padding:8px 10px;background:#FFF3E0;border-radius:6px;margin-bottom:8px;";
-        userDiv.innerHTML = '<b style="font-size:12px;color:#E65100;">Usuarios detectados:</b> ';
-        userMatches.forEach(function (u) {
-          var span = document.createElement("span");
-          span.style.cssText = "display:inline-flex;align-items:center;gap:2px;margin:2px 4px;padding:2px 8px;background:#fff;border:1px solid #E65100;border-radius:4px;font-weight:600;font-size:12px;font-family:monospace;";
-          span.textContent = u;
-          span.appendChild(createCopyButton(u));
-          userDiv.appendChild(span);
-        });
-        container.appendChild(userDiv);
-      }
-
-      if (dbMatches.length && _canShowLabels) {
-        var dbDiv = document.createElement("div");
-        dbDiv.style.cssText = "padding:8px 10px;background:#E8F5E9;border-radius:6px;margin-bottom:8px;";
-        dbDiv.innerHTML = '<b style="font-size:12px;color:#2E7D32;">🗄️ Objetos de BD detectados:</b> ';
-        dbMatches.forEach(function (obj) {
-          var span = document.createElement("span");
-          span.style.cssText = "display:inline-flex;align-items:center;gap:2px;margin:2px 4px;padding:2px 8px;background:#fff;border:1px solid #2E7D32;border-radius:4px;font-weight:600;font-size:12px;font-family:monospace;";
-          span.textContent = obj;
-          span.appendChild(createCopyButton(obj));
-          dbDiv.appendChild(span);
-        });
-        container.appendChild(dbDiv);
-      }
-
       evidenciasH2.parentElement.insertBefore(container, evidenciasH2);
     }
 
@@ -1968,7 +741,7 @@
           if (!profileId) throw new Error("No se pudo obtener tu perfil");
           var takeRes = await fetch(SP_API + "/reassign/" + ticketId, {
             method: "PUT",
-            headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+            headers: spHeaders(),
             body: JSON.stringify({
               resolutionGroupId: getTeamConfig().resolutionGroupId,
               serviceId: null,
@@ -1984,7 +757,7 @@
           showLoadingToast("Reasignando a Aplicaciones...");
           var res = await fetch(SP_API + "/reassign/" + ticketId, {
             method: "PUT",
-            headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+            headers: spHeaders(),
             body: JSON.stringify({
               ticketCommentRequest: { internal: false, content: "Se reasigna ticket" },
               resolutionGroupId: 53,
@@ -2068,7 +841,7 @@
           for (var ti = 0; ti < ticketIds.length; ti++) {
             try {
               // Fetch individual ticket for full data (email del analista)
-              var tRes = await fetch(SP_API + "/" + ticketIds[ti], { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+              var tRes = await fetch(SP_API + "/" + ticketIds[ti], { headers: spGetHeaders() });
               if (!tRes.ok) continue;
               var tJson = await tRes.json();
               var ticket = tJson.data || tJson;
@@ -2123,15 +896,9 @@
       return el ? el.textContent.trim() : "";
     }
 
-    var _loggedUserEmail = "";
     function getLoggedUserEmail() {
-      if (_loggedUserEmail) return _loggedUserEmail;
-      // Read from storage synchronously (set during checkSession)
-      chrome.storage.local.get("userEmail", function (r) { _loggedUserEmail = r.userEmail || ""; });
-      return _loggedUserEmail;
+      return window.SP_Session.state.userEmail || "";
     }
-    // Pre-load email
-    chrome.storage.local.get("userEmail", function (r) { _loggedUserEmail = (r.userEmail || "").toLowerCase(); });
 
     function highlightMyRows() {
       const myName = getLoggedUserName();
@@ -2150,48 +917,23 @@
       });
     }
 
-    const STATUS_COLORS = {
-      "Asignado": "rgba(33, 150, 243, 0.18)",
-      "En validación": "rgba(156, 39, 176, 0.18)",
-      "En atención": "rgba(255, 152, 0, 0.18)",
-      "Por aprobador": "rgba(121, 85, 72, 0.18)",
-      "Por ejecutar": "rgba(0, 150, 136, 0.18)",
-      "Por revisar": "rgba(63, 81, 181, 0.18)",
-      "En aplicaciones": "rgba(233, 30, 99, 0.18)",
-      "Por confirmar": "rgba(255, 193, 7, 0.20)",
-      "Cerrado": "rgba(76, 175, 80, 0.18)",
-      "Rechazado": "rgba(244, 67, 54, 0.18)",
-      "Cancelado": "rgba(158, 158, 158, 0.20)",
-      "Reabierto": "rgba(255, 87, 34, 0.18)",
-      "En espera": "rgba(255, 235, 59, 0.20)"
-    };
-
-    const STATUS_TEXT_COLORS = {
-      "Asignado": "#1565C0",
-      "En validación": "#7B1FA2",
-      "En atención": "#E65100",
-      "Por aprobador": "#5D4037",
-      "Por ejecutar": "#00796B",
-      "Por revisar": "#283593",
-      "En aplicaciones": "#C2185B",
-      "Por confirmar": "#F9A825",
-      "Cerrado": "#2E7D32",
-      "Rechazado": "#C62828",
-      "Cancelado": "#616161",
-      "Reabierto": "#D84315",
-      "En espera": "#F57F17"
-    };
+    const STATUS_COLORS = window.SP_CONFIG.STATUS_COLORS;
+    const STATUS_TEXT_COLORS = window.SP_CONFIG.STATUS_TEXT_COLORS;
 
     function colorRowsByStatus() {
+      var classMap = window.SP_Styles.STATUS_CLASS_MAP;
       document.querySelectorAll(".MuiDataGrid-row").forEach(function (row) {
         var statusCell = row.querySelector('[data-field="ticketStatusName"]');
         if (!statusCell) return;
         var status = statusCell.textContent.trim();
-        var color = STATUS_COLORS[status] || "transparent";
-        if (row.dataset.spStatus !== status) {
-          row.style.backgroundColor = color;
-          row.dataset.spStatus = status;
+        if (row.dataset.spStatus === status) return;
+        // Remove old status class
+        if (row.dataset.spStatus && classMap[row.dataset.spStatus]) {
+          row.classList.remove(classMap[row.dataset.spStatus]);
         }
+        // Add new
+        if (classMap[status]) row.classList.add(classMap[status]);
+        row.dataset.spStatus = status;
       });
     }
 
@@ -2265,7 +1007,7 @@
       var spToken = localStorage.getItem("token");
       if (!spToken) return Promise.resolve([]);
       _pendingProfileRequests[groupId] = fetch("https://macropayapi.supportplus.mx/tickets/web/active-profiles-by-resolution-group/" + groupId, {
-        headers: { accept: "application/json", authorization: "Bearer " + spToken }
+        headers: spGetHeaders()
       }).then(function (r) { return r.json(); }).then(function (json) {
         var profiles = json.data || json;
         if (!Array.isArray(profiles)) profiles = [];
@@ -2505,7 +1247,7 @@
                 if (myProfId) {
                   await fetch(SP_API + "/reassign/" + ticketId, {
                     method: "PUT",
-                    headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                    headers: spHeaders(),
                     body: JSON.stringify({ resolutionGroupId: getTeamConfig().resolutionGroupId, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: getTeamConfig().resolutionGroupLabel, value: getTeamConfig().resolutionGroupId } }),
                   });
                 }
@@ -2513,7 +1255,7 @@
               // Close the ticket
               var closeRes = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
                 method: "PATCH",
-                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                headers: spHeaders(),
                 body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO, ticketCommentRequest: null }),
               });
               if (!closeRes.ok) throw new Error("HTTP " + closeRes.status);
@@ -2553,7 +1295,7 @@
           try {
             var res = await fetch(SP_API + "/reassign/" + ticketId, {
               method: "PUT",
-              headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+              headers: spHeaders(),
               body: JSON.stringify({
                 resolutionGroupId: dropAreaConfig.resolutionGroupId,
                 serviceId: null,
@@ -2600,36 +1342,16 @@
         // Fetch tickets for each member individually and update as they arrive
         areas.forEach(function (area) {
           area.profiles.forEach(function (p) {
-            var TEAM_API = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + p.profileId;
-            Promise.all([
-              fetch(TEAM_API + "&ticketStatusName=Asignado", { headers: { accept: "application/json", authorization: "Bearer " + spToken } }).then(function (r) { return r.json(); }),
-              fetch(TEAM_API + "&ticketStatusName=En%20atenci%C3%B3n", { headers: { accept: "application/json", authorization: "Bearer " + spToken } }).then(function (r) { return r.json(); })
-            ]).then(function (results) {
-              var tickets = ((results[0].data || results[0]).content || []).concat((results[1].data || results[1]).content || []);
-
+            fetch(window.SP_CONFIG.SP_SEARCH_API + "?responsibleProfileId=" + p.profileId + "&ticketStatusName=Asignado", { headers: spGetHeaders() })
+            .then(function (r) { return r.json(); }).then(function (json) {
+              var tickets = (json.data || json).content || [];
               var col = document.getElementById("sp-team-col-" + p.profileId);
               if (!col) return;
-
               var countEl = col.querySelector(".sp-team-count");
               if (countEl) countEl.textContent = "(" + tickets.length + ")";
-
               var listEl = col.querySelector(".sp-team-tickets");
               if (!listEl) return;
-
-              if (!tickets.length) {
-                listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
-              } else {
-                var html = "";
-                tickets.forEach(function (t) {
-                  var statusColor = STATUS_TEXT_COLORS[t.ticketStatusName] || "#333";
-                  html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:10px;line-height:1.3;cursor:grab;">';
-                  html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
-                  html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-                  html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + esc(t.requesterName || "") + '">' + esc((t.requesterName || "").split(" ")[0]) + '</span></div>';
-                  html += '</div>';
-                });
-                listEl.innerHTML = html;
-              }
+              listEl.innerHTML = SP_Templates.ticketList(tickets, { draggable: true, showStatus: true });
             }).catch(function () {
               var col = document.getElementById("sp-team-col-" + p.profileId);
               if (col) {
@@ -2641,7 +1363,7 @@
 
           // Fetch unassigned tickets (En espera) per area
           fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=" + area.resolutionGroupId + "&ticketStatusName=En%20espera", {
-            headers: { accept: "application/json", authorization: "Bearer " + spToken },
+            headers: spGetHeaders(),
           }).then(function (r) { return r.json(); }).then(function (json) {
             var tickets = (json.data || json).content || [];
             var col = document.getElementById("sp-team-col-unassigned-" + area.resolutionGroupId);
@@ -2650,19 +1372,7 @@
             if (countEl) countEl.textContent = "(" + tickets.length + ")";
             var listEl = col.querySelector(".sp-team-tickets");
             if (!listEl) return;
-            if (!tickets.length) {
-              listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
-            } else {
-              var html = "";
-              tickets.forEach(function (t) {
-                html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:10px;line-height:1.3;cursor:grab;">';
-                html += '<div style="font-weight:600;color:#E65100;">' + (t.uniqueCode || "") + '</div>';
-                html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-                html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#FF8F00;font-weight:600;font-size:9px;">En espera</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + esc(t.requesterName || "") + '">' + esc((t.requesterName || "").split(" ")[0]) + '</span></div>';
-                html += '</div>';
-              });
-              listEl.innerHTML = html;
-            }
+            listEl.innerHTML = SP_Templates.ticketList(tickets, { draggable: true, borderColor: "#FF8F00", codeColor: "#E65100" });
           }).catch(function () { });
         });
 
@@ -2692,40 +1402,19 @@
 
       var pending = allProfiles.length;
       allProfiles.forEach(function (p) {
-        var TEAM_API = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + p.profileId;
-        Promise.all([
-          fetch(TEAM_API + "&ticketStatusName=Asignado", { headers: { accept: "application/json", authorization: "Bearer " + spToken } }).then(function (r) { return r.json(); }),
-          fetch(TEAM_API + "&ticketStatusName=En%20atenci%C3%B3n", { headers: { accept: "application/json", authorization: "Bearer " + spToken } }).then(function (r) { return r.json(); })
-        ]).then(function (results) {
-          var tickets = ((results[0].data || results[0]).content || []).concat((results[1].data || results[1]).content || []);
-
+        fetch(window.SP_CONFIG.SP_SEARCH_API + "?responsibleProfileId=" + p.profileId + "&ticketStatusName=Asignado", { headers: spGetHeaders() })
+        .then(function (r) { return r.json(); }).then(function (json) {
+          var tickets = (json.data || json).content || [];
           var col = document.getElementById("sp-team-col-" + p.profileId);
           if (!col) return;
-
           var countEl = col.querySelector(".sp-team-count");
           if (countEl) countEl.textContent = "(" + tickets.length + ")";
-
           var listEl = col.querySelector(".sp-team-tickets");
           if (!listEl) return;
-
-          if (!tickets.length) {
-            listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
-          } else {
-            var html = "";
-            tickets.forEach(function (t) {
-              var statusColor = STATUS_TEXT_COLORS[t.ticketStatusName] || "#333";
-              html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:10px;line-height:1.3;cursor:grab;">';
-              html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
-              html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-              html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + esc(t.requesterName || "") + '">' + esc((t.requesterName || "").split(" ")[0]) + '</span></div>';
-              html += '</div>';
-            });
-            listEl.innerHTML = html;
-          }
+          listEl.innerHTML = SP_Templates.ticketList(tickets, { draggable: true, showStatus: true });
         }).catch(function () { }).finally(function () { pending--; if (pending <= 0) teamRefreshing = false; });
       });
 
-      // Also refresh unassigned and closed columns
       refreshUnassignedColumn();
       refreshClosedColumn();
     }
@@ -2733,38 +1422,16 @@
     function refreshTeamColumn(profileId) {
       var spToken = getToken();
       if (!spToken) return;
-      var name = ALL_PROFILE_NAMES[profileId];
-      if (!name) return;
-      var TEAM_API = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?responsibleProfileId=" + profileId;
-      Promise.all([
-        fetch(TEAM_API + "&ticketStatusName=Asignado", { headers: { accept: "application/json", authorization: "Bearer " + spToken } }).then(function (r) { return r.json(); }),
-        fetch(TEAM_API + "&ticketStatusName=En%20atenci%C3%B3n", { headers: { accept: "application/json", authorization: "Bearer " + spToken } }).then(function (r) { return r.json(); })
-      ]).then(function (results) {
-        var tickets = ((results[0].data || results[0]).content || []).concat((results[1].data || results[1]).content || []);
-
+      fetch(window.SP_CONFIG.SP_SEARCH_API + "?responsibleProfileId=" + profileId + "&ticketStatusName=Asignado", { headers: spGetHeaders() })
+      .then(function (r) { return r.json(); }).then(function (json) {
+        var tickets = (json.data || json).content || [];
         var col = document.getElementById("sp-team-col-" + profileId);
         if (!col) return;
-
         var countEl = col.querySelector(".sp-team-count");
         if (countEl) countEl.textContent = "(" + tickets.length + ")";
-
         var listEl = col.querySelector(".sp-team-tickets");
         if (!listEl) return;
-
-        if (!tickets.length) {
-          listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
-        } else {
-          var html = "";
-          tickets.forEach(function (t) {
-            var statusColor = STATUS_TEXT_COLORS[t.ticketStatusName] || "#333";
-            html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #eee;font-size:10px;line-height:1.3;cursor:grab;">';
-            html += '<div style="font-weight:600;color:#1976D2;">' + (t.uniqueCode || "") + '</div>';
-            html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-            html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:' + statusColor + ';font-weight:600;font-size:9px;">' + t.ticketStatusName + '</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + esc(t.requesterName || "") + '">' + esc((t.requesterName || "").split(" ")[0]) + '</span></div>';
-            html += '</div>';
-          });
-          listEl.innerHTML = html;
-        }
+        listEl.innerHTML = SP_Templates.ticketList(tickets, { draggable: true, showStatus: true });
       }).catch(function () { });
     }
 
@@ -2774,7 +1441,7 @@
       var areas = getActiveAreas();
       areas.forEach(function (area) {
         fetch(SP_SEARCH_API + "?page=0&size=50&resolutionGroupId=" + area.resolutionGroupId + "&ticketStatusName=En%20espera", {
-          headers: { accept: "application/json", authorization: "Bearer " + spToken },
+          headers: spGetHeaders(),
         }).then(function (r) { return r.json(); }).then(function (json) {
           var tickets = (json.data || json).content || [];
           var col = document.getElementById("sp-team-col-unassigned-" + area.resolutionGroupId);
@@ -2783,19 +1450,7 @@
           if (countEl) countEl.textContent = "(" + tickets.length + ")";
           var listEl = col.querySelector(".sp-team-tickets");
           if (!listEl) return;
-          if (!tickets.length) {
-            listEl.innerHTML = '<div style="text-align:center;padding:8px;color:#aaa;font-size:11px;">Sin tickets</div>';
-          } else {
-            var html = "";
-            tickets.forEach(function (t) {
-              html += '<div draggable="true" data-ticket-id="' + t.id + '" class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:10px;line-height:1.3;cursor:grab;">';
-              html += '<div style="font-weight:600;color:#E65100;">' + (t.uniqueCode || "") + '</div>';
-              html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">' + (t.subject || "").substring(0, 30) + '</div>';
-              html += '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#FF8F00;font-weight:600;font-size:9px;">En espera</span><span style="color:#888;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;" title="' + esc(t.requesterName || "") + '">' + esc((t.requesterName || "").split(" ")[0]) + '</span></div>';
-              html += '</div>';
-            });
-            listEl.innerHTML = html;
-          }
+          listEl.innerHTML = SP_Templates.ticketList(tickets, { draggable: true, borderColor: "#FF8F00", codeColor: "#E65100" });
         }).catch(function () { });
       });
     }
@@ -2812,7 +1467,7 @@
 
       areas.forEach(function (area) {
         fetch("https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + area.resolutionGroupId + "&ticketStatusName=Cerrado&initDate=" + todayStart + "&endDate=" + todayEnd + "&page=0&size=100", {
-          headers: { accept: "application/json", authorization: "Bearer " + spToken },
+          headers: spGetHeaders(),
         }).then(function (r) { return r.json(); }).then(function (json) {
           var tickets = (json.data || json).content || [];
           allClosed = allClosed.concat(tickets);
@@ -2857,7 +1512,7 @@
       if (!myName) return null;
       try {
         const res = await fetch(SP_API.replace("/tickets/web", "") + "/tickets/web/active-profiles-by-resolution-group/" + getTeamConfig().resolutionGroupId, {
-          headers: { accept: "application/json", authorization: "Bearer " + spToken },
+          headers: spGetHeaders(),
         });
         if (!res.ok) return null;
         const json = await res.json();
@@ -2878,14 +1533,13 @@
       btn.title = "Tomar ticket";
       btn.style.cssText =
         "padding:2px 8px;font-size:11px;cursor:pointer;border:1px solid #1976D2;border-radius:4px;background:#1976D2;color:#fff;margin-left:6px;white-space:nowrap;";
-      btn.addEventListener("mouseenter", function () { if (!btn.disabled) btn.textContent = "✊ Tomar"; });
-      btn.addEventListener("mouseleave", function () { if (!btn.disabled) btn.textContent = "🤚 Tomar"; });
+      hoverText(btn, "🤚 Tomar", "✊ Tomar");
       btn.addEventListener("click", async function (e) {
         e.stopPropagation();
         e.preventDefault();
         btn.disabled = true;
         var origText = btn.textContent;
-        btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
+        btn.innerHTML = spinnerHTML(12);
         await showTakeModal(ticketId, btn);
         btn.textContent = origText;
         btn.disabled = false;
@@ -2899,7 +1553,7 @@
       if (!spToken) return null;
       try {
         var res = await fetch(SP_API + "/" + ticketId, {
-          headers: { accept: "application/json", authorization: "Bearer " + spToken },
+          headers: spGetHeaders(),
         });
         if (!res.ok) return null;
         var json = await res.json();
@@ -2923,21 +1577,10 @@
       if (!info) return "";
       var fullText = (info.subject || "") + " " + (info.desc || "");
 
-      // Detect SL and PR codes
-      var slMatches = [];
-      var slRaw = fullText.match(/(?:SL|PR)\d{10,}/g);
-      if (slRaw) slMatches = slRaw.filter(function (v, i, a) { return a.indexOf(v) === i; });
-
-      // Detect DB users
-      var userMatches = [];
-      var userRaw = fullText.match(/(?:mp-|srv-|usr_|dba-|app-)[a-zA-Z0-9_\-]+/g);
-      if (userRaw) {
-        var seen = {};
-        userMatches = userRaw.map(function (v) {
-          var m = v.match(/(.*?(?:_dev\d|_qa\d|_t\d|_prod))/i);
-          return m ? m[1] : v;
-        }).filter(function (v) { var low = v.toLowerCase(); if (seen[low]) return false; seen[low] = true; return true; });
-      }
+      // Use centralized detection engine
+      var detections = window.SP_DetailView.detectAll(fullText);
+      var slMatches = detections.slCodes;
+      var userMatches = detections.users;
 
       var statusColor = STATUS_COLORS[info.status] || "rgba(0,0,0,0.05)";
       var rowStyle = 'padding:10px 14px;border-bottom:1px solid #e8e8e8;display:flex;align-items:center;gap:8px;';
@@ -3162,14 +1805,6 @@
       overlay = m.overlay;
       injectSLCopyButtons(overlay);
 
-      // Inject spinner keyframes if not present
-      if (!document.getElementById("sp-spinner-style")) {
-        var style = document.createElement("style");
-        style.id = "sp-spinner-style";
-        style.textContent = "@keyframes sp-spin { to { transform: rotate(360deg); } }";
-        document.head.appendChild(style);
-      }
-
       var confirmBtn = document.getElementById("sp-take-confirm");
       var cancelBtn = document.getElementById("sp-take-cancel");
       var msg = document.getElementById("sp-take-msg");
@@ -3204,7 +1839,7 @@
         var closeComment = doneCheck.checked ? (document.getElementById("sp-take-close-comment").value.trim()) : "";
         overlay.remove();
         originalBtn.disabled = true;
-        originalBtn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
+        originalBtn.innerHTML = spinnerHTML(12);
         showLoadingToast("Tomando ticket...");
 
         var profileId = await getMyProfileId();
@@ -3226,7 +1861,7 @@
           body.ticketCommentRequest = { internal: false, content: comment };
           var res = await fetch(SP_API + "/reassign/" + ticketId, {
             method: "PUT",
-            headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+            headers: spHeaders(),
             body: JSON.stringify(body),
           });
           if (!res.ok) throw new Error("HTTP " + res.status);
@@ -3255,14 +1890,14 @@
               if (closeComment) {
                 await fetch(SP_API + "/comment/" + ticketId, {
                   method: "POST",
-                  headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                  headers: spHeaders(),
                   body: JSON.stringify({ content: "<p>" + closeComment + "</p>", internal: false }),
                 });
               }
               // Close ticket
               var closeRes = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
                 method: "PATCH",
-                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                headers: spHeaders(),
                 body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO, ticketCommentRequest: null }),
               });
               if (!closeRes.ok) throw new Error("Error al cerrar: HTTP " + closeRes.status);
@@ -3277,7 +1912,7 @@
                 // Check if already exists in Monday before creating
                 var existingItemId = await checkTicketExistsInMonday(mondayToken, ticket?.uniqueCode || "");
                 if (!existingItemId) {
-                  var ticketRes = await fetch(SP_API + "/" + ticketId, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+                  var ticketRes = await fetch(SP_API + "/" + ticketId, { headers: spGetHeaders() });
                   var ticketJson = await ticketRes.json();
                   var ticket = ticketJson.data || ticketJson;
                   var holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
@@ -3373,14 +2008,13 @@
       btn.title = responsibleName ? "Asignado a: " + responsibleName : "Robar ticket";
       btn.style.cssText =
         "padding:2px 8px;font-size:11px;cursor:pointer;border:1px solid #E65100;border-radius:4px;background:#E65100;color:#fff;margin-left:6px;white-space:nowrap;";
-      btn.addEventListener("mouseenter", function () { if (!btn.disabled) btn.textContent = "💀 Robar"; });
-      btn.addEventListener("mouseleave", function () { if (!btn.disabled) btn.textContent = "🥷 Robar"; });
+      hoverText(btn, "🥷 Robar", "💀 Robar");
       btn.addEventListener("click", async function (e) {
         e.stopPropagation();
         e.preventDefault();
         btn.disabled = true;
         var origText = btn.textContent;
-        btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
+        btn.innerHTML = spinnerHTML(12);
         await showTakeModal(ticketId, btn);
         btn.textContent = origText;
         btn.disabled = false;
@@ -3396,14 +2030,13 @@
       btn.title = "Cerrar ticket";
       btn.style.cssText =
         "padding:2px 8px;font-size:11px;cursor:pointer;border:1px solid #616161;border-radius:4px;background:#616161;color:#fff;margin-left:6px;white-space:nowrap;";
-      btn.addEventListener("mouseenter", function () { if (!btn.disabled) btn.textContent = "🔐 Cerrar"; });
-      btn.addEventListener("mouseleave", function () { if (!btn.disabled) btn.textContent = "🔒 Cerrar"; });
+      hoverText(btn, "🔒 Cerrar", "🔐 Cerrar");
       btn.addEventListener("click", async function (e) {
         e.stopPropagation();
         e.preventDefault();
         btn.disabled = true;
         var origText = btn.textContent;
-        btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
+        btn.innerHTML = spinnerHTML(12);
         await showCloseModal(ticketId, btn);
         btn.textContent = origText;
         btn.disabled = false;
@@ -3442,13 +2075,6 @@
       var overlay = m.overlay;
       injectSLCopyButtons(overlay);
 
-      if (!document.getElementById("sp-spinner-style")) {
-        var style = document.createElement("style");
-        style.id = "sp-spinner-style";
-        style.textContent = "@keyframes sp-spin { to { transform: rotate(360deg); } }";
-        document.head.appendChild(style);
-      }
-
       var confirmBtn = document.getElementById("sp-close-confirm");
       var cancelBtn = document.getElementById("sp-close-cancel");
       var msg = document.getElementById("sp-close-msg");
@@ -3474,7 +2100,7 @@
         var commentText = document.getElementById("sp-close-comment").value.trim();
         overlay.remove();
         originalBtn.disabled = true;
-        originalBtn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span>';
+        originalBtn.innerHTML = spinnerHTML(12);
         showLoadingToast(selectedGroup ? "Cerrando y migrando..." : "Cerrando ticket...");
 
         var spToken = getToken();
@@ -3483,7 +2109,7 @@
           if (commentText) {
             var commentRes = await fetch(SP_API + "/comment/" + ticketId, {
               method: "POST",
-              headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+              headers: spHeaders(),
               body: JSON.stringify({ content: "<p>" + commentText + "</p>", internal: false }),
             });
             if (!commentRes.ok) throw new Error("Error al agregar comentario: HTTP " + commentRes.status);
@@ -3495,7 +2121,7 @@
             if (myProfId) {
               var assignRes = await fetch(SP_API + "/reassign/" + ticketId, {
                 method: "PUT",
-                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                headers: spHeaders(),
                 body: JSON.stringify({
                   resolutionGroupId: getTeamConfig().resolutionGroupId,
                   serviceId: null,
@@ -3510,7 +2136,7 @@
           // Step 2: Close ticket
           var res = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+            headers: spHeaders(),
             body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO, ticketCommentRequest: null }),
           });
           if (!res.ok) throw new Error("HTTP " + res.status);
@@ -3523,7 +2149,7 @@
 
           if (selectedGroup && canMigrate && mondayToken && boardId && info) {
             var ticketRes = await fetch(SP_API + "/" + ticketId, {
-              headers: { accept: "application/json", authorization: "Bearer " + spToken },
+              headers: spGetHeaders(),
             });
             var ticketJson = await ticketRes.json();
             var ticket = ticketJson.data || ticketJson;
@@ -3651,7 +2277,7 @@
         try {
           var res = await fetch(SP_API + "/reassign/" + ticketId, {
             method: "PUT",
-            headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+            headers: spHeaders(),
             body: JSON.stringify({
               resolutionGroupId: getTeamConfig().resolutionGroupId,
               serviceId: null,
@@ -3693,7 +2319,7 @@
       var bulkCloseBtn = document.getElementById(BULK_CLOSE_BTN_ID);
       if (bulkCloseBtn) {
         bulkCloseBtn.disabled = true;
-        bulkCloseBtn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Cargando...';
+        bulkCloseBtn.innerHTML = spinnerHTML(14, 'Cargando...');
       }
       function restoreCloseBtn() {
         if (bulkCloseBtn) { bulkCloseBtn.disabled = false; bulkCloseBtn.textContent = "🔒 Cerrar varios"; }
@@ -3754,7 +2380,7 @@
 
         startBtn.disabled = true;
         startBtn.style.background = "#999";
-        startBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Cerrando...';
+        startBtn.innerHTML = spinnerHTML(16, 'Cerrando...');
         cancelBtn.style.display = "none";
 
         var ok = 0, fail = 0;
@@ -3765,7 +2391,7 @@
           try {
             var res = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + t.ticketId, {
               method: "PATCH",
-              headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+              headers: spHeaders(),
               body: JSON.stringify({
                 nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO,
                 ticketCommentRequest: null
@@ -3804,8 +2430,7 @@
       btn.textContent = "🔒 Cerrar varios";
       btn.style.cssText =
         "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#616161;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-      btn.addEventListener("mouseenter", function () { if (!btn.disabled) btn.textContent = "🔐 Cerrar varios"; });
-      btn.addEventListener("mouseleave", function () { if (!btn.disabled) btn.textContent = "🔒 Cerrar varios"; });
+      hoverText(btn, "🔒 Cerrar varios", "🔐 Cerrar varios");
       btn.addEventListener("click", handleBulkClose);
       parent.insertBefore(btn, bulkMigrateBtn.nextSibling);
     }
@@ -3835,21 +2460,12 @@
     const SP_SEARCH_API = "https://macropayapi.supportplus.mx/tickets/search-by-level-and-resolution-groups";
     var activeModalRefresh = null;
 
-    // --- Config button ---
+    // --- Config button (header-buttons.js handles initial injection, this handles the click action) ---
     const CONFIG_BTN_ID = "sp-config-btn";
 
     function injectConfigButton() {
-      if (document.getElementById(CONFIG_BTN_ID)) return;
-      var userWrapper = document.querySelector('[class*="warapperNameUserAndLogout"]');
-      if (!userWrapper) return;
-
-      var btn = document.createElement("button");
-      btn.id = CONFIG_BTN_ID;
-      btn.textContent = "⚙️";
-      btn.title = "Configuración SupportPlus Tools";
-      btn.style.cssText = "padding:4px 10px;font-size:14px;cursor:pointer;border:none;border-radius:6px;background:rgba(255,255,255,0.15);color:#fff;margin-right:8px;";
-      btn.addEventListener("click", showConfigModal);
-      userWrapper.parentElement.insertBefore(btn, userWrapper);
+      // No-op: already injected by features/header-buttons.js
+      // Kept for backward compat with header observer calls
     }
 
     // Allow opening config from outside initExtension
@@ -3936,7 +2552,7 @@
           membersDiv.innerHTML = '<div style="color:#888;font-size:11px;">Cargando...</div>';
           var spToken = localStorage.getItem("token");
           fetch("https://macropayapi.supportplus.mx/tickets/web/active-profiles-by-resolution-group/" + groupId, {
-            headers: { accept: "application/json", authorization: "Bearer " + spToken }
+            headers: spGetHeaders()
           }).then(function (r) { return r.json(); }).then(function (json) {
             var profiles = json.data || json;
             if (!Array.isArray(profiles) || !profiles.length) { membersDiv.innerHTML = '<div style="color:#888;font-size:11px;">Sin miembros</div>'; return; }
@@ -4208,7 +2824,7 @@
           while (true) {
             var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?page=" + page + "&size=100&resolutionGroupId=" + groupId;
             url += "&initDate=" + fromDate + "&endDate=" + toDate;
-            var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+            var res = await fetch(url, { headers: spGetHeaders() });
             if (!res.ok) break;
             var json = await res.json();
             var data = json.data || json;
@@ -4221,8 +2837,8 @@
           saveDashboardCache(allTickets, fromDate, toDate);
           var btn = document.getElementById(DASHBOARD_BTN_ID);
           if (btn) btn.textContent = "📊 Ver dashboard";
-          console.log("[SP] Dashboard auto-generated:", allTickets.length, "tickets");
-        } catch (e) { console.log("[SP] Dashboard auto-gen failed:", e.message); }
+          SP_Log.info("Dashboard auto-generated:", allTickets.length, "tickets");
+        } catch (e) { SP_Log.warn("Dashboard auto-gen failed:", e.message); }
       })();
     }
 
@@ -4277,16 +2893,23 @@
       if (document.getElementById("sp-update-btn")) return;
       var refBtn = document.getElementById(DASHBOARD_BTN_ID) || document.getElementById(SEARCH_BTN_ID);
       if (!refBtn) return;
-      // Only show if there's a newer version
-      if (!_latestVersion || _latestVersion === _currentVersion || !_latestZipUrl) return;
-
-      var btn = createHeaderButton({ id: "sp-update-btn", icon: "📥", label: "Actualizar v" + _latestVersion, color: "#5D4037", onClick: showUpdateModal });
-      refBtn.parentElement.insertBefore(btn, refBtn);
+      // Read version info from storage
+      chrome.storage.local.get(["latestVersion", "latestZipUrl"], function (r) {
+        var latestVersion = r.latestVersion || "";
+        var latestZipUrl = r.latestZipUrl || "";
+        var currentVersion = chrome.runtime.getManifest().version;
+        if (!latestVersion || latestVersion === currentVersion || !latestZipUrl) return;
+        if (document.getElementById("sp-update-btn")) return;
+        var btn = createHeaderButton({ id: "sp-update-btn", icon: "📥", label: "Actualizar v" + latestVersion, color: "#5D4037", onClick: showUpdateModal });
+        refBtn.parentElement.insertBefore(btn, refBtn);
+      });
     }
 
     function showUpdateModal() {
-      chrome.storage.local.get("allVersions", function (r) {
+      chrome.storage.local.get(["allVersions", "latestVersion"], function (r) {
         var allVersions = r.allVersions || [];
+        var _latestVersion = r.latestVersion || "";
+        var _currentVersion = chrome.runtime.getManifest().version;
         if (!allVersions.length) { showErrorToast("No hay versiones disponibles"); return; }
 
         // Filter versions newer than current
@@ -4431,7 +3054,7 @@
           var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?page=" + page + "&size=100&resolutionGroupId=" + groupId;
           if (dashboardFrom) url += "&initDate=" + dashboardFrom;
           if (dashboardTo) url += "&endDate=" + dashboardTo;
-          var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+          var res = await fetch(url, { headers: spGetHeaders() });
           if (!res.ok) throw new Error("HTTP " + res.status);
           var json = await res.json();
           var data = json.data || json;
@@ -5389,378 +4012,9 @@
       });
     }
 
-    // --- Report Excel ---
-    const REPORT_BTN_ID = "sp-report-btn";
-    var reportGenerating = false;
-
-    function injectReportButton() {
-      if (!_btnReports) return;
-      if (document.getElementById(REPORT_BTN_ID)) return;
-      var refBtn = document.getElementById(DASHBOARD_BTN_ID) || document.getElementById(SEARCH_BTN_ID);
-      if (!refBtn) return;
-
-      var btn = createHeaderButton({ id: REPORT_BTN_ID, icon: "📥", label: "Reporte Excel", color: "#1565C0", onClick: handleReportClick });
-      refBtn.parentElement.insertBefore(btn, refBtn.nextSibling);
-    }
-
-    async function handleReportClick() {
-      if (reportGenerating) return;
-
-      // Get user groups from storage
-      var stored = await new Promise(function (r) { chrome.storage.local.get(["notionUsers", "userEmail", "groupNames"], function (d) { r(d); }); });
-      var email = (stored.userEmail || "").toLowerCase();
-      var users = stored.notionUsers || {};
-      var userData = users[email];
-      var userGroups = userData ? (userData.groups || []) : [];
-      var groupNamesMap = stored.groupNames || {};
-
-      if (!userGroups.length) { showErrorToast("No tienes grupos asignados"); return; }
-
-      // Build group options
-      var groupOptions = userGroups.map(function (gId) {
-        var name = groupNamesMap[gId] || (window.SP_CONFIG.GROUP_INFO.find(function (g) { return g.id === gId; }) || {}).name || ("Grupo " + gId);
-        return { id: gId, name: name };
-      });
-
-      var now = new Date();
-      var currentMonth = now.getMonth();
-      var currentYear = now.getFullYear();
-
-      var monthOpts = window.SP_CONFIG.MONTH_NAMES.map(function (m, i) {
-        return '<option value="' + i + '"' + (i === currentMonth ? ' selected' : '') + '>' + m + '</option>';
-      }).join("");
-      var yearOpts = '';
-      for (var y = currentYear; y >= currentYear - 3; y--) {
-        yearOpts += '<option value="' + y + '"' + (y === currentYear ? ' selected' : '') + '>' + y + '</option>';
-      }
-
-      var groupCheckboxes = groupOptions.map(function (g) {
-        return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;font-size:12px;">' +
-          '<input type="checkbox" value="' + g.id + '" checked> ' + esc(g.name) + '</label>';
-      }).join("");
-
-      var m = createModal({
-        id: "sp-report-modal",
-        title: "📥 Exportar Reporte CSV",
-        content:
-          '<div style="margin-bottom:12px;">' +
-          '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">Grupos:</label>' +
-          '<div id="sp-rpt-groups" style="max-height:150px;overflow-y:auto;border:1px solid #ddd;border-radius:6px;padding:8px;">' + groupCheckboxes + '</div>' +
-          '<div style="margin-top:4px;display:flex;gap:8px;"><button id="sp-rpt-select-all" style="font-size:10px;border:none;background:none;color:#1976D2;cursor:pointer;text-decoration:underline;">Seleccionar todos</button><button id="sp-rpt-select-none" style="font-size:10px;border:none;background:none;color:#1976D2;cursor:pointer;text-decoration:underline;">Deseleccionar todos</button></div>' +
-          '</div>' +
-          '<div style="margin-bottom:12px;">' +
-          '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">Periodo:</label>' +
-          '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
-          '<label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px;"><input type="radio" name="sp-rpt-mode" value="month" checked> Por mes</label>' +
-          '<label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px;"><input type="radio" name="sp-rpt-mode" value="range"> Por rango</label>' +
-          '</div>' +
-          '<div id="sp-rpt-month-section" style="display:flex;gap:8px;">' +
-          '<select id="sp-rpt-month" style="flex:1;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px;">' + monthOpts + '</select>' +
-          '<select id="sp-rpt-year" style="width:80px;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px;">' + yearOpts + '</select>' +
-          '</div>' +
-          '<div id="sp-rpt-range-section" style="display:none;">' +
-          '<div style="display:flex;gap:8px;align-items:center;">' +
-          '<input id="sp-rpt-from" type="date" style="flex:1;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px;">' +
-          '<span style="font-size:12px;color:#888;">a</span>' +
-          '<input id="sp-rpt-to" type="date" style="flex:1;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px;">' +
-          '</div>' +
-          '<div id="sp-rpt-range-error" style="color:#D94040;font-size:11px;margin-top:4px;display:none;"></div>' +
-          '</div>' +
-          '</div>' +
-          '<div id="sp-rpt-progress" style="display:none;margin-bottom:12px;padding:8px;background:#f5f5f5;border-radius:6px;font-size:12px;color:#555;text-align:center;"></div>' +
-          '<div style="display:flex;gap:8px;">' +
-          '<button id="sp-rpt-generate" style="flex:1;padding:10px;border:none;border-radius:6px;background:#1565C0;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">📥 Generar CSV</button>' +
-          '<button id="sp-rpt-cancel" style="padding:10px 16px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Cancelar</button>' +
-          '</div>',
-        options: { maxWidth: "480px" }
-      });
-      var overlay = m.overlay;
-
-      // Toggle month/range
-      overlay.querySelectorAll('[name="sp-rpt-mode"]').forEach(function (radio) {
-        radio.addEventListener("change", function () {
-          document.getElementById("sp-rpt-month-section").style.display = radio.value === "month" ? "flex" : "none";
-          document.getElementById("sp-rpt-range-section").style.display = radio.value === "range" ? "block" : "none";
-        });
-      });
-
-      // Select all/none
-      document.getElementById("sp-rpt-select-all").addEventListener("click", function () {
-        overlay.querySelectorAll('#sp-rpt-groups input[type="checkbox"]').forEach(function (cb) { cb.checked = true; });
-      });
-      document.getElementById("sp-rpt-select-none").addEventListener("click", function () {
-        overlay.querySelectorAll('#sp-rpt-groups input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
-      });
-
-      // Cancel
-      document.getElementById("sp-rpt-cancel").addEventListener("click", function () { m.close(); });
-
-      // Generate
-      document.getElementById("sp-rpt-generate").addEventListener("click", async function () {
-        var genBtn = document.getElementById("sp-rpt-generate");
-        var progressDiv = document.getElementById("sp-rpt-progress");
-
-        // Get selected groups
-        var selectedGroups = [];
-        overlay.querySelectorAll('#sp-rpt-groups input[type="checkbox"]:checked').forEach(function (cb) {
-          var gId = parseInt(cb.value);
-          var gName = groupOptions.find(function (g) { return g.id === gId; })?.name || ("Grupo " + gId);
-          selectedGroups.push({ id: gId, name: gName });
-        });
-        if (!selectedGroups.length) { showErrorToast("Selecciona al menos un grupo"); return; }
-
-        // Get date range
-        var fromDate, toDate;
-        var mode = overlay.querySelector('[name="sp-rpt-mode"]:checked').value;
-        if (mode === "month") {
-          var month = parseInt(document.getElementById("sp-rpt-month").value);
-          var year = parseInt(document.getElementById("sp-rpt-year").value);
-          var lastDay = new Date(year, month + 1, 0).getDate();
-          fromDate = year + "-" + String(month + 1).padStart(2, "0") + "-01T00:00";
-          toDate = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(lastDay).padStart(2, "0") + "T23:59";
-        } else {
-          var fromVal = document.getElementById("sp-rpt-from").value;
-          var toVal = document.getElementById("sp-rpt-to").value;
-          var rangeError = document.getElementById("sp-rpt-range-error");
-          if (!fromVal || !toVal) { rangeError.textContent = "Selecciona ambas fechas"; rangeError.style.display = "block"; return; }
-          if (fromVal > toVal) { rangeError.textContent = "La fecha inicio no puede ser mayor a la fecha fin"; rangeError.style.display = "block"; return; }
-          rangeError.style.display = "none";
-          fromDate = fromVal + "T00:00";
-          toDate = toVal + "T23:59";
-        }
-
-        // Close modal, block button, show loader
-        m.close();
-        var reportBtn = document.getElementById(REPORT_BTN_ID);
-        if (reportBtn) { reportBtn.disabled = true; reportBtn.style.opacity = "0.5"; }
-
-        // Inject loader CSS if not present
-        if (!document.getElementById("sp-rpt-loader-style")) {
-          var loaderStyle = document.createElement("style");
-          loaderStyle.id = "sp-rpt-loader-style";
-          loaderStyle.textContent = ".sp-rpt-loader{position:fixed;bottom:20px;z-index:99999;transform:scale(0.6);padding:16px 20px;border-radius:10px;animation:spTruckDrive 15s ease-in-out infinite;}.sp-rpt-loader .loader{display:block;position:relative;width:130px;height:100px;background-repeat:no-repeat;background-image:linear-gradient(#0277bd,#0277bd),linear-gradient(#29b6f6,#4fc3f7),linear-gradient(#29b6f6,#4fc3f7);background-size:80px 70px,30px 50px,30px 30px;background-position:0 0,80px 20px,100px 40px;}.sp-rpt-loader .loader:after{content:\"\";position:absolute;bottom:10px;left:12px;width:10px;height:10px;background:#fff;border-radius:50%;box-sizing:content-box;border:10px solid #000;box-shadow:78px 0 0 -10px #fff,78px 0 #000;animation:wheelSk 0.75s ease-in infinite alternate;}.sp-rpt-loader .loader:before{content:\"\";position:absolute;right:100%;top:0px;height:70px;width:70px;background-image:linear-gradient(#fff 45px,transparent 0),linear-gradient(#fff 45px,transparent 0),linear-gradient(#fff 45px,transparent 0);background-repeat:no-repeat;background-size:30px 4px;background-position:0px 11px,8px 35px,0px 60px;animation:lineDropping 0.75s linear infinite;}@keyframes wheelSk{0%,50%,100%{transform:translatey(0)}30%,90%{transform:translatey(-3px)}}@keyframes lineDropping{0%{background-position:100px 11px,115px 35px,105px 60px;opacity:1}50%{background-position:0px 11px,20px 35px,5px 60px}60%{background-position:-30px 11px,0px 35px,-10px 60px}75%,100%{background-position:-30px 11px,-30px 35px,-30px 60px;opacity:0}}@keyframes spTruckDrive{0%{left:20px;transform:scale(0.6) scaleX(1);}45%{left:calc(100vw - 200px);transform:scale(0.6) scaleX(1);}50%{left:calc(100vw - 200px);transform:scale(0.6) scaleX(-1);}95%{left:20px;transform:scale(0.6) scaleX(-1);}100%{left:20px;transform:scale(0.6) scaleX(1);}}";
-          document.head.appendChild(loaderStyle);
-        }
-
-        // Show loader
-        var loaderDiv = document.createElement("div");
-        loaderDiv.id = "sp-rpt-loader";
-        loaderDiv.className = "sp-rpt-loader";
-        loaderDiv.innerHTML = '<span class="loader"></span>';
-        document.body.appendChild(loaderDiv);
-
-        var spToken = getToken();
-        if (!spToken) { showErrorToast("No hay token"); loaderDiv.remove(); if (reportBtn) { reportBtn.disabled = false; reportBtn.style.opacity = "1"; } return; }
-
-        try {
-          var allTickets = [];
-
-          for (var i = 0; i < selectedGroups.length; i++) {
-            var group = selectedGroups[i];
-
-            var page = 0;
-            var hasMore = true;
-            while (hasMore) {
-              var url = "https://macropayapi.supportplus.mx/tickets/search-all-tickets?resolutionGroupId=" + group.id + "&page=" + page + "&size=100&initDate=" + encodeURIComponent(fromDate) + "&endDate=" + encodeURIComponent(toDate);
-              var res = await fetch(url, { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
-              if (!res.ok) throw new Error("HTTP " + res.status + " en grupo " + group.name);
-              var json = await res.json();
-              var data = json.data || json;
-              var tickets = data.content || [];
-              tickets.forEach(function (t) { t._groupName = group.name; });
-              allTickets = allTickets.concat(tickets);
-              hasMore = tickets.length === 100;
-              page++;
-            }
-          }
-
-          if (!allTickets.length) {
-            showErrorToast("No se encontraron tickets en el rango seleccionado.");
-            loaderDiv.remove();
-            if (reportBtn) { reportBtn.disabled = false; reportBtn.style.opacity = "1"; }
-            return;
-          }
-
-          // Build CSV
-          var headers = ["Folio", "Asunto", "Grupo", "Solicitante", "Responsable", "Estado", "Prioridad", "Tipo", "Canal", "Fecha Creacion", "Fecha Actualizacion"];
-          var csvRows = [headers.join(",")];
-
-          allTickets.forEach(function (t) {
-            var row = [
-              '"' + (t.uniqueCode || "").replace(/"/g, '""') + '"',
-              '"' + (t.subject || "").replace(/"/g, '""') + '"',
-              '"' + (t._groupName || "").replace(/"/g, '""') + '"',
-              '"' + (t.requesterName || t.ticketInfo?.fullName || "").replace(/"/g, '""') + '"',
-              '"' + (t.responsibleName || "").replace(/"/g, '""') + '"',
-              '"' + (t.ticketStatusName || "").replace(/"/g, '""') + '"',
-              '"' + (t.incidentPriorityName || "").replace(/"/g, '""') + '"',
-              '"' + (t.reportTypeName || "").replace(/"/g, '""') + '"',
-              '"' + (t.attentionChannelName || "").replace(/"/g, '""') + '"',
-              '"' + (t.createdAt ? t.createdAt.replace("T", " ").substring(0, 16) : "") + '"',
-              '"' + (t.updatedAt ? t.updatedAt.replace("T", " ").substring(0, 16) : "") + '"'
-            ];
-            csvRows.push(row.join(","));
-          });
-
-          var csvContent = "\uFEFF" + csvRows.join("\n");
-          var blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-          var downloadUrl = URL.createObjectURL(blob);
-          var a = document.createElement("a");
-          a.href = downloadUrl;
-          a.download = "Reporte_SP_" + fromDate.substring(0, 10) + "_a_" + toDate.substring(0, 10) + ".csv";
-          a.click();
-          URL.revokeObjectURL(downloadUrl);
-
-          showSuccessToast("📥 CSV listo: " + allTickets.length + " tickets de " + selectedGroups.length + " grupo(s)");
-
-        } catch (err) {
-          showErrorToast("Error: " + err.message);
-        }
-
-        loaderDiv.remove();
-        if (reportBtn) { reportBtn.disabled = false; reportBtn.style.opacity = "1"; }
-      });
-    }
-
-    var sheetJSLoaded = false;
-    function loadSheetJS() {
-      if (sheetJSLoaded) return Promise.resolve();
-      return new Promise(function (resolve, reject) {
-        var script = document.createElement("script");
-        script.src = "https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js";
-        script.onload = function () { sheetJSLoaded = true; resolve(); };
-        script.onerror = function () { reject(new Error("No se pudo cargar SheetJS")); };
-        document.head.appendChild(script);
-      });
-    }
-
-    // --- Monday Stats ---
-    const MONDAY_STATS_BTN_ID = "sp-monday-stats-btn";
-
-    function injectMondayStatsButton() {
-      if (!canMigrateMonday) return;
-      if (document.getElementById(MONDAY_STATS_BTN_ID)) return;
-      var refBtn = document.getElementById(REPORT_BTN_ID) || document.getElementById(DASHBOARD_BTN_ID) || document.getElementById(SEARCH_BTN_ID);
-      if (!refBtn) return;
-
-      // Only show if Monday token is configured
-      getMondayToken().then(function (token) {
-        if (!token) return;
-        getMondayBoardId().then(function (boardId) {
-          if (!boardId) return;
-          if (document.getElementById(MONDAY_STATS_BTN_ID)) return;
-          var btn = createHeaderButton({ id: MONDAY_STATS_BTN_ID, icon: "📈", label: "Monday Stats", color: "#1565C0", onClick: handleMondayStats });
-          refBtn.parentElement.insertBefore(btn, refBtn.nextSibling);
-        });
-      });
-    }
-
-    async function handleMondayStats() {
-      var btn = document.getElementById(MONDAY_STATS_BTN_ID);
-      if (!btn || btn.disabled) return;
-
-      btn.disabled = true;
-      btn.textContent = "⏳ Cargando...";
-      btn.style.background = "#999";
-
-      try {
-        var mondayToken = await getMondayToken();
-        var boardId = await getMondayBoardId();
-        if (!mondayToken || !boardId) throw new Error("Configura Monday en el popup");
-
-        // Fetch all items from the board
-        var allItems = [];
-        var firstPage = await mondayQuery(mondayToken,
-          'query ($boardId: [ID!]!) { boards(ids: $boardId) { name items_page(limit: 500) { cursor items { id name column_values { id text value } } } } }',
-          { boardId });
-        var board = firstPage.boards[0];
-        var boardName = board.name;
-        var page = board.items_page;
-        allItems = allItems.concat(page.items);
-
-        var cursor = page.cursor;
-        while (cursor) {
-          btn.textContent = "⏳ " + allItems.length + " items...";
-          var next = await mondayQuery(mondayToken,
-            'query ($cursor: String!) { next_items_page(limit: 500, cursor: $cursor) { cursor items { id name column_values { id text value } } } }',
-            { cursor });
-          allItems = allItems.concat(next.next_items_page.items);
-          cursor = next.next_items_page.cursor;
-        }
-
-        // Parse items: extract person and status
-        var statsByPerson = {};
-        var statusCounts = {};
-        var totalItems = allItems.length;
-
-        allItems.forEach(function (item) {
-          var person = "Sin asignar";
-          var status = "Sin estado";
-
-          item.column_values.forEach(function (col) {
-            if (col.id === "multiple_person_mm25nvfq" && col.text) {
-              person = col.text;
-            }
-            if (col.id === "status" && col.text) {
-              status = col.text;
-            }
-          });
-
-          // Count by status
-          statusCounts[status] = (statusCounts[status] || 0) + 1;
-
-          // Count by person + status
-          if (!statsByPerson[person]) statsByPerson[person] = { total: 0, statuses: {} };
-          statsByPerson[person].total++;
-          statsByPerson[person].statuses[status] = (statsByPerson[person].statuses[status] || 0) + 1;
-        });
-
-        // Show modal with stats
-        showMondayStatsModal(boardName, totalItems, statusCounts, statsByPerson);
-
-      } catch (err) {
-        showErrorToast("Error: " + err.message);
-      }
-
-      btn.textContent = "📈 Monday Stats";
-      btn.style.background = "#1565C0";
-      btn.disabled = false;
-    }
-
-    function showMondayStatsModal(boardName, totalItems, statusCounts, statsByPerson) {
-      var existing = document.getElementById("sp-monday-stats-modal");
-      if (existing) existing.remove();
-
-      var personSorted = Object.entries(statsByPerson).sort(function (a, b) { return b[1].total - a[1].total; });
-      var maxTotal = personSorted[0] ? personSorted[0][1].total : 1;
-
-      var colors = ["#1976D2", "#2E7D32", "#D94040", "#7B1FA2", "#E65100", "#00796B", "#C2185B", "#F57F17", "#283593", "#5D4037"];
-
-      // --- Bar chart per person ---
-      var barsHTML = '';
-      personSorted.forEach(function (entry, idx) {
-        var name = entry[0];
-        var data = entry[1];
-        var barWidth = Math.round((data.total / maxTotal) * 100);
-        var color = colors[idx % colors.length];
-
-        barsHTML += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">';
-        barsHTML += '<div style="width:140px;font-size:12px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + name + '">' + name + '</div>';
-        barsHTML += '<div style="flex:1;background:#f0f0f0;border-radius:4px;height:30px;overflow:hidden;">';
-        barsHTML += '<div style="width:' + barWidth + '%;background:' + color + ';height:100%;border-radius:4px;transition:width 0.5s;"></div>';
-        barsHTML += '</div>';
-        barsHTML += '<div style="width:35px;font-size:13px;font-weight:700;text-align:center;">' + data.total + '</div>';
-        barsHTML += '</div>';
-      });
-
-      var m = createModal({
-        id: "sp-monday-stats-modal",
-        title: '📈 ' + boardName + ' <span style="font-size:13px;color:#888;font-weight:400;">(' + totalItems + ' tickets migrados)</span>',
-        content: '<h4 style="margin:0 0 12px;font-size:14px;color:#555;">Tickets por persona</h4>' +
-          '<div style="flex:1;overflow:auto;">' + barsHTML + '</div>',
-        options: { maxWidth: "700px", width: "95%", maxHeight: "90vh" }
-      });
-    }
+    // --- Report Excel: delegated to features/reports.js ---
+    function injectReportButton() { if (window.SP_Reports) window.SP_Reports.injectReportButton(); }
+    function injectMondayStatsButton() { if (window.SP_Reports) window.SP_Reports.injectMondayStatsButton(); }
 
     const QUICK_SEARCH_ID = "sp-quick-search";
 
@@ -5794,7 +4048,7 @@
 
         try {
           var res = await fetch(SP_SEARCH_API + "?uniqueCode=" + encodeURIComponent(val) + "&page=0&size=1", {
-            headers: { accept: "application/json", authorization: "Bearer " + spToken },
+            headers: spGetHeaders(),
           });
           if (!res.ok) throw new Error("HTTP " + res.status);
           var json = await res.json();
@@ -5878,7 +4132,7 @@
           if (statusName) url += "&ticketStatusName=" + encodeURIComponent(statusName);
           if (extraParams) url += "&" + extraParams;
           var res = await fetch(url, {
-            headers: { accept: "application/json", authorization: "Bearer " + spToken },
+            headers: spGetHeaders(),
           });
           if (!res.ok) throw new Error("HTTP " + res.status);
           var json = await res.json();
@@ -5981,7 +4235,7 @@
 
         try {
           var res = await fetch(SP_SEARCH_API + "?" + params, {
-            headers: { accept: "application/json", authorization: "Bearer " + spToken },
+            headers: spGetHeaders(),
           });
           if (!res.ok) throw new Error("HTTP " + res.status);
           var json = await res.json();
@@ -6067,7 +4321,7 @@
 
       try {
         var res = await fetch(SP_API + "/" + ticketId, {
-          headers: { accept: "application/json", authorization: "Bearer " + spToken }
+          headers: spGetHeaders()
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
         var json = await res.json();
@@ -6110,11 +4364,11 @@
                   if (uId) colValues.multiple_person_mm25nvfq = { personsAndTeams: [{ id: parseInt(uId.id), kind: "person" }] };
                 }
                 await mFetch('mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: b.id, itemId: items[0].id, columnValues: JSON.stringify(colValues) });
-                console.log("[SP] Monday synced from modal:", t.uniqueCode, spStatus, hEmail);
+                SP_Log.debug("Monday synced from modal:", t.uniqueCode, spStatus, hEmail);
                 break;
               }
             }
-          } catch (e) { console.log("[SP] Modal Monday sync error:", e.message); }
+          } catch (e) { SP_Log.warn("Modal Monday sync error:", e.message); }
         })();
         var loadingToast = document.getElementById("sp-loading-toast");
         if (loadingToast) loadingToast.remove();
@@ -6354,7 +4608,7 @@
         // Auto-refresh comments every 30s
         _qdCommentsInterval = setInterval(function () {
           if (!document.getElementById("sp-quick-detail-modal")) { clearInterval(_qdCommentsInterval); _qdCommentsInterval = null; return; }
-          fetch(SP_API + "/" + ticketId, { headers: { accept: "application/json", authorization: "Bearer " + spToken } })
+          fetch(SP_API + "/" + ticketId, { headers: spGetHeaders() })
             .then(function (r) { return r.json(); })
             .then(function (json) {
               var ticket = json.data || json;
@@ -6500,7 +4754,7 @@
               var commentText = text || "(archivo adjunto)";
               var commentRes = await fetch(SP_API + "/comment/" + ticketId, {
                 method: "POST",
-                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                headers: spHeaders(),
                 body: JSON.stringify({ content: "<p>" + commentText + "</p>", internal: false }),
               });
               if (!commentRes.ok) throw new Error("HTTP " + commentRes.status);
@@ -6525,7 +4779,7 @@
                   var attachPayload = uploadedFiles.map(function (f) { uploadedFileNames.push(f.name); return { fileId: f.id }; });
                   await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                    headers: spHeaders(),
                     body: JSON.stringify({ attachments: attachPayload, commentId: commentId, isInternal: false }),
                   });
                 }
@@ -6595,7 +4849,7 @@
                       var commentText = commentInputEl.value.trim() || "📎 Imagen adjunta";
                       var commentRes = await fetch(SP_API + "/" + ticketId + "/comment", {
                         method: "POST",
-                        headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                        headers: spHeaders(),
                         body: JSON.stringify({ content: commentText, internal: false })
                       });
                       var commentJson = await commentRes.json();
@@ -6729,7 +4983,7 @@
                 var attachPayload = uploadedFiles.map(function (f) { return { fileId: f.id }; });
                 await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", {
                   method: "POST",
-                  headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                  headers: spHeaders(),
                   body: JSON.stringify({ attachments: attachPayload, commentId: parseInt(commentId), isInternal: false }),
                 });
                 showSuccessToast("Evidencia adjuntada");
@@ -6786,7 +5040,7 @@
                     if (Array.isArray(uploadedFiles) && uploadedFiles.length) {
                       await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", {
                         method: "POST",
-                        headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                        headers: spHeaders(),
                         body: JSON.stringify({ attachments: [{ fileId: uploadedFiles[0].id }], commentId: parseInt(_selectedCommentId), isInternal: false }),
                       });
                       showSuccessToast("✅ Imagen adjuntada al comentario");
@@ -6822,7 +5076,7 @@
           statusSelect.innerHTML = '<option value="">' + statusName + '</option>';
         } else {
           fetch("https://macropayapi.supportplus.mx/ticket-status/next-status-options/" + currentStatusId, {
-            headers: { accept: "application/json", authorization: "Bearer " + spToken }
+            headers: spGetHeaders()
           }).then(function (r) { return r.json(); }).then(function (statusJson) {
             var options = (statusJson.data || []);
             statusSelect.innerHTML = '<option value="" data-id="">' + statusName + ' (actual)</option>';
@@ -6845,7 +5099,7 @@
           try {
             var statusRes = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
               method: "PATCH",
-              headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+              headers: spHeaders(),
               body: JSON.stringify({ nextTicketStatusId: parseInt(newStatusId), ticketCommentRequest: null }),
             });
             if (!statusRes.ok) throw new Error("HTTP " + statusRes.status);
@@ -6854,7 +5108,7 @@
             statusSelect.style.color = STATUS_TEXT_COLORS[newStatusName] || "#333";
             // Reload valid options for new status
             var newOptRes = await fetch("https://macropayapi.supportplus.mx/ticket-status/next-status-options/" + newStatusId, {
-              headers: { accept: "application/json", authorization: "Bearer " + spToken }
+              headers: spGetHeaders()
             });
             var newOptJson = await newOptRes.json();
             var newOptions = (newOptJson.data || []);
@@ -6880,7 +5134,7 @@
           // Load team members from the ticket's resolution group
           var ticketGroupId = t.resolutionGroup?.id || getTeamConfig().resolutionGroupId;
           fetch("https://macropayapi.supportplus.mx/tickets/web/active-profiles-by-resolution-group/" + ticketGroupId, {
-            headers: { accept: "application/json", authorization: "Bearer " + spToken }
+            headers: spGetHeaders()
           }).then(function (r) { return r.json(); }).then(function (json) {
             var profiles = json.data || json;
             if (Array.isArray(profiles)) {
@@ -6968,7 +5222,7 @@
               try {
                 var res = await fetch(SP_API + "/change-status/" + ticketId, {
                   method: "PUT",
-                  headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                  headers: spHeaders(),
                   body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.RECHAZADO, ticketCommentRequest: null })
                 });
                 if (!res.ok) throw new Error("HTTP " + res.status);
@@ -7066,14 +5320,14 @@
                   // Reassign without comment
                   var res = await fetch(SP_API + "/reassign/" + ticketId, {
                     method: "PUT",
-                    headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                    headers: spHeaders(),
                     body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id } }),
                   });
                   if (!res.ok) throw new Error("HTTP " + res.status);
                   // Post comment separately
                   var commentRes = await fetch(SP_API + "/comment/" + ticketId, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                    headers: spHeaders(),
                     body: JSON.stringify({ content: "<p>" + comment + "</p>", internal: false }),
                   });
                   var commentJson = await commentRes.json();
@@ -7088,7 +5342,7 @@
                       var uploadedFiles = fileJson.data || fileJson;
                       if (Array.isArray(uploadedFiles) && uploadedFiles.length) {
                         var attachPayload = uploadedFiles.map(function (f) { return { fileId: f.id }; });
-                        await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", { method: "POST", headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken }, body: JSON.stringify({ attachments: attachPayload, commentId: commentId, isInternal: false }) });
+                        await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", { method: "POST", headers: spHeaders(), body: JSON.stringify({ attachments: attachPayload, commentId: commentId, isInternal: false }) });
                       }
                     }
                   }
@@ -7096,7 +5350,7 @@
                   // No files - reassign with comment inline
                   var res = await fetch(SP_API + "/reassign/" + ticketId, {
                     method: "PUT",
-                    headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                    headers: spHeaders(),
                     body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id }, ticketCommentRequest: { internal: false, content: comment } }),
                   });
                   if (!res.ok) throw new Error("HTTP " + res.status);
@@ -7128,7 +5382,7 @@
                   if (closeComment || takeCloseFiles.length > 0) {
                     var closeCommentRes = await fetch(SP_API + "/comment/" + ticketId, {
                       method: "POST",
-                      headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                      headers: spHeaders(),
                       body: JSON.stringify({ content: "<p>" + (closeComment || "(archivo adjunto)") + "</p>", internal: false }),
                     });
                     // Upload close files if any
@@ -7144,7 +5398,7 @@
                           var uploadedFiles2 = fileJson2.data || fileJson2;
                           if (Array.isArray(uploadedFiles2) && uploadedFiles2.length) {
                             var attachPayload2 = uploadedFiles2.map(function (f) { return { fileId: f.id }; });
-                            await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", { method: "POST", headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken }, body: JSON.stringify({ attachments: attachPayload2, commentId: closeCommentId, isInternal: false }) });
+                            await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", { method: "POST", headers: spHeaders(), body: JSON.stringify({ attachments: attachPayload2, commentId: closeCommentId, isInternal: false }) });
                           }
                         }
                       }
@@ -7152,7 +5406,7 @@
                   }
                   await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
                     method: "PATCH",
-                    headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                    headers: spHeaders(),
                     body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO, ticketCommentRequest: null }),
                   });
                   var selectedGroup = takeGroupSelect ? takeGroupSelect.value : "";
@@ -7184,7 +5438,7 @@
             try {
               var res = await fetch(SP_API + "/reassign/" + ticketId, {
                 method: "PUT",
-                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                headers: spHeaders(),
                 body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id, serviceId: null, responsibleProfileId: parseInt(selectedId), resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id }, ticketCommentRequest: { internal: false, content: comment } }),
               });
               if (!res.ok) throw new Error("HTTP " + res.status);
@@ -7315,7 +5569,7 @@
                 if (!myProfId) throw new Error("No se pudo obtener tu perfil");
                 await fetch(SP_API + "/reassign/" + ticketId, {
                   method: "PUT",
-                  headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                  headers: spHeaders(),
                   body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id } }),
                 });
                 showSuccessToast("Ticket tomado");
@@ -7341,7 +5595,7 @@
                 if (closeComment || closePendingFiles.length > 0) {
                   var cRes = await fetch(SP_API + "/comment/" + ticketId, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                    headers: spHeaders(),
                     body: JSON.stringify({ content: "<p>" + (closeComment || "(archivo adjunto)") + "</p>", internal: false }),
                   });
                   if (closePendingFiles.length > 0 && cRes.ok) {
@@ -7355,7 +5609,7 @@
                         var fJson = await fRes.json();
                         var uFiles = fJson.data || fJson;
                         if (Array.isArray(uFiles) && uFiles.length) {
-                          await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", { method: "POST", headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken }, body: JSON.stringify({ attachments: uFiles.map(function (f) { return { fileId: f.id }; }), commentId: cId, isInternal: false }) });
+                          await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", { method: "POST", headers: spHeaders(), body: JSON.stringify({ attachments: uFiles.map(function (f) { return { fileId: f.id }; }), commentId: cId, isInternal: false }) });
                         }
                       }
                     }
@@ -7367,7 +5621,7 @@
                   if (myProfId) {
                     await fetch(SP_API + "/reassign/" + ticketId, {
                       method: "PUT",
-                      headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                      headers: spHeaders(),
                       body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id, serviceId: null, responsibleProfileId: myProfId, resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id } }),
                     });
                   }
@@ -7375,7 +5629,7 @@
                 // Close
                 var closeRes = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketId, {
                   method: "PATCH",
-                  headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                  headers: spHeaders(),
                   body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO, ticketCommentRequest: null }),
                 });
                 if (!closeRes.ok) throw new Error("HTTP " + closeRes.status);
@@ -7417,7 +5671,7 @@
             try {
               var res = await fetch(SP_API + "/reassign/" + ticketId, {
                 method: "PUT",
-                headers: { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + spToken },
+                headers: spHeaders(),
                 body: JSON.stringify({ resolutionGroupId: teamConfigReopen.resolutionGroupId, serviceId: null, responsibleProfileId: parseInt(personId), resolutionGroup: { label: teamConfigReopen.resolutionGroupLabel, value: teamConfigReopen.resolutionGroupId } }),
               });
               if (!res.ok) throw new Error("HTTP " + res.status);
@@ -7438,7 +5692,7 @@
 
         // View attachments in modal (carousel mode)
         var allAttachBtns = Array.from(overlay.querySelectorAll(".sp-qd-download"));
-        console.log("[SP] Registering download listeners (carousel), found:", allAttachBtns.length);
+        SP_Log.debug("Registering download listeners (carousel), found:", allAttachBtns.length);
 
         // Cache for loaded files: { fileId: { url, blob, byteArray, mimeType, fileName } }
         var attachCache = {};
@@ -7446,7 +5700,7 @@
         async function loadFileData(fileId, fileName) {
           if (attachCache[fileId]) return attachCache[fileId];
           var fileRes = await fetch("https://macropayapi.supportplus.mx/files/" + fileId, {
-            headers: { accept: "application/json", authorization: "Bearer " + spToken }
+            headers: spGetHeaders()
           });
           if (!fileRes.ok) throw new Error("HTTP " + fileRes.status);
           var fileJson = await fileRes.json();
@@ -8026,7 +6280,7 @@
               var spToken = getToken();
               var mondayToken = await getMondayToken();
               if (!spToken || !mondayToken) return;
-              var res = await fetch(SP_API + "/" + detailTicketId[1], { headers: { accept: "application/json", authorization: "Bearer " + spToken } });
+              var res = await fetch(SP_API + "/" + detailTicketId[1], { headers: spGetHeaders() });
               if (!res.ok) return;
               var ticket = (await res.json()).data;
               if (!ticket || !ticket.uniqueCode) return;
@@ -8047,7 +6301,7 @@
                     if (userId) colValues.multiple_person_mm25nvfq = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
                   }
                   await mondayQuery(mondayToken, 'mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }', { boardId: b.id, itemId: items[0].id, columnValues: JSON.stringify(colValues) });
-                  console.log("[SP] Detail view synced to Monday:", ticket.uniqueCode);
+                  SP_Log.debug("Detail view synced to Monday:", ticket.uniqueCode);
                   break;
                 }
               }
@@ -8274,10 +6528,9 @@
       sendBtn.addEventListener("click", async () => {
         sendBtn.disabled = true;
         sendBtn.style.background = "#999";
-        sendBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.6s linear infinite;"></span> Validando...';
+        sendBtn.innerHTML = spinnerHTML(16, 'Validando...');
         var closeBtnEl = document.getElementById("sp-monday-close");
         if (closeBtnEl) closeBtnEl.style.display = "none";
-        ensureToastStyles();
         msg.textContent = "";
 
         const boardId = boards[0].id;
@@ -8347,8 +6600,8 @@
                 });
               }
               if (foundUserId) personValue = { personsAndTeams: [{ id: parseInt(foundUserId), kind: "person" }] };
-              console.log("[SP Monday] Person select:", selectedProfile.email, "-> Monday userId:", foundUserId);
-            } catch (e) { console.warn("[SP Monday] Error finding user:", e); }
+              SP_Log.debug("Monday person select:", selectedProfile.email, "-> userId:", foundUserId);
+            } catch (e) { SP_Log.warn("Error finding Monday user:", e); }
           }
         } else {
           const holderEmail = ticket.ticketHolder?.ticketHolderLog?.email || "";
@@ -8463,6 +6716,32 @@
       if (!document.getElementById("sp-team-panel")) { clearInterval(_teamPanelInterval); return; }
       if (!isDetailView()) refreshTeamPanel();
     }, 60000);
+
+    // ─── Expose core functions for external modules ─────────
+    window.SP_Core = {
+      getTeamConfig: getTeamConfig,
+      getActiveAreas: getActiveAreas,
+      isMultiGroup: isMultiGroup,
+      getLoggedUserName: getLoggedUserName,
+      getMyProfileId: getMyProfileId,
+      getToken: getToken,
+      loadProfilesForGroup: loadProfilesForGroup,
+      getMondayToken: getMondayToken,
+      getMondayBoardId: getMondayBoardId,
+      mondayQuery: mondayQuery,
+      getMondayUsers: getMondayUsers,
+      getMondayTicketBoards: getMondayTicketBoards,
+      checkTicketExistsInMonday: checkTicketExistsInMonday,
+      canMigrateTicket: canMigrateTicket,
+      ensureSyncStarted: ensureSyncStarted,
+      getCache: getCache,
+      addToCache: addToCache,
+      createSyncedBadge: createSyncedBadge,
+      createButton: createButton,
+      createCopyButton: createCopyButton,
+      isDetailView: isDetailView,
+      getDetailTicketId: getDetailTicketId
+    };
   } // end initExtension
 
   // Re-sync Notion on page focus (detect changes without reload)

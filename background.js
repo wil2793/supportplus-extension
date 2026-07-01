@@ -1,18 +1,35 @@
-// ─── Background Service Worker ──────────────────────────
+// ============================================================
+// BACKGROUND.JS - Service Worker (Notion sync + API proxy)
+// ============================================================
+
+// ─── Configuration ──────────────────────────────────────────
+// ⚠️ SECURITY NOTE: This token should ideally be stored in chrome.storage
+// and configured by an admin via a settings UI, not hardcoded in source.
+// TODO: Move to encrypted storage in a future release.
 const NOTION_TOKEN = atob("bnRuX2I4ODI1MjQyODA5NFEzSEFwenZ3NVBoTG1JdmJZYW8xY202d2dWY2RSVUplNUM=");
 const NOTION_API = "https://api.notion.com/v1";
-const NOTION_USERS_DB = "36620e0684b98051a190e51d38d97288";
-const NOTION_ROLES_DB = "36720e0684b9807aba20c1c3d0536c09";
-const NOTION_GROUPS_DB = "36620e0684b9800e9a57df46019a03e0";
-const NOTION_COMMENTS_DB = "36920e0684b980a19fdbd27302a65feb";
 const NOTION_HEADERS = {
   "Authorization": "Bearer " + NOTION_TOKEN,
   "Notion-Version": "2022-06-28",
   "Content-Type": "application/json"
 };
 
+// Notion Database IDs (centralized)
+const DB = {
+  USERS: "36620e0684b98051a190e51d38d97288",
+  ROLES: "36720e0684b9807aba20c1c3d0536c09",
+  GROUPS: "36620e0684b9800e9a57df46019a03e0",
+  COMMENTS: "36920e0684b980a19fdbd27302a65feb",
+  SUBGROUPS: "36c20e0684b9800db6afe60707a87df7",
+  VERSIONS: "36f20e0684b98004b283ec713d3cde8a",
+  USER_CONFIG: "37320e0684b9806b84ecc4aae906f645",
+  WORK_SCHEDULE: "38420e0684b9808492a6f7d0d43cf1d1"
+};
+
+// ─── Notion Helpers ─────────────────────────────────────────
+
 async function notionQuery(dbId, body = {}) {
-  const res = await fetch(NOTION_API + "/databases/" + dbId + "/query", {
+  const res = await fetch(`${NOTION_API}/databases/${dbId}/query`, {
     method: "POST",
     headers: NOTION_HEADERS,
     body: JSON.stringify(body)
@@ -20,240 +37,355 @@ async function notionQuery(dbId, body = {}) {
   return res.json();
 }
 
-// Fetch all pages from a database (handles pagination)
 async function notionQueryAll(dbId) {
-  let all = [];
+  const all = [];
   let cursor = undefined;
   let hasMore = true;
   while (hasMore) {
     const body = cursor ? { start_cursor: cursor } : {};
     const data = await notionQuery(dbId, body);
-    all = all.concat(data.results || []);
+    all.push(...(data.results || []));
     hasMore = data.has_more;
     cursor = data.next_cursor;
   }
   return all;
 }
 
-// Sync Notion data to chrome.storage.local
-async function syncNotionData() {
-  try {
-    // 1. Get all users
-    const users = await notionQueryAll(NOTION_USERS_DB);
-    // 2. Get all roles
-    const roles = await notionQueryAll(NOTION_ROLES_DB);
-    // 3. Get all groups
-    const groups = await notionQueryAll(NOTION_GROUPS_DB);
-
-    // Build groups map: pageId -> groupId (number), groupId -> name, and monday config per group
-    const groupsMap = {};
-    const groupNamesMap = {}; // groupId (number) -> group name
-    const groupMondayConfig = {}; // groupId (number) -> { workspaceId, folderId, etiqueta }
-    for (const g of groups) {
-      const idSP = g.properties.IdSupportPlus?.title?.[0]?.plain_text || g.properties.IdSupportPlus?.rich_text?.[0]?.plain_text;
-      const groupName = g.properties.Grupo?.title?.[0]?.plain_text || g.properties.Nombre?.title?.[0]?.plain_text || g.properties.Grupo?.rich_text?.[0]?.plain_text || "";
-      if (idSP) {
-        const gId = parseInt(idSP);
-        groupsMap[g.id] = gId;
-        if (groupName) groupNamesMap[gId] = groupName;
-        const wsId = g.properties.monday_workspace_id?.number ? String(g.properties.monday_workspace_id.number) : "";
-        const folderId = g.properties.monday_folder_id?.number ? String(g.properties.monday_folder_id.number) : "";
-        const etiqueta = g.properties.EtiquetaMonday?.rich_text?.[0]?.plain_text || "";
-        if (wsId && etiqueta) {
-          groupMondayConfig[gId] = { workspaceId: wsId, folderId, etiqueta };
-        }
-      }
-    }
-
-    // Build roles map: pageId -> { name, groups[] }
-    const rolesMap = {};
-    for (const r of roles) {
-      const name = (r.properties.Nombre?.title?.[0]?.plain_text || "");
-      const nameLower = name.toLowerCase();
-      const roleGroups = (r.properties.MSP_cat_Grupos?.relation || []).map(rel => groupsMap[rel.id]).filter(Boolean);
-      const canMigrate = r.properties.PuedeMigrarMonday?.checkbox || false;
-      const btnDashboard = r.properties.BotonDasboard?.checkbox || false;
-      const btnComments = r.properties.BotonComentarios?.checkbox || false;
-      const btnReports = r.properties.BotonReportesExcel?.checkbox || false;
-      rolesMap[r.id] = { name, groups: roleGroups, active: r.properties.Activo?.checkbox, canMigrate, btnDashboard, btnComments, btnReports };
-    }
-
-    // Build users list: email -> { name, role, groups[], profileId, active }
-    const usersMap = Object.create(null);
-    for (const u of users) {
-      const email = (u.properties.Correo?.rich_text?.[0]?.plain_text || u.properties.Correo?.title?.[0]?.plain_text || "").toLowerCase();
-      if (!email || email === "__proto__" || email === "constructor" || email === "prototype") continue;
-      const nombre = u.properties.Nombre?.title?.[0]?.plain_text || "";
-      const active = u.properties.Activo?.checkbox || false;
-      const profileId = u.properties["Id Support Plus"]?.number || null;
-      const rolRelation = u.properties.Rol?.relation || [];
-      const rolPageId = rolRelation.length > 0 ? rolRelation[0].id : null;
-      const userGroups = (u.properties["Grupos Suppor Plus"]?.relation || []).map(rel => groupsMap[rel.id]).filter(Boolean);
-
-      // Resolve role
-      let roleName = "usuario";
-      let roleGroups = [];
-      if (rolPageId && rolesMap[rolPageId]) {
-        roleName = rolesMap[rolPageId].name;
-        roleGroups = rolesMap[rolPageId].groups;
-      }
-
-      // Groups: merge role groups + user groups (union, no duplicates)
-      const finalGroups = [...new Set([...roleGroups, ...userGroups])];
-
-      // Can migrate Monday
-      const canMigrate = (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].canMigrate : false;
-
-      usersMap[email] = { name: nombre, role: "usuario", roleName: roleName, groups: finalGroups, profileId, active, canMigrate, btnDashboard: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnDashboard : false, btnComments: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnComments : false, btnReports: (rolPageId && rolesMap[rolPageId]) ? rolesMap[rolPageId].btnReports : false, notionPageId: u.id };
-    }
-
-    // Check sub-groups for permissions
-    const SUBGRUPO_DB = "36c20e0684b9800db6afe60707a87df7";
-    const subGroups = await notionQueryAll(SUBGRUPO_DB);
-    const dragDropGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("drag"));
-    const dragDropMembers = dragDropGroup ? (dragDropGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
-    const reassignAppGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("migrar apli"));
-    const reassignAppMembers = reassignAppGroup ? (reassignAppGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
-    const iamGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("iamcito"));
-    const iamMembers = iamGroup ? (iamGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
-    const labelsGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("etiquetas"));
-    const labelsMembers = labelsGroup ? (labelsGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
-    const reopenGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("reabrir"));
-    const reopenMembers = reopenGroup ? (reopenGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
-    const commentClosedGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("comentar con ticket cerrado"));
-    const commentClosedMembers = commentClosedGroup ? (commentClosedGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
-    const rejectGroup = subGroups.find(sg => (sg.properties.Nombre?.title?.[0]?.plain_text || "").toLowerCase().includes("rechazar"));
-    const rejectMembers = rejectGroup ? (rejectGroup.properties.MSP_Usuarios?.relation || []).map(r => r.id) : [];
-
-    // Mark users with sub-group permissions
-    for (const u of users) {
-      const email = (u.properties.Correo?.rich_text?.[0]?.plain_text || u.properties.Correo?.title?.[0]?.plain_text || "").toLowerCase();
-      if (email && usersMap[email]) {
-        if (dragDropMembers.includes(u.id)) usersMap[email].canDragDrop = true;
-        if (reassignAppMembers.includes(u.id)) usersMap[email].canReassignApp = true;
-        if (iamMembers.includes(u.id)) usersMap[email].canAddIAM = true;
-        if (labelsMembers.includes(u.id)) usersMap[email].canShowLabels = true;
-        if (reopenMembers.includes(u.id)) usersMap[email].canReopenTickets = true;
-        if (commentClosedMembers.includes(u.id)) usersMap[email].canCommentClosed = true;
-        if (rejectMembers.includes(u.id)) usersMap[email].canRejectTickets = true;
-      }
-    }
-
-    // Build roles list for the view switcher (exclude admin)
-    const rolesList = [];
-    const rolesGroupsMap = {}; // roleName -> groups[]
-    for (const r of roles) {
-      const name = (r.properties.Nombre?.title?.[0]?.plain_text || "");
-      const active = r.properties.Activo?.checkbox;
-      const roleNameLower = name.toLowerCase();
-      const roleGroups = rolesMap[r.id]?.groups || [];
-      if (active) {
-        rolesGroupsMap[roleNameLower] = roleGroups;
-        if (roleNameLower !== "administrador") {
-          rolesList.push(name);
-        }
-      }
-    }
-
-    // 4. Get suggested comments (only active ones)
-    const commentsRaw = await notionQueryAll(NOTION_COMMENTS_DB);
-    const suggestedComments = {}; // groupId -> [{id, text, name}]
-    for (const c of commentsRaw) {
-      const active = c.properties.Activo?.checkbox;
-      if (!active) continue; // Skip inactive (logically deleted)
-      const text = c.properties.Comentario?.rich_text?.[0]?.plain_text || "";
-      const name = c.properties.Nombre?.title?.[0]?.plain_text || "";
-      const commentGroups = (c.properties.MSP_cat_Grupos?.relation || []).map(rel => groupsMap[rel.id]).filter(Boolean);
-      for (const gId of commentGroups) {
-        if (!suggestedComments[gId]) suggestedComments[gId] = [];
-        suggestedComments[gId].push({ id: c.id, text, name });
-      }
-    }
-
-    // 5. Get user's Monday token from their MSP_Usuarios record
-    const storedData = await chrome.storage.local.get("userEmail");
-    const currentEmail = (storedData.userEmail || "").toLowerCase();
-    let mondayTokenFromNotion = "";
-    if (currentEmail && usersMap[currentEmail]?.notionPageId) {
-      const userPageId = usersMap[currentEmail].notionPageId;
-      const userPage = users.find(u => u.id === userPageId);
-      if (userPage) {
-        const encoded = userPage.properties.token_monday?.rich_text?.[0]?.plain_text || "";
-        if (encoded) {
-          try { mondayTokenFromNotion = atob(encoded); } catch(e) { mondayTokenFromNotion = encoded; }
-        }
-      }
-    }
-
-    // 6. Get all versions from Notion
-    const VERSIONS_DB = "36f20e0684b98004b283ec713d3cde8a";
-    const versionsRaw = await notionQuery(VERSIONS_DB, { filter: { property: "Activo", checkbox: { equals: true } }, sorts: [{ property: "Fecha de creación", direction: "descending" }] });
-    let latestVersion = "";
-    let latestZipUrl = "";
-    let allVersions = [];
-    if (versionsRaw.results && versionsRaw.results.length) {
-      versionsRaw.results.forEach(function(v) {
-        var ver = v.properties.Version?.title?.[0]?.plain_text || "";
-        var changes = v.properties.Camios?.rich_text?.[0]?.plain_text || "";
-        var zipFiles = v.properties["Archivo zip"]?.files || [];
-        var zipUrl = zipFiles.length ? (zipFiles[0].external?.url || zipFiles[0].file?.url || "") : "";
-        if (ver) allVersions.push({ version: ver, changes: changes, zipUrl: zipUrl });
-      });
-      if (allVersions.length) {
-        latestVersion = allVersions[0].version;
-        latestZipUrl = allVersions[0].zipUrl;
-      }
-    }
-
-    // 7. Get user config from Notion (blacklist, onlyWithTickets)
-    const USER_CONFIG_DB = "37320e0684b9806b84ecc4aae906f645";
-    let userConfig = {};
-    // Get current user email from storage to find their config
-    if (currentEmail && usersMap[currentEmail]?.notionPageId) {
-      const userNotionId = usersMap[currentEmail].notionPageId;
-      const cfgRaw = await notionQuery(USER_CONFIG_DB, { filter: { property: "Usuario", relation: { contains: userNotionId } }, page_size: 1 });
-      if (cfgRaw.results && cfgRaw.results[0]) {
-        const cfgPage = cfgRaw.results[0];
-        const blacklistRels = cfgPage.properties.BlackList?.relation || [];
-        const onlyWithTickets = cfgPage.properties.MostrarSoloConTickets?.checkbox || false;
-        userConfig = { pageId: cfgPage.id, blacklist: blacklistRels.map(r => r.id), onlyWithTickets: onlyWithTickets };
-      }
-    }
-
-    // 8. Get work schedule from MSP_Configuracion
-    const WORK_SCHEDULE_DB = "38420e0684b9808492a6f7d0d43cf1d1";
-    var workSchedule = { horaEntrada: 9, horaSalida: 19, diaInicio: "Lunes", diaFinal: "Viernes" };
-    try {
-      const scheduleRaw = await notionQueryAll(WORK_SCHEDULE_DB);
-      for (const row of scheduleRaw) {
-        const name = (row.properties.Nombre?.title?.[0]?.plain_text || "").trim();
-        const value = (row.properties.Valor?.rich_text?.[0]?.plain_text || "").trim();
-        if (name === "HorarioEntrada") workSchedule.horaEntrada = parseInt(value) || 9;
-        if (name === "HorarioSalida") workSchedule.horaSalida = parseInt(value) || 19;
-        if (name === "DiaInicio") workSchedule.diaInicio = value || "Lunes";
-        if (name === "DiaFinal") workSchedule.diaFinal = value || "Viernes";
-      }
-    } catch (e) { console.log("[SP Background] Work schedule error:", e.message); }
-
-    // Save to storage
-    await chrome.storage.local.set({ notionUsers: usersMap, notionRoles: rolesList, notionRolesGroups: rolesGroupsMap, groupNames: groupNamesMap, groupMondayConfig, suggestedComments, mondayToken: mondayTokenFromNotion, latestVersion, latestZipUrl, allVersions, userConfig, workSchedule, notionSyncTime: Date.now() });
-    console.log("[SP Background] Notion synced:", Object.keys(usersMap).length, "users,", rolesList.length, "roles,", commentsRaw.length, "comments, monday token:", mondayTokenFromNotion ? "OK (user)" : "NOT SET", "latest version:", latestVersion, "versions:", allVersions.length, "schedule:", workSchedule);
-  } catch (e) {
-    console.error("[SP Background] Notion sync error:", e);
+/** Safely extract a property value from a Notion page */
+function prop(page, name, type) {
+  const p = page.properties[name];
+  if (!p) return null;
+  switch (type) {
+    case "title": return p.title?.[0]?.plain_text || "";
+    case "rich_text": return p.rich_text?.[0]?.plain_text || "";
+    case "number": return p.number || null;
+    case "checkbox": return !!p.checkbox;
+    case "relation": return (p.relation || []).map(r => r.id);
+    case "files": return p.files || [];
+    default: return null;
   }
 }
 
-// Sync on install/update
+// ─── Sync: Build Groups Map ─────────────────────────────────
+
+function buildGroupsData(groups) {
+  const groupsMap = {};       // pageId -> groupId (number)
+  const groupNamesMap = {};   // groupId -> name
+  const groupMondayConfig = {}; // groupId -> {workspaceId, folderId, etiqueta}
+
+  for (const g of groups) {
+    const idSP = prop(g, "IdSupportPlus", "title") || prop(g, "IdSupportPlus", "rich_text");
+    const groupName = prop(g, "Grupo", "title") || prop(g, "Nombre", "title") || prop(g, "Grupo", "rich_text") || "";
+    if (!idSP) continue;
+
+    const gId = parseInt(idSP);
+    groupsMap[g.id] = gId;
+    if (groupName) groupNamesMap[gId] = groupName;
+
+    const wsId = g.properties.monday_workspace_id?.number ? String(g.properties.monday_workspace_id.number) : "";
+    const folderId = g.properties.monday_folder_id?.number ? String(g.properties.monday_folder_id.number) : "";
+    const etiqueta = prop(g, "EtiquetaMonday", "rich_text");
+    if (wsId && etiqueta) {
+      groupMondayConfig[gId] = { workspaceId: wsId, folderId, etiqueta };
+    }
+  }
+
+  return { groupsMap, groupNamesMap, groupMondayConfig };
+}
+
+// ─── Sync: Build Roles Map ──────────────────────────────────
+
+function buildRolesData(roles, groupsMap) {
+  const rolesMap = {};
+  const rolesList = [];
+  const rolesGroupsMap = {};
+
+  for (const r of roles) {
+    const name = prop(r, "Nombre", "title");
+    const active = prop(r, "Activo", "checkbox");
+    const roleGroups = prop(r, "MSP_cat_Grupos", "relation").map(id => groupsMap[id]).filter(Boolean);
+    const canMigrate = prop(r, "PuedeMigrarMonday", "checkbox");
+    const btnDashboard = prop(r, "BotonDasboard", "checkbox");
+    const btnComments = prop(r, "BotonComentarios", "checkbox");
+    const btnReports = prop(r, "BotonReportesExcel", "checkbox");
+
+    rolesMap[r.id] = { name, groups: roleGroups, active, canMigrate, btnDashboard, btnComments, btnReports };
+
+    if (active) {
+      rolesGroupsMap[name.toLowerCase()] = roleGroups;
+      if (name.toLowerCase() !== "administrador") {
+        rolesList.push(name);
+      }
+    }
+  }
+
+  return { rolesMap, rolesList, rolesGroupsMap };
+}
+
+// ─── Sync: Build Users Map ──────────────────────────────────
+
+function buildUsersData(users, groupsMap, rolesMap) {
+  const usersMap = Object.create(null);
+
+  for (const u of users) {
+    const email = (prop(u, "Correo", "rich_text") || prop(u, "Correo", "title")).toLowerCase();
+    if (!email || email === "__proto__" || email === "constructor" || email === "prototype") continue;
+
+    const nombre = prop(u, "Nombre", "title");
+    const active = prop(u, "Activo", "checkbox");
+    const profileId = prop(u, "Id Support Plus", "number");
+    const rolRelation = prop(u, "Rol", "relation");
+    const rolPageId = rolRelation.length > 0 ? rolRelation[0] : null;
+    const userGroups = prop(u, "Grupos Suppor Plus", "relation").map(id => groupsMap[id]).filter(Boolean);
+
+    // Resolve role
+    let roleName = "usuario";
+    let roleGroups = [];
+    let canMigrate = false;
+    let btnDashboard = false;
+    let btnComments = false;
+    let btnReports = false;
+
+    if (rolPageId && rolesMap[rolPageId]) {
+      const role = rolesMap[rolPageId];
+      roleName = role.name;
+      roleGroups = role.groups;
+      canMigrate = role.canMigrate;
+      btnDashboard = role.btnDashboard;
+      btnComments = role.btnComments;
+      btnReports = role.btnReports;
+    }
+
+    const finalGroups = [...new Set([...roleGroups, ...userGroups])];
+
+    usersMap[email] = {
+      name: nombre,
+      role: "usuario",
+      roleName,
+      groups: finalGroups,
+      profileId,
+      active,
+      canMigrate,
+      btnDashboard,
+      btnComments,
+      btnReports,
+      notionPageId: u.id
+    };
+  }
+
+  return usersMap;
+}
+
+// ─── Sync: Apply Subgroup Permissions ───────────────────────
+
+function applySubgroupPermissions(users, subGroups, usersMap) {
+  const PERM_KEYWORDS = {
+    canDragDrop: "drag",
+    canReassignApp: "migrar apli",
+    canAddIAM: "iamcito",
+    canShowLabels: "etiquetas",
+    canReopenTickets: "reabrir",
+    canCommentClosed: "comentar con ticket cerrado",
+    canRejectTickets: "rechazar"
+  };
+
+  // For each permission, find the subgroup and collect member page IDs
+  const permMembers = {};
+  for (const [key, keyword] of Object.entries(PERM_KEYWORDS)) {
+    const sg = subGroups.find(s => (prop(s, "Nombre", "title")).toLowerCase().includes(keyword));
+    permMembers[key] = sg ? prop(sg, "MSP_Usuarios", "relation") : [];
+  }
+
+  // Apply permissions to users
+  for (const u of users) {
+    const email = (prop(u, "Correo", "rich_text") || prop(u, "Correo", "title")).toLowerCase();
+    if (!email || !usersMap[email]) continue;
+    for (const [key, members] of Object.entries(permMembers)) {
+      if (members.includes(u.id)) usersMap[email][key] = true;
+    }
+  }
+}
+
+// ─── Sync: Get Suggested Comments ───────────────────────────
+
+function buildSuggestedComments(commentsRaw, groupsMap) {
+  const suggestedComments = {};
+  for (const c of commentsRaw) {
+    if (!prop(c, "Activo", "checkbox")) continue;
+    const text = prop(c, "Comentario", "rich_text");
+    const name = prop(c, "Nombre", "title");
+    const commentGroups = prop(c, "MSP_cat_Grupos", "relation").map(id => groupsMap[id]).filter(Boolean);
+    for (const gId of commentGroups) {
+      if (!suggestedComments[gId]) suggestedComments[gId] = [];
+      suggestedComments[gId].push({ id: c.id, text, name });
+    }
+  }
+  return suggestedComments;
+}
+
+// ─── Sync: Get Versions ─────────────────────────────────────
+
+async function getVersionsData() {
+  const raw = await notionQuery(DB.VERSIONS, {
+    filter: { property: "Activo", checkbox: { equals: true } },
+    sorts: [{ property: "Fecha de creación", direction: "descending" }]
+  });
+
+  const allVersions = [];
+  let latestVersion = "";
+  let latestZipUrl = "";
+
+  if (raw.results) {
+    for (const v of raw.results) {
+      const ver = prop(v, "Version", "title");
+      const changes = prop(v, "Camios", "rich_text");
+      const zipFiles = prop(v, "Archivo zip", "files");
+      const zipUrl = zipFiles.length ? (zipFiles[0].external?.url || zipFiles[0].file?.url || "") : "";
+      if (ver) allVersions.push({ version: ver, changes, zipUrl });
+    }
+    if (allVersions.length) {
+      latestVersion = allVersions[0].version;
+      latestZipUrl = allVersions[0].zipUrl;
+    }
+  }
+
+  return { allVersions, latestVersion, latestZipUrl };
+}
+
+// ─── Sync: Get User Config ──────────────────────────────────
+
+async function getUserConfig(currentEmail, usersMap) {
+  if (!currentEmail || !usersMap[currentEmail]?.notionPageId) return {};
+  const userNotionId = usersMap[currentEmail].notionPageId;
+  const cfgRaw = await notionQuery(DB.USER_CONFIG, {
+    filter: { property: "Usuario", relation: { contains: userNotionId } },
+    page_size: 1
+  });
+  if (!cfgRaw.results?.[0]) return {};
+  const cfgPage = cfgRaw.results[0];
+  return {
+    pageId: cfgPage.id,
+    blacklist: prop(cfgPage, "BlackList", "relation"),
+    onlyWithTickets: prop(cfgPage, "MostrarSoloConTickets", "checkbox")
+  };
+}
+
+// ─── Sync: Get Work Schedule ────────────────────────────────
+
+async function getWorkSchedule() {
+  const schedule = { horaEntrada: 9, horaSalida: 19, diaInicio: "Lunes", diaFinal: "Viernes" };
+  try {
+    const rows = await notionQueryAll(DB.WORK_SCHEDULE);
+    for (const row of rows) {
+      const name = prop(row, "Nombre", "title").trim();
+      const value = prop(row, "Valor", "rich_text").trim();
+      if (name === "HorarioEntrada") schedule.horaEntrada = parseInt(value) || 9;
+      if (name === "HorarioSalida") schedule.horaSalida = parseInt(value) || 19;
+      if (name === "DiaInicio") schedule.diaInicio = value || "Lunes";
+      if (name === "DiaFinal") schedule.diaFinal = value || "Viernes";
+    }
+  } catch (e) {
+    console.log("[SP Background] Work schedule error:", e.message);
+  }
+  return schedule;
+}
+
+// ─── Main Sync Function ─────────────────────────────────────
+
+async function syncNotionData() {
+  try {
+    // Fetch all data in parallel where possible
+    const [users, roles, groups, subGroups, commentsRaw] = await Promise.all([
+      notionQueryAll(DB.USERS),
+      notionQueryAll(DB.ROLES),
+      notionQueryAll(DB.GROUPS),
+      notionQueryAll(DB.SUBGROUPS),
+      notionQueryAll(DB.COMMENTS)
+    ]);
+
+    // Build data structures
+    const { groupsMap, groupNamesMap, groupMondayConfig } = buildGroupsData(groups);
+    const { rolesMap, rolesList, rolesGroupsMap } = buildRolesData(roles, groupsMap);
+    const usersMap = buildUsersData(users, groupsMap, rolesMap);
+    applySubgroupPermissions(users, subGroups, usersMap);
+    const suggestedComments = buildSuggestedComments(commentsRaw, groupsMap);
+
+    // Get current user email for user-specific data
+    const storedData = await chrome.storage.local.get("userEmail");
+    const currentEmail = (storedData.userEmail || "").toLowerCase();
+
+    // Get Monday token from user's Notion record
+    let mondayTokenFromNotion = "";
+    if (currentEmail && usersMap[currentEmail]?.notionPageId) {
+      const userPage = users.find(u => u.id === usersMap[currentEmail].notionPageId);
+      if (userPage) {
+        const encoded = prop(userPage, "token_monday", "rich_text");
+        if (encoded) {
+          try { mondayTokenFromNotion = atob(encoded); } catch (e) { mondayTokenFromNotion = encoded; }
+        }
+      }
+    }
+
+    // Fetch remaining data (sequential - depends on previous results)
+    const [versionsData, userConfig, workSchedule] = await Promise.all([
+      getVersionsData(),
+      getUserConfig(currentEmail, usersMap),
+      getWorkSchedule()
+    ]);
+
+    // Save everything to storage
+    await chrome.storage.local.set({
+      notionUsers: usersMap,
+      notionRoles: rolesList,
+      notionRolesGroups: rolesGroupsMap,
+      groupNames: groupNamesMap,
+      groupMondayConfig,
+      suggestedComments,
+      mondayToken: mondayTokenFromNotion,
+      latestVersion: versionsData.latestVersion,
+      latestZipUrl: versionsData.latestZipUrl,
+      allVersions: versionsData.allVersions,
+      userConfig,
+      workSchedule,
+      notionSyncTime: Date.now()
+    });
+
+    console.log("[SP Background] Synced:", Object.keys(usersMap).length, "users,", rolesList.length, "roles,", commentsRaw.length, "comments, monday:", mondayTokenFromNotion ? "OK" : "N/A", "v:", versionsData.latestVersion);
+  } catch (e) {
+    console.error("[SP Background] Sync error:", e);
+  }
+}
+
+// Retry wrapper: retries sync up to 2 times with exponential backoff
+var _syncRetryCount = 0;
+async function syncWithRetry() {
+  try {
+    await syncNotionData();
+    _syncRetryCount = 0;
+  } catch (e) {
+    _syncRetryCount++;
+    if (_syncRetryCount <= 2) {
+      var delay = _syncRetryCount * 5000;
+      console.log("[SP Background] Sync failed, retry", _syncRetryCount, "in", delay, "ms");
+      setTimeout(syncWithRetry, delay);
+    } else {
+      console.error("[SP Background] Sync failed after 3 attempts:", e.message);
+      _syncRetryCount = 0;
+    }
+  }
+}
+
+// ─── Lifecycle Events ───────────────────────────────────────
+
 chrome.runtime.onInstalled.addListener((details) => {
-  syncNotionData();
-  // Notify open tabs about the update
+  syncWithRetry();
   if (details.reason === "update") {
     chrome.tabs.query({ url: "https://macropay.supportplus.mx/*" }, (tabs) => {
       tabs.forEach((tab) => {
         chrome.scripting.executeScript({
           target: { tabId: tab.id },
           func: (version) => {
-            alert("⚠️ SupportPlus Tools se actualizó a v" + version + ". La página se recargará para aplicar los cambios.");
+            alert("⚠️ SupportPlus Tools se actualizó a v" + version + ". La página se recargará.");
             window.location.reload();
           },
           args: [chrome.runtime.getManifest().version]
@@ -263,88 +395,94 @@ chrome.runtime.onInstalled.addListener((details) => {
   }
 });
 
-// Sync on startup
-chrome.runtime.onStartup.addListener(() => { syncNotionData(); });
+chrome.runtime.onStartup.addListener(() => syncWithRetry());
 
-// Sync when content script requests it
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "sync-notion") {
-    syncNotionData().then(() => sendResponse({ success: true })).catch(e => sendResponse({ success: false, error: e.message }));
-    return true;
-  }
+// ─── Message Router ─────────────────────────────────────────
 
-  // Keep legacy notion-query for other uses
-  if (message.type === "notion-query") {
-    fetch(NOTION_API + "/databases/" + (message.dbId || NOTION_USERS_DB) + "/query", {
+const MESSAGE_HANDLERS = {
+  "sync-notion": async () => {
+    await syncNotionData();
+    return { success: true };
+  },
+
+  "notion-query": async (msg) => {
+    const data = await fetch(`${NOTION_API}/databases/${msg.dbId || DB.USERS}/query`, {
       method: "POST",
       headers: NOTION_HEADERS,
-      body: JSON.stringify(message.body || {})
-    }).then(r => r.json()).then(data => sendResponse({ success: true, data })).catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
+      body: JSON.stringify(msg.body || {})
+    }).then(r => r.json());
+    return { success: true, data };
+  },
 
-  if (message.type === "notion-create") {
-    fetch(NOTION_API + "/pages", {
+  "notion-create": async (msg) => {
+    const data = await fetch(`${NOTION_API}/pages`, {
       method: "POST",
       headers: NOTION_HEADERS,
-      body: JSON.stringify(message.body)
-    }).then(r => r.json()).then(data => sendResponse({ success: true, data })).catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
+      body: JSON.stringify(msg.body)
+    }).then(r => r.json());
+    return { success: true, data };
+  },
 
-  if (message.type === "notion-update") {
-    fetch(NOTION_API + "/pages/" + message.pageId, {
+  "notion-update": async (msg) => {
+    const data = await fetch(`${NOTION_API}/pages/${msg.pageId}`, {
       method: "PATCH",
       headers: NOTION_HEADERS,
-      body: JSON.stringify(message.body)
-    }).then(r => r.json()).then(data => sendResponse({ success: true, data })).catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
+      body: JSON.stringify(msg.body)
+    }).then(r => r.json());
+    return { success: true, data };
+  },
 
-  if (message.type === "notion-delete") {
-    fetch(NOTION_API + "/pages/" + message.pageId, {
+  "notion-delete": async (msg) => {
+    const data = await fetch(`${NOTION_API}/pages/${msg.pageId}`, {
       method: "PATCH",
       headers: NOTION_HEADERS,
       body: JSON.stringify({ archived: true })
-    }).then(r => r.json()).then(data => sendResponse({ success: true, data })).catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
+    }).then(r => r.json());
+    return { success: true, data };
+  },
 
-  if (message.type === "notion-page") {
-    fetch(NOTION_API + "/pages/" + message.pageId, {
+  "notion-page": async (msg) => {
+    const data = await fetch(`${NOTION_API}/pages/${msg.pageId}`, {
       method: "GET",
       headers: NOTION_HEADERS
-    }).then(r => r.json()).then(data => sendResponse({ success: true, data })).catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
+    }).then(r => r.json());
+    return { success: true, data };
+  },
 
-  if (message.type === "notion-pages-batch") {
-    // Fetch multiple pages in parallel
-    Promise.all((message.pageIds || []).map(id =>
-      fetch(NOTION_API + "/pages/" + id, { method: "GET", headers: NOTION_HEADERS }).then(r => r.json())
-    )).then(pages => sendResponse({ success: true, data: pages })).catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
+  "notion-pages-batch": async (msg) => {
+    const data = await Promise.all(
+      (msg.pageIds || []).map(id =>
+        fetch(`${NOTION_API}/pages/${id}`, { method: "GET", headers: NOTION_HEADERS }).then(r => r.json())
+      )
+    );
+    return { success: true, data };
+  },
 
-  if (message.type === "monday-query") {
-    fetch("https://api.monday.com/v2", {
+  "monday-query": async (msg) => {
+    const data = await fetch("https://api.monday.com/v2", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": message.token },
-      body: JSON.stringify({ query: message.query, variables: message.variables })
-    }).then(r => r.json()).then(data => {
-      if (data.errors) sendResponse({ success: false, error: data.errors[0].message });
-      else sendResponse({ success: true, data: data.data });
-    }).catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
+      headers: { "Content-Type": "application/json", "Authorization": msg.token },
+      body: JSON.stringify({ query: msg.query, variables: msg.variables })
+    }).then(r => r.json());
+    if (data.errors) throw new Error(data.errors[0].message);
+    return { success: true, data: data.data };
+  },
 
-  if (message.type === "proxy-fetch") {
-    fetch(message.url).then(r => {
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return r.blob();
-    }).then(blob => blob.arrayBuffer()).then(buffer => {
-      sendResponse({ success: true, data: Array.from(new Uint8Array(buffer)) });
-    }).catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
+  "proxy-fetch": async (msg) => {
+    const res = await fetch(msg.url);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const buffer = await res.blob().then(b => b.arrayBuffer());
+    return { success: true, data: Array.from(new Uint8Array(buffer)) };
   }
+};
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  const handler = MESSAGE_HANDLERS[message.type];
+  if (!handler) return;
+
+  handler(message)
+    .then(result => sendResponse(result))
+    .catch(err => sendResponse({ success: false, error: err.message }));
+
+  return true; // Keep channel open for async response
 });

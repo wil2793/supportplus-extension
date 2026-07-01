@@ -10,3 +10,7 @@ Thumbs.db
 # MDs (excepto README)
 *.md
 !README.md
+
+# Debug/test scripts
+check-*.js
+test-*.js

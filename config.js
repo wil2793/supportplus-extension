@@ -128,4 +128,38 @@
     return window.SP_CONFIG.STATUS_MAP[s] !== undefined ? window.SP_CONFIG.STATUS_MAP[s] : 5;
   };
 
+  // Status colors (background for rows/cards)
+  window.SP_CONFIG.STATUS_COLORS = {
+    "Asignado": "rgba(33, 150, 243, 0.18)",
+    "En validación": "rgba(156, 39, 176, 0.18)",
+    "En atención": "rgba(255, 152, 0, 0.18)",
+    "Por aprobador": "rgba(121, 85, 72, 0.18)",
+    "Por ejecutar": "rgba(0, 150, 136, 0.18)",
+    "Por revisar": "rgba(63, 81, 181, 0.18)",
+    "En aplicaciones": "rgba(233, 30, 99, 0.18)",
+    "Por confirmar": "rgba(255, 193, 7, 0.20)",
+    "Cerrado": "rgba(76, 175, 80, 0.18)",
+    "Rechazado": "rgba(244, 67, 54, 0.18)",
+    "Cancelado": "rgba(158, 158, 158, 0.20)",
+    "Reabierto": "rgba(255, 87, 34, 0.18)",
+    "En espera": "rgba(255, 235, 59, 0.20)"
+  };
+
+  // Status colors (text for labels)
+  window.SP_CONFIG.STATUS_TEXT_COLORS = {
+    "Asignado": "#1565C0",
+    "En validación": "#7B1FA2",
+    "En atención": "#E65100",
+    "Por aprobador": "#5D4037",
+    "Por ejecutar": "#00796B",
+    "Por revisar": "#283593",
+    "En aplicaciones": "#C2185B",
+    "Por confirmar": "#F9A825",
+    "Cerrado": "#2E7D32",
+    "Rechazado": "#C62828",
+    "Cancelado": "#616161",
+    "Reabierto": "#D84315",
+    "En espera": "#F57F17"
+  };
+
 })();
