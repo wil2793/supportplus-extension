@@ -924,20 +924,7 @@
     const STATUS_TEXT_COLORS = window.SP_CONFIG.STATUS_TEXT_COLORS;
 
     function colorRowsByStatus() {
-      var classMap = window.SP_Styles.STATUS_CLASS_MAP;
-      document.querySelectorAll(".MuiDataGrid-row").forEach(function (row) {
-        var statusCell = row.querySelector('[data-field="ticketStatusName"]');
-        if (!statusCell) return;
-        var status = statusCell.textContent.trim();
-        if (row.dataset.spStatus === status) return;
-        // Remove old status class
-        if (row.dataset.spStatus && classMap[row.dataset.spStatus]) {
-          row.classList.remove(classMap[row.dataset.spStatus]);
-        }
-        // Add new
-        if (classMap[status]) row.classList.add(classMap[status]);
-        row.dataset.spStatus = status;
-      });
+      if (window.SP_RowColors) window.SP_RowColors.colorRows();
     }
 
     // --- Team panel ---

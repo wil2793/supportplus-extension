@@ -188,40 +188,7 @@
       });
   }
 
-  // ─── Row Coloring ─────────────────────────────────────────
-  // Colors rows by ticket status using CSS classes from styles.js
-
-  function colorRows() {
-    const STATUS_CLASS_MAP = window.SP_Styles.STATUS_CLASS_MAP;
-    document.querySelectorAll('.MuiDataGrid-row').forEach(function (row) {
-      const cell = row.querySelector('[data-field="ticketStatusName"]');
-      if (!cell) return;
-      const status = cell.textContent.trim();
-      // Skip if status hasn't changed since last paint
-      if (row.dataset.spStatus === status) return;
-      // Remove previous status class
-      if (row.dataset.spStatus && STATUS_CLASS_MAP[row.dataset.spStatus]) {
-        row.classList.remove(STATUS_CLASS_MAP[row.dataset.spStatus]);
-      }
-      // Apply new class
-      const cls = STATUS_CLASS_MAP[status];
-      if (cls) row.classList.add(cls);
-      row.dataset.spStatus = status;
-    });
-  }
-
-  function startRowColorObserver() {
-    // Run immediately and on every DOM change near the grid
-    colorRows();
-
-    // Use a short debounce for the body-level observer
-    const debounced = SP_DOM.debounce(colorRows, 50);
-    const observer = new MutationObserver(debounced);
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    // Also run on scroll events in the grid (virtual scroll recreates rows)
-    document.addEventListener("scroll", SP_DOM.throttle(colorRows, 300), true);
-  }
+  // ─── Row Coloring: delegated to features/row-colors.js ────
 
   // ─── GROUP_INFO loader ────────────────────────────────────
   const _groupRefs = { info: window.SP_CONFIG.GROUP_INFO };
@@ -267,7 +234,6 @@
   // Start everything
   initialInject();
   startHeaderObserver();
-  startRowColorObserver();
   loadGroupInfo();
 
   // Version check: after 3s, and on tab focus
