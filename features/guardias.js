@@ -314,21 +314,33 @@
         chrome.runtime.sendMessage({
           type: "notion-update", pageId: solicitud.id,
           body: { properties: { "Aceptado": { checkbox: true } } }
-        }, function () {
+        }, function (acceptResp) {
+          if (!acceptResp || !acceptResp.success) {
+            m.close();
+            window.showErrorToast("Error al aceptar: " + (acceptResp && acceptResp.error ? acceptResp.error : "unknown"));
+            return;
+          }
+
           // 2. Swap users in DBA_ControlDeGuardias
-          // Target day: put solicitante as new user, current user as anterior
-          // Offered day: put current user as new user, solicitante as anterior
           const targetEntry = _state.rawEntries.find(function (e) { return e.pageId === solicitud.guardiaPageId; });
           const offeredEntry = _state.rawEntries.find(function (e) { return e.pageId === solicitud.ofrecidoPageId; });
+
+          // Target day: put solicitante, save current as anterior
+          const targetUserBefore = (targetEntry && targetEntry.userPageId) ? targetEntry.userPageId : _state.currentUserPageId;
+          // Offered day: put accepter (me), save solicitante as anterior
+          const offeredUserBefore = (offeredEntry && offeredEntry.userPageId) ? offeredEntry.userPageId : solicitud.solicitantePageId;
 
           const updateTarget = new Promise(function (resolve) {
             chrome.runtime.sendMessage({
               type: "notion-update", pageId: solicitud.guardiaPageId,
               body: { properties: {
                 "Usuario": { relation: [{ id: solicitud.solicitantePageId }] },
-                "Usuario_Anterior": { relation: [{ id: targetEntry ? targetEntry.userPageId : "" }].filter(function (r) { return r.id; }) }
+                "Usuario_Anterior": { relation: targetUserBefore ? [{ id: targetUserBefore }] : [] }
               }}
-            }, function () { resolve(); });
+            }, function (resp) {
+              if (!resp || !resp.success) { if (window.SP_Log) window.SP_Log.error("Swap target failed:", resp); }
+              resolve();
+            });
           });
 
           const updateOffered = new Promise(function (resolve) {
@@ -336,9 +348,12 @@
               type: "notion-update", pageId: solicitud.ofrecidoPageId,
               body: { properties: {
                 "Usuario": { relation: [{ id: _state.currentUserPageId }] },
-                "Usuario_Anterior": { relation: [{ id: offeredEntry ? offeredEntry.userPageId : "" }].filter(function (r) { return r.id; }) }
+                "Usuario_Anterior": { relation: offeredUserBefore ? [{ id: offeredUserBefore }] : [] }
               }}
-            }, function () { resolve(); });
+            }, function (resp) {
+              if (!resp || !resp.success) { if (window.SP_Log) window.SP_Log.error("Swap offered failed:", resp); }
+              resolve();
+            });
           });
 
           Promise.all([updateTarget, updateOffered]).then(function () {
