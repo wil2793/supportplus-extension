@@ -96,7 +96,7 @@
         resp.data.results.forEach(function (p) {
           const guardiaRel = (p.properties.DBA_ControlDeGuardias && p.properties.DBA_ControlDeGuardias.relation) || [];
           const ofrecidoRel = (p.properties.DBA_ControlDeGuardias_Ofrecido && p.properties.DBA_ControlDeGuardias_Ofrecido.relation) || [];
-          const solicitanteRel = (p.properties["\ud83c\udfdb\ufe0f UsuarioSolicitante"] && p.properties["\ud83c\udfdb\ufe0f UsuarioSolicitante"].relation) || [];
+          const solicitanteRel = (p.properties["UsuarioSolicitante"] && p.properties["UsuarioSolicitante"].relation) || [];
           const motivo = (p.properties.MotivoCambio && p.properties.MotivoCambio.title && p.properties.MotivoCambio.title[0]) ? p.properties.MotivoCambio.title[0].plain_text : "";
           pending.push({
             id: p.id,
@@ -253,7 +253,7 @@
             "MotivoCambio": { title: [{ text: { content: motivo } }] },
             "DBA_ControlDeGuardias": { relation: [{ id: targetGuardiaPageId }] },
             "DBA_ControlDeGuardias_Ofrecido": { relation: [{ id: myDayPageId }] },
-            "\ud83c\udfdb\ufe0f UsuarioSolicitante": { relation: _state.currentUserPageId ? [{ id: _state.currentUserPageId }] : [] },
+            "UsuarioSolicitante": { relation: _state.currentUserPageId ? [{ id: _state.currentUserPageId }] : [] },
             "Aceptado": { checkbox: false }
           }
         }
@@ -335,7 +335,7 @@
               type: "notion-update", pageId: solicitud.guardiaPageId,
               body: { properties: {
                 "Usuario": { relation: [{ id: solicitud.solicitantePageId }] },
-                "Usuario_Anterior": { relation: targetUserBefore ? [{ id: targetUserBefore }] : [] }
+                "UsuarioAnterior": { relation: targetUserBefore ? [{ id: targetUserBefore }] : [] }
               }}
             }, function (resp) {
               if (!resp || !resp.success) { if (window.SP_Log) window.SP_Log.error("Swap target failed:", resp); }
@@ -348,7 +348,7 @@
               type: "notion-update", pageId: solicitud.ofrecidoPageId,
               body: { properties: {
                 "Usuario": { relation: [{ id: _state.currentUserPageId }] },
-                "Usuario_Anterior": { relation: offeredUserBefore ? [{ id: offeredUserBefore }] : [] }
+                "UsuarioAnterior": { relation: offeredUserBefore ? [{ id: offeredUserBefore }] : [] }
               }}
             }, function (resp) {
               if (!resp || !resp.success) { if (window.SP_Log) window.SP_Log.error("Swap offered failed:", resp); }
