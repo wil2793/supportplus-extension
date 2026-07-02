@@ -514,9 +514,10 @@
     function refreshOpenCollapsibles() {
       panel.querySelectorAll(".sp-mgr-body").forEach(function (body) {
         if (body.style.display !== "none" && body.dataset.loaded) {
-          body.querySelectorAll(".sp-mgr-ptickets").forEach(function (listEl) {
+          body.querySelectorAll(".sp-mgr-ptickets[data-profile-id]").forEach(function (listEl) {
             const profileId = listEl.dataset.profileId;
             const gId = listEl.dataset.groupId || "";
+            if (!profileId) return;
             if (profileId === "unassigned") {
               fetch(SP_SEARCH_API + "?resolutionGroupId=" + gId + "&ticketStatusName=En%20espera&page=0&size=100", {
                 headers: { accept: "application/json", authorization: "Bearer " + spToken }

@@ -3629,16 +3629,18 @@
 
         // Guardias tab logic — delegated to features/guardias.js
         function loadGuardias(offset) {
-          // Resolve current user name and pageId for highlighting and swap logic
-          var currentUserName = "";
-          var currentUserPageId = "";
-          Object.keys(allUserPages).forEach(function (pid) {
-            if (allUserPages[pid].correo === currentEmail) {
-              currentUserName = allUserPages[pid].nombre;
-              currentUserPageId = pid;
+          // Resolve current user name and pageId from notionUsers in storage
+          chrome.storage.local.get(["notionUsers", "userEmail"], function (stored) {
+            var email = (stored.userEmail || "").toLowerCase();
+            var users = stored.notionUsers || {};
+            var currentUserName = "";
+            var currentUserPageId = "";
+            if (email && users[email]) {
+              currentUserName = users[email].name || "";
+              currentUserPageId = users[email].notionPageId || "";
             }
+            window.SP_Guardias.load(offset, { currentUserName: currentUserName, currentUserPageId: currentUserPageId });
           });
-          window.SP_Guardias.load(offset, { currentUserName: currentUserName, currentUserPageId: currentUserPageId });
         }
 
         // Handle check clicks

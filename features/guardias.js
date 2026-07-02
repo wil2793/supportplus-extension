@@ -96,7 +96,7 @@
         resp.data.results.forEach(function (p) {
           const guardiaRel = (p.properties.DBA_ControlDeGuardias && p.properties.DBA_ControlDeGuardias.relation) || [];
           const ofrecidoRel = (p.properties.DBA_ControlDeGuardias_Ofrecido && p.properties.DBA_ControlDeGuardias_Ofrecido.relation) || [];
-          const solicitanteRel = (p.properties.UsuarioSolicitante && p.properties.UsuarioSolicitante.relation) || [];
+          const solicitanteRel = (p.properties["\ud83c\udfdb\ufe0f UsuarioSolicitante"] && p.properties["\ud83c\udfdb\ufe0f UsuarioSolicitante"].relation) || [];
           const motivo = (p.properties.MotivoCambio && p.properties.MotivoCambio.title && p.properties.MotivoCambio.title[0]) ? p.properties.MotivoCambio.title[0].plain_text : "";
           pending.push({
             id: p.id,
@@ -189,8 +189,13 @@
           return;
         }
 
-        // If it's someone else's day → show request modal
+        // If it's someone else's day → check if already has a pending request
         if (rawEntry.userPageId !== _state.currentUserPageId) {
+          const alreadyRequested = pendingList.find(function (p) { return p.guardiaPageId === guardiaPageId; });
+          if (alreadyRequested) {
+            window.showErrorToast("Ya existe una solicitud pendiente para ese día.");
+            return;
+          }
           showRequestModal(guardiaPageId, guardiaDate, guardiaName);
         }
       });
@@ -248,7 +253,7 @@
             "MotivoCambio": { title: [{ text: { content: motivo } }] },
             "DBA_ControlDeGuardias": { relation: [{ id: targetGuardiaPageId }] },
             "DBA_ControlDeGuardias_Ofrecido": { relation: [{ id: myDayPageId }] },
-            "UsuarioSolicitante": { relation: [{ id: _state.currentUserPageId }] },
+            "\ud83c\udfdb\ufe0f UsuarioSolicitante": { relation: _state.currentUserPageId ? [{ id: _state.currentUserPageId }] : [] },
             "Aceptado": { checkbox: false }
           }
         }
@@ -258,7 +263,8 @@
           window.showSuccessToast("Solicitud de cambio enviada");
           loadGuardias(_state.monthOffset, { currentUserName: _state.currentUserName, currentUserPageId: _state.currentUserPageId });
         } else {
-          window.showErrorToast("Error al enviar solicitud");
+          window.showErrorToast("Error al enviar: " + (resp && resp.error ? resp.error : "revisa consola"));
+          if (window.SP_Log) window.SP_Log.error("Guardia solicitud error:", resp);
         }
       });
     });
