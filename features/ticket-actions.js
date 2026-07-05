@@ -148,16 +148,21 @@
    * @param {string} uniqueCode
    * @param {number} ticketId
    * @param {string} userNotionPageId
+   * @param {string} [groupNotionPageId] - Notion page ID of the group
    * @returns {Promise<Object>}
    */
-  function saveTicketPendingClose(uniqueCode, ticketId, userNotionPageId) {
+  function saveTicketPendingClose(uniqueCode, ticketId, userNotionPageId, groupNotionPageId) {
+    const properties = {
+      "Ticket": { title: [{ text: { content: uniqueCode } }] },
+      "IdSupporPlus": { number: ticketId },
+      "MSP_Usuarios": { relation: [{ id: userNotionPageId }] }
+    };
+    if (groupNotionPageId) {
+      properties["Grupo"] = { relation: [{ id: groupNotionPageId }] };
+    }
     return SP_API_Lib.notionCreate({
       parent: { database_id: TICKETS_POR_CERRAR_DB },
-      properties: {
-        "Ticket": { title: [{ text: { content: uniqueCode } }] },
-        "IdSupporPlus": { number: ticketId },
-        "MSP_Usuarios": { relation: [{ id: userNotionPageId }] }
-      }
+      properties: properties
     });
   }
 

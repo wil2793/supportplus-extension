@@ -211,6 +211,25 @@
       return { accept: "application/json", authorization: "Bearer " + (token || getToken()) };
     }
 
+    // Helper: resolve group Notion page ID from numeric group ID
+    var _groupPageIdCache = {};
+    async function resolveGroupPageId(groupId) {
+      if (!groupId) return "";
+      if (_groupPageIdCache[groupId]) return _groupPageIdCache[groupId];
+      try {
+        var resp = await new Promise(function (resolve) {
+          chrome.runtime.sendMessage({ type: "notion-query", dbId: "36620e0684b9800e9a57df46019a03e0", body: {} }, function (r) { resolve(r); });
+        });
+        if (resp && resp.success && resp.data.results) {
+          resp.data.results.forEach(function (p) {
+            var idSP = p.properties.IdSupportPlus?.rich_text?.[0]?.plain_text || p.properties.IdSupportPlus?.title?.[0]?.plain_text || "";
+            if (idSP) _groupPageIdCache[idSP] = p.id;
+          });
+        }
+      } catch (e) { }
+      return _groupPageIdCache[String(groupId)] || "";
+    }
+
     // Helper: add hover text toggle to a button (disabled-aware)
     function hoverText(btn, normal, hover) {
       btn.addEventListener("mouseenter", function () { if (!btn.disabled) btn.textContent = hover; });
@@ -1868,7 +1887,8 @@
                   var pUsers = storedP.notionUsers || {};
                   var pUserPageId = pEmail && pUsers[pEmail] ? pUsers[pEmail].notionPageId : "";
                   if (pUserPageId) {
-                    await saveTicketPendingClose(info?.uniqueCode || ("T" + ticketId), ticketId, pUserPageId);
+                    var pGroupPageId = await resolveGroupPageId(getTeamConfig().resolutionGroupId);
+                    await saveTicketPendingClose(info?.uniqueCode || ("T" + ticketId), ticketId, pUserPageId, pGroupPageId);
                   }
                 } catch (e) { }
                 showSuccessToast("Ticket tomado. Cierre pendiente (fuera de horario).");
@@ -4239,6 +4259,20 @@
         var json = await res.json();
         var t = json.data || json;
 
+        // Check if ticket is pending close in Notion
+        var isPendingClose = false;
+        try {
+          var pendingResp = await new Promise(function (resolve) {
+            chrome.runtime.sendMessage({
+              type: "notion-query", dbId: "38420e0684b980d682ccfac983fc1780",
+              body: { filter: { property: "IdSupporPlus", number: { equals: parseInt(ticketId) } }, page_size: 1 }
+            }, function (r) { resolve(r); });
+          });
+          if (pendingResp && pendingResp.success && pendingResp.data.results && pendingResp.data.results.length > 0) {
+            isPendingClose = true;
+          }
+        } catch (e) { /* ignore */ }
+
         // Sync status and person to Monday (non-blocking, reuses ticket data)
         (async function () {
           try {
@@ -4360,7 +4394,7 @@
         overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0);z-index:99999;display:flex;align-items:center;justify-content:center;transition:background 0.3s ease,backdrop-filter 0.3s ease;backdrop-filter:blur(0px);";
         overlay.innerHTML = '<div style="background:#fff;padding:clamp(16px, 2vw, 28px);border-radius:12px;width:92vw;max-width:900px;max-height:85vh;display:flex;flex-direction:column;overflow-y:auto;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);transform:scale(0.95);opacity:0;transition:transform 0.2s ease,opacity 0.2s ease;box-shadow:0 8px 40px rgba(0,0,0,0.25);">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
-          '<h3 style="margin:0;font-size:1.1rem;">📋 ' + (t.uniqueCode || ticketId) + ' <span class="sp-qd-copy-folio" data-copy="' + (t.uniqueCode || ticketId) + '" style="cursor:pointer;font-size:0.85rem;opacity:0.6;" title="Copiar folio">⧉</span> <span style="font-weight:400;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-size:0.85rem;">(' + statusName + ')</span></h3>' +
+          '<h3 style="margin:0;font-size:1.1rem;">📋 ' + (t.uniqueCode || ticketId) + ' <span class="sp-qd-copy-folio" data-copy="' + (t.uniqueCode || ticketId) + '" style="cursor:pointer;font-size:0.85rem;opacity:0.6;" title="Copiar folio">⧉</span> <span style="font-weight:400;color:' + (STATUS_TEXT_COLORS[statusName] || '#333') + ';font-size:0.85rem;">(' + statusName + ')</span>' + (isPendingClose ? ' <span style="padding:2px 8px;background:#FF8F00;color:#fff;border-radius:4px;font-size:0.7rem;font-weight:600;vertical-align:middle;">🕐 Pendiente por cerrar</span>' : '') + '</h3>' +
           '<div style="display:flex;gap:6px;align-items:center;">' +
           '<span id="sp-qd-actions" style="display:flex;gap:4px;"></span>' +
           '<a href="/es/dashboard/tickets/' + ticketId + '" target="_blank" style="padding:5px 10px;border:1px solid #1976D2;border-radius:6px;font-size:0.9rem;text-decoration:none;color:#1976D2;">Abrir ↗</a>' +
@@ -5271,7 +5305,8 @@
                       var pendingUsers = storedPending.notionUsers || {};
                       var pendingUserPageId = pendingEmail && pendingUsers[pendingEmail] ? pendingUsers[pendingEmail].notionPageId : "";
                       if (pendingUserPageId) {
-                        await saveTicketPendingClose(t.uniqueCode || ("T" + ticketId), ticketId, pendingUserPageId);
+                        var pendGroupPageId = await resolveGroupPageId(getTeamConfig().resolutionGroupId);
+                        await saveTicketPendingClose(t.uniqueCode || ("T" + ticketId), ticketId, pendingUserPageId, pendGroupPageId);
                       }
                     } catch (e) { }
                     showSuccessToast("Ticket tomado. Cierre pendiente (fuera de horario).");
@@ -5400,13 +5435,17 @@
               closeActionBtn.parentElement.appendChild(warningDiv);
               // Save to Notion
               try {
-                var userPageId = "";
-                var storedData = await new Promise(function (r) { chrome.storage.local.get(["notionUsers", "userEmail"], function (d) { r(d); }); });
-                var email = (storedData.userEmail || "").toLowerCase();
+                var analystPageId = "";
+                var storedData = await new Promise(function (r) { chrome.storage.local.get(["notionUsers"], function (d) { r(d); }); });
                 var users = storedData.notionUsers || {};
-                if (email && users[email]) userPageId = users[email].notionPageId || "";
-                if (!userPageId) throw new Error("No se encontró el usuario en Notion");
-                await saveTicketPendingClose(t.uniqueCode || ("T" + ticketId), ticketId, userPageId);
+                // Use the ticket's analyst (holder) email to find their Notion page
+                var analystEmail = (t.ticketHolder?.ticketHolderLog?.email || "").toLowerCase();
+                if (analystEmail && users[analystEmail]) {
+                  analystPageId = users[analystEmail].notionPageId || "";
+                }
+                if (!analystPageId) throw new Error("No se encontró al analista en Notion");
+                var closeGroupPageId = await resolveGroupPageId(getTeamConfig().resolutionGroupId);
+                await saveTicketPendingClose(t.uniqueCode || ("T" + ticketId), ticketId, analystPageId, closeGroupPageId);
                 document.getElementById("sp-qd-saving-pending").innerHTML = '✅ Registrado como pendiente. Se cerrará en horario laboral.';
               } catch (err) {
                 document.getElementById("sp-qd-saving-pending").innerHTML = '❌ Error: ' + err.message;
@@ -6274,7 +6313,118 @@
 
       injectBulkCloseButton();
       injectNewTicketButton();
+      checkPendingCloseAlert();
       loadTeamPanel();
+    }
+
+    // --- Pending close alert (above grid) ---
+    var _pendingAlertShown = false;
+    async function checkPendingCloseAlert() {
+      if (_pendingAlertShown) return;
+      var grid = document.querySelector(".MuiDataGrid-root");
+      if (!grid) return;
+      try {
+        var groupPageId = await resolveGroupPageId(getTeamConfig().resolutionGroupId);
+        var pendingResp = await new Promise(function (resolve) {
+          chrome.runtime.sendMessage({
+            type: "notion-query", dbId: "38420e0684b980d682ccfac983fc1780",
+            body: groupPageId ? { filter: { property: "Grupo", relation: { contains: groupPageId } } } : {}
+          }, function (r) { resolve(r); });
+        });
+        var pendingTickets = (pendingResp && pendingResp.success && pendingResp.data.results) ? pendingResp.data.results : [];
+        if (!pendingTickets.length) return;
+
+        _pendingAlertShown = true;
+        var existingAlert = document.getElementById("sp-pending-close-alert");
+        if (existingAlert) existingAlert.remove();
+
+        var alertDiv = document.createElement("div");
+        alertDiv.id = "sp-pending-close-alert";
+        alertDiv.style.cssText = "margin-bottom:8px;padding:10px 16px;background:#FFF3E0;border:1px solid #FF8F00;border-radius:8px;display:flex;align-items:center;gap:10px;cursor:pointer;font-family:system-ui;";
+        alertDiv.innerHTML = '<span style="font-size:20px;">🕐</span><span style="flex:1;font-size:13px;color:#E65100;font-weight:600;">Hay ' + pendingTickets.length + ' ticket(s) pendientes por cerrar</span><span style="padding:4px 12px;background:#FF8F00;color:#fff;border-radius:6px;font-size:12px;font-weight:600;">Cerrar ahora</span>';
+        var panelEl = document.getElementById(TEAM_PANEL_ID) || document.getElementById("sp-manager-panel");
+        var insertRef = panelEl || grid;
+        insertRef.parentElement.insertBefore(alertDiv, insertRef);
+
+        alertDiv.addEventListener("click", function () {
+          if (!isWithinWorkHours()) {
+            createModal({
+              id: "sp-pending-close-modal",
+              title: "⏰ Fuera de horario laboral",
+              content: '<p style="font-size:14px;color:#555;margin:0 0 12px;">No se pueden cerrar tickets fuera del horario laboral.</p>' +
+                '<p style="font-size:13px;color:#888;margin:0 0 16px;">Horario: ' + _workSchedule.horaEntrada + ':00 - ' + _workSchedule.horaSalida + ':00, ' + _workSchedule.diaInicio + ' a ' + _workSchedule.diaFinal + '</p>' +
+                '<button id="sp-pending-close-ok" style="width:100%;padding:10px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:14px;">Entendido</button>',
+              options: { maxWidth: "380px", textAlign: "center" }
+            });
+            document.getElementById("sp-pending-close-ok").addEventListener("click", function () {
+              document.getElementById("sp-pending-close-modal").remove();
+            });
+            return;
+          }
+
+          var ticketList = pendingTickets.map(function (p) {
+            var ticket = p.properties.Ticket?.title?.[0]?.plain_text || "";
+            var spId = p.properties.IdSupporPlus?.number || 0;
+            return { ticket: ticket, ticketId: spId, pageId: p.id };
+          }).filter(function (t) { return t.ticketId; });
+
+          var listHTML = ticketList.map(function (t) {
+            return '<div style="padding:4px 8px;font-size:12px;border-bottom:1px solid #eee;">' + t.ticket + '</div>';
+          }).join("");
+
+          var m = createModal({
+            id: "sp-pending-close-modal",
+            title: "🔒 Cerrar " + ticketList.length + " tickets pendientes",
+            content: '<p style="font-size:13px;color:#555;margin:0 0 12px;">Se cerrarán los siguientes tickets:</p>' +
+              '<div style="max-height:200px;overflow-y:auto;border:1px solid #eee;border-radius:6px;padding:8px;margin-bottom:16px;">' + listHTML + '</div>' +
+              '<div id="sp-pending-close-progress" style="display:none;margin-bottom:12px;padding:8px;background:#f5f5f5;border-radius:6px;font-size:12px;text-align:center;"></div>' +
+              '<div style="display:flex;gap:8px;">' +
+              '<button id="sp-pending-close-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#2E7D32;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">✅ Cerrar todos</button>' +
+              '<button id="sp-pending-close-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
+              '</div>',
+            options: { maxWidth: "450px" }
+          });
+
+          document.getElementById("sp-pending-close-cancel").addEventListener("click", m.close);
+
+          document.getElementById("sp-pending-close-confirm").addEventListener("click", async function () {
+            var confirmBtn = document.getElementById("sp-pending-close-confirm");
+            var progress = document.getElementById("sp-pending-close-progress");
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = "⏳ Cerrando...";
+            progress.style.display = "block";
+
+            var closed = 0;
+            var errors = 0;
+            for (var i = 0; i < ticketList.length; i++) {
+              progress.textContent = "Cerrando " + (i + 1) + " de " + ticketList.length + "...";
+              try {
+                var closeRes = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketList[i].ticketId, {
+                  method: "PATCH",
+                  headers: spHeaders(),
+                  body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO, ticketCommentRequest: null }),
+                });
+                if (!closeRes.ok) throw new Error("HTTP " + closeRes.status);
+                chrome.runtime.sendMessage({ type: "notion-delete", pageId: ticketList[i].pageId });
+                updateMondayStatus(ticketList[i].ticketId, ticketList[i].ticket, "Cerrado");
+                closed++;
+              } catch (e) {
+                errors++;
+              }
+            }
+
+            m.close();
+            alertDiv.remove();
+            _pendingAlertShown = false;
+            if (errors === 0) {
+              showSuccessToast("✅ " + closed + " tickets cerrados");
+            } else {
+              showErrorToast(closed + " cerrados, " + errors + " errores");
+            }
+            refreshTeamPanel();
+          });
+        });
+      } catch (e) { }
     }
 
     // --- Handle single click ---
