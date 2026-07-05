@@ -4657,7 +4657,7 @@
           commentSendBtn.addEventListener("click", async function () {
             var input = document.getElementById("sp-qd-comment-input");
             var text = input.value.trim();
-            if (!text && !pendingFiles.length) return;
+            if (!text && !pendingFiles.length && !_pastedFile) return;
             var sendBtn = document.getElementById("sp-qd-comment-send");
             sendBtn.disabled = true;
             sendBtn.textContent = "...";
@@ -4673,7 +4673,7 @@
               var commentJson = await commentRes.json();
               var commentId = commentJson.data?.id || commentJson.id;
 
-              // Step 2: Upload files if present
+              // Step 2: Upload attached files if present
               var uploadedFileNames = [];
               if (pendingFiles.length && commentId) {
                 var formData = new FormData();
@@ -4687,7 +4687,6 @@
                 var fileJson = await fileRes.json();
                 var uploadedFiles = fileJson.data || fileJson;
                 if (Array.isArray(uploadedFiles) && uploadedFiles.length) {
-                  // Step 3: Attach files to comment
                   var attachPayload = uploadedFiles.map(function (f) { uploadedFileNames.push(f.name); return { fileId: f.id }; });
                   await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", {
                     method: "POST",
@@ -4695,6 +4694,36 @@
                     body: JSON.stringify({ attachments: attachPayload, commentId: commentId, isInternal: false }),
                   });
                 }
+              }
+
+              // Step 2b: Upload pasted image if present
+              if (_pastedFile && commentId) {
+                var namedFile = new File([_pastedFile], "clipboard_" + Date.now() + ".png", { type: _pastedFile.type });
+                var imgFormData = new FormData();
+                imgFormData.append("files", namedFile);
+                var imgRes = await fetch("https://macropayapi.supportplus.mx/files", {
+                  method: "POST",
+                  headers: { authorization: "Bearer " + spToken },
+                  body: imgFormData,
+                });
+                if (imgRes.ok) {
+                  var imgJson = await imgRes.json();
+                  var imgFiles = imgJson.data || imgJson;
+                  if (Array.isArray(imgFiles) && imgFiles.length) {
+                    var imgAttach = imgFiles.map(function (f) { uploadedFileNames.push(f.name || "imagen.png"); return { fileId: f.id }; });
+                    await fetch("https://macropayapi.supportplus.mx/tickets/web/comment/attachments", {
+                      method: "POST",
+                      headers: spHeaders(),
+                      body: JSON.stringify({ attachments: imgAttach, commentId: commentId, isInternal: false }),
+                    });
+                  }
+                }
+                // Clean up paste preview
+                var pastePreview = document.getElementById("sp-qd-paste-preview");
+                if (pastePreview) pastePreview.remove();
+                if (_pastedImgUrl) URL.revokeObjectURL(_pastedImgUrl);
+                _pastedFile = null;
+                _pastedImgUrl = null;
               }
 
               // Update UI
@@ -4714,6 +4743,8 @@
               input.value = "";
               pendingFiles = [];
               renderPendingFiles();
+              // Refetch comments to get proper attachment URLs
+              await showQuickDetailModal(ticketId);
             } catch (err) {
               showErrorToast("Error: " + err.message);
             }
@@ -4728,7 +4759,9 @@
           commentInputEl.addEventListener("keydown", function (e) {
             if (e.key === "Enter") document.getElementById("sp-qd-comment-send").click();
           });
-          // Paste image from clipboard - show preview with send button
+          // Paste image from clipboard - show preview (image will be sent with "Enviar" button)
+          var _pastedFile = null;
+          var _pastedImgUrl = null;
           commentInputEl.addEventListener("paste", function (e) {
             var items = (e.clipboardData || e.originalEvent.clipboardData).items;
             for (var i = 0; i < items.length; i++) {
@@ -4736,75 +4769,33 @@
                 var file = items[i].getAsFile();
                 if (file) {
                   e.preventDefault();
+                  _pastedFile = file;
                   // Remove existing preview if any
                   var existingPreview = document.getElementById("sp-qd-paste-preview");
                   if (existingPreview) existingPreview.remove();
-                  // Create preview
+                  if (_pastedImgUrl) URL.revokeObjectURL(_pastedImgUrl);
+                  _pastedImgUrl = URL.createObjectURL(file);
+                  // Create preview (no "Enviar imagen" button — will send with regular "Enviar")
                   var previewDiv = document.createElement("div");
                   previewDiv.id = "sp-qd-paste-preview";
                   previewDiv.style.cssText = "margin:8px 0;padding:8px;border:1px solid #1976D2;border-radius:8px;background:#e3f2fd;display:flex;align-items:center;gap:8px;";
-                  var imgUrl = URL.createObjectURL(file);
-                  previewDiv.innerHTML = '<img src="' + imgUrl + '" style="max-width:80px;max-height:60px;border-radius:4px;border:1px solid #ddd;">' +
+                  previewDiv.innerHTML = '<img src="' + _pastedImgUrl + '" style="max-width:80px;max-height:60px;border-radius:4px;border:1px solid #ddd;">' +
                     '<span style="flex:1;font-size:0.85rem;color:#333;">📋 Imagen del portapapeles</span>' +
-                    '<button id="sp-qd-paste-send" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:0.8rem;font-weight:600;">📎 Enviar imagen</button>' +
                     '<button id="sp-qd-paste-cancel" style="padding:6px 8px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:0.8rem;">✕</button>';
                   commentInputEl.parentElement.insertAdjacentElement("afterend", previewDiv);
-                  // Send button
-                  document.getElementById("sp-qd-paste-send").addEventListener("click", async function () {
-                    var sendBtn = document.getElementById("sp-qd-paste-send");
-                    sendBtn.textContent = "⏳ Subiendo...";
-                    sendBtn.disabled = true;
-                    try {
-                      var timestamp = new Date().getTime();
-                      var namedFile = new File([file], "clipboard_" + timestamp + ".png", { type: file.type });
-                      // Post empty comment to get commentId, then attach file
-                      var commentText = commentInputEl.value.trim() || "📎 Imagen adjunta";
-                      var commentRes = await fetch(SP_API + "/" + ticketId + "/comment", {
-                        method: "POST",
-                        headers: spHeaders(),
-                        body: JSON.stringify({ content: commentText, internal: false })
-                      });
-                      var commentJson = await commentRes.json();
-                      var commentId = commentJson.data?.id || commentJson.id;
-                      if (commentId) {
-                        var formData = new FormData();
-                        formData.append("file", namedFile);
-                        await fetch(SP_API.replace("/tickets/web", "") + "/files", {
-                          method: "POST",
-                          headers: { authorization: "Bearer " + spToken },
-                          body: formData
-                        }).then(function (r) { return r.json(); }).then(async function (fileJson) {
-                          var fileId = fileJson.data?.id || fileJson.id;
-                          if (fileId) {
-                            await fetch(SP_API + "/" + ticketId + "/comment/" + commentId + "/attachments", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json", authorization: "Bearer " + spToken },
-                              body: JSON.stringify({ fileIds: [fileId] })
-                            });
-                          }
-                        });
-                      }
-                      commentInputEl.value = "";
-                      previewDiv.remove();
-                      URL.revokeObjectURL(imgUrl);
-                      showSuccessToast("✅ Imagen enviada");
-                      // Refresh comments
-                      showQuickDetailModal(ticketId);
-                    } catch (err) {
-                      sendBtn.textContent = "❌ Error";
-                      setTimeout(function () { sendBtn.textContent = "📎 Enviar imagen"; sendBtn.disabled = false; }, 2000);
-                    }
-                  });
                   // Cancel button
                   document.getElementById("sp-qd-paste-cancel").addEventListener("click", function () {
                     previewDiv.remove();
-                    URL.revokeObjectURL(imgUrl);
+                    URL.revokeObjectURL(_pastedImgUrl);
+                    _pastedFile = null;
+                    _pastedImgUrl = null;
                   });
                 }
                 break;
               }
             }
           });
+
           // Load suggested comments into all containers
           var suggestedContainers = ["sp-qd-suggested", "sp-qd-take-suggested", "sp-qd-close-suggested"];
           chrome.storage.local.get("suggestedComments", function (r) {
