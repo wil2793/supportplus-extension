@@ -167,16 +167,16 @@
   }
 
   /**
-   * Remove a ticket from pending close in Notion
+   * Mark a ticket as closed in MSP_TicketsPorCerrar (historical)
    * @param {number} ticketId
    */
   function removeTicketPendingClose(ticketId) {
     SP_API_Lib.notionQuery(TICKETS_POR_CERRAR_DB, {
-      filter: { property: "IdSupporPlus", number: { equals: ticketId } }
+      filter: { and: [{ property: "IdSupporPlus", number: { equals: ticketId } }, { property: "Cerrado", checkbox: { equals: false } }] }
     }).then(function (data) {
       if (data && data.results) {
         data.results.forEach(function (page) {
-          SP_API_Lib.notionDelete(page.id);
+          SP_API_Lib.notionUpdate(page.id, { properties: { "Cerrado": { checkbox: true } } });
         });
       }
     }).catch(function () { });
@@ -189,7 +189,9 @@
    */
   async function fetchPendingCloseTickets(userGroups) {
     try {
-      const data = await SP_API_Lib.notionQuery(TICKETS_POR_CERRAR_DB, {});
+      const data = await SP_API_Lib.notionQuery(TICKETS_POR_CERRAR_DB, {
+        filter: { property: "Cerrado", checkbox: { equals: false } }
+      });
       if (!data || !data.results) return [];
 
       const stored = await SP_Storage.get("notionUsers");

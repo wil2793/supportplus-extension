@@ -4265,7 +4265,7 @@
           var pendingResp = await new Promise(function (resolve) {
             chrome.runtime.sendMessage({
               type: "notion-query", dbId: "38420e0684b980d682ccfac983fc1780",
-              body: { filter: { property: "IdSupporPlus", number: { equals: parseInt(ticketId) } }, page_size: 1 }
+              body: { filter: { and: [{ property: "IdSupporPlus", number: { equals: parseInt(ticketId) } }, { property: "Cerrado", checkbox: { equals: false } }] }, page_size: 1 }
             }, function (r) { resolve(r); });
           });
           if (pendingResp && pendingResp.success && pendingResp.data.results && pendingResp.data.results.length > 0) {
@@ -6328,7 +6328,7 @@
         var pendingResp = await new Promise(function (resolve) {
           chrome.runtime.sendMessage({
             type: "notion-query", dbId: "38420e0684b980d682ccfac983fc1780",
-            body: groupPageId ? { filter: { property: "Grupo", relation: { contains: groupPageId } } } : {}
+            body: groupPageId ? { filter: { and: [{ property: "Grupo", relation: { contains: groupPageId } }, { property: "Cerrado", checkbox: { equals: false } }] } } : { filter: { property: "Cerrado", checkbox: { equals: false } } }
           }, function (r) { resolve(r); });
         });
         var pendingTickets = (pendingResp && pendingResp.success && pendingResp.data.results) ? pendingResp.data.results : [];
@@ -6396,18 +6396,32 @@
 
             var closed = 0;
             var errors = 0;
+            var skipped = 0;
             for (var i = 0; i < ticketList.length; i++) {
-              progress.textContent = "Cerrando " + (i + 1) + " de " + ticketList.length + "...";
+              progress.textContent = "Procesando " + (i + 1) + " de " + ticketList.length + "...";
               try {
-                var closeRes = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketList[i].ticketId, {
-                  method: "PATCH",
-                  headers: spHeaders(),
-                  body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO, ticketCommentRequest: null }),
-                });
-                if (!closeRes.ok) throw new Error("HTTP " + closeRes.status);
-                chrome.runtime.sendMessage({ type: "notion-delete", pageId: ticketList[i].pageId });
+                // Check if ticket is already closed in the portal
+                var ticketRes = await fetch(SP_API + "/" + ticketList[i].ticketId, { headers: spGetHeaders() });
+                var ticketJson = await ticketRes.json();
+                var ticketData = ticketJson.data || ticketJson;
+                var alreadyClosed = ticketData.ticketStatus?.name === "Cerrado" || ticketData.ticketStatus?.type?.name === "Cerrado";
+
+                if (alreadyClosed) {
+                  // Already closed — just mark in Notion
+                  chrome.runtime.sendMessage({ type: "notion-update", pageId: ticketList[i].pageId, body: { properties: { "Cerrado": { checkbox: true } } } });
+                  skipped++;
+                } else {
+                  // Close via API
+                  var closeRes = await fetch(SP_API + "/update-ticket-status-with-optional-comment/" + ticketList[i].ticketId, {
+                    method: "PATCH",
+                    headers: spHeaders(),
+                    body: JSON.stringify({ nextTicketStatusId: window.SP_CONFIG.SP_STATUSES.CERRADO, ticketCommentRequest: null }),
+                  });
+                  if (!closeRes.ok) throw new Error("HTTP " + closeRes.status);
+                  chrome.runtime.sendMessage({ type: "notion-update", pageId: ticketList[i].pageId, body: { properties: { "Cerrado": { checkbox: true } } } });
+                  closed++;
+                }
                 updateMondayStatus(ticketList[i].ticketId, ticketList[i].ticket, "Cerrado");
-                closed++;
               } catch (e) {
                 errors++;
               }
@@ -6417,7 +6431,7 @@
             alertDiv.remove();
             _pendingAlertShown = false;
             if (errors === 0) {
-              showSuccessToast("✅ " + closed + " tickets cerrados");
+              showSuccessToast("✅ " + closed + " cerrados" + (skipped ? ", " + skipped + " ya estaban cerrados" : ""));
             } else {
               showErrorToast(closed + " cerrados, " + errors + " errores");
             }
