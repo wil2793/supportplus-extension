@@ -117,9 +117,9 @@
       const lat = latest.split(".").map(Number);
 
       if (lat[0] > cur[0]) {
-        // Major version — block
+        // Major version — show alert in header (non-blocking)
         SP_Session.state.versionBlocked = true;
-        showVersionBlocker(latest, zipUrl);
+        showVersionAlert(latest, zipUrl);
       } else {
         // Minor/patch — show update button
         const btn = document.getElementById("sp-update-btn");
@@ -128,28 +128,23 @@
     });
   }
 
-  function showVersionBlocker(latest, zipUrl) {
-    const blocker = document.createElement("div");
-    blocker.id = "sp-version-blocker";
-    blocker.className = "sp-version-blocker";
-
-    const downloadBtn = zipUrl
-      ? '<button id="sp-blocker-download" style="margin-top:10px;padding:8px 16px;background:#1976D2;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">📥 Descargar v' + latest + '</button>'
-      : '';
-
-    blocker.innerHTML = '<div style="background:#fff;padding:30px;border-radius:12px;text-align:center;max-width:400px;font-family:system-ui;">' +
-      '<h2 style="margin:0 0 12px;color:#D32F2F;">⚠️ Actualización requerida</h2>' +
-      '<p style="margin:0 0 8px;font-size:14px;">Tu versión (<b>' + _currentVersion + '</b>) está muy desactualizada.<br>La versión actual es <b>' + latest + '</b>.</p>' +
-      '<p style="margin:0;font-size:13px;color:#555;">Actualiza la extensión para continuar usando SupportPlus Tools.</p>' +
-      downloadBtn + '</div>';
-
-    document.body.appendChild(blocker);
-
-    if (zipUrl) {
-      document.getElementById("sp-blocker-download").addEventListener("click", function (e) {
-        downloadZip(zipUrl, latest, e);
+  function showVersionAlert(latest, zipUrl) {
+    if (document.getElementById("sp-version-alert")) return;
+    SP_DOM.waitForElement('[class*="warapperNameUserAndLogout"]', { maxAttempts: 30, interval: 200 })
+      .then(function (wrapper) {
+        if (!wrapper) return;
+        if (document.getElementById("sp-version-alert")) return;
+        const alert = document.createElement("div");
+        alert.id = "sp-version-alert";
+        alert.style.cssText = "padding:6px 14px;font-size:11px;border-radius:6px;background:rgba(217,64,64,0.15);color:#D94040;border:1px solid rgba(217,64,64,0.3);margin-right:8px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;";
+        alert.innerHTML = '⚠️ Actualiza a v' + latest + ' <span style="padding:2px 8px;background:#D94040;color:#fff;border-radius:4px;font-size:10px;">Descargar</span>';
+        alert.addEventListener("click", function () {
+          if (zipUrl) {
+            downloadZip(zipUrl, latest, null);
+          }
+        });
+        wrapper.parentElement.insertBefore(alert, wrapper);
       });
-    }
   }
 
   function downloadZip(url, version, e) {
