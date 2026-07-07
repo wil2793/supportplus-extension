@@ -39,7 +39,7 @@
 
     function render() {
       container.innerHTML = "";
-      selectedIds.forEach(function (sid) {
+      _filterState.ids.forEach(function (sid) {
         const item = items.find(function (i) { return String(i.id) === sid; });
         if (!item) return;
         const tag = document.createElement("span");
@@ -48,7 +48,7 @@
         tag.querySelector("[data-remove]").addEventListener("click", function () {
           _filterState.ids = _filterState.ids.filter(function (s) { return s !== sid; });
           render();
-          onChangeCallback(selectedIds);
+          onChangeCallback(_filterState.ids);
         });
         container.appendChild(tag);
       });
@@ -77,7 +77,7 @@
             _filterState.ids.push(String(item.id));
             input.value = "";
             render();
-            onChangeCallback(selectedIds);
+            onChangeCallback(_filterState.ids);
           });
           dropdown.appendChild(opt);
         });
