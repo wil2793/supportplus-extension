@@ -14,3 +14,4 @@ Thumbs.db
 # Debug/test scripts
 check-*.js
 test-*.js
+database/

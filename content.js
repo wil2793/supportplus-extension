@@ -203,6 +203,20 @@
 
     const SP_API = window.SP_CONFIG.SP_API;
 
+    // Helper: convert UTC datetime string to UTC-6 (format: YYYY-MM-DD HH:MM)
+    function utcToLocal(dateStr) {
+      if (!dateStr) return "";
+      var d = new Date(dateStr.endsWith("Z") ? dateStr : dateStr + "Z");
+      if (isNaN(d.getTime())) return dateStr.replace("T", " ").substring(0, 16);
+      d.setHours(d.getHours() - 6);
+      var yyyy = d.getUTCFullYear();
+      var mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+      var dd = String(d.getUTCDate()).padStart(2, "0");
+      var hh = String(d.getUTCHours()).padStart(2, "0");
+      var min = String(d.getUTCMinutes()).padStart(2, "0");
+      return yyyy + "-" + mm + "-" + dd + " " + hh + ":" + min;
+    }
+
     // Helper: build auth headers for SP API calls
     function spHeaders(token) {
       return { "Content-Type": "application/json", accept: "application/json", authorization: "Bearer " + (token || getToken()) };
@@ -4485,7 +4499,7 @@
           '<b style="font-size:12px;">💬 Comentarios (' + comments.length + ')</b>' +
           '<div id="sp-qd-comments-list" style="max-height:250px;overflow-y:auto;margin-top:6px;display:flex;flex-direction:column-reverse;">' +
           (comments.length ? comments.map(function (c) {
-            var cDate = c.createdAt ? c.createdAt.replace("T", " ").substring(0, 16) : "";
+            var cDate = utcToLocal(c.createdAt);
             var cContent = (c.content || "").replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
             var cAttachments = c.attachments || [];
             var cAttachHTML = "";
@@ -4565,7 +4579,7 @@
               if (newComments.length === currentCount) return; // No changes
               // Re-render comments
               var html = newComments.map(function (c) {
-                var cDate = c.createdAt ? c.createdAt.replace("T", " ").substring(0, 16) : "";
+                var cDate = utcToLocal(c.createdAt);
                 var cContent = (c.content || "").replace(/<script[^>]*>.*?<\/script>/gi, "");
                 var myName = getLoggedUserName();
                 var myEmail = getLoggedUserEmail();
