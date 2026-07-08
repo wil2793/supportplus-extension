@@ -5384,14 +5384,13 @@
           assignSelect.addEventListener("change", async function () {
             var selectedId = assignSelect.value;
             if (!selectedId) return;
-            var comment = document.getElementById("sp-qd-take-comment")?.value?.trim() || "se revisa";
             assignSelect.disabled = true;
             showLoadingToast("Asignando ticket...");
             try {
               var res = await fetch(SP_API + "/reassign/" + ticketId, {
                 method: "PUT",
                 headers: spHeaders(),
-                body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id, serviceId: null, responsibleProfileId: parseInt(selectedId), resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id }, ticketCommentRequest: { internal: false, content: comment } }),
+                body: JSON.stringify({ resolutionGroupId: t.resolutionGroup?.id, serviceId: null, responsibleProfileId: parseInt(selectedId), resolutionGroup: { label: t.resolutionGroup?.name || "", value: t.resolutionGroup?.id } }),
               });
               if (!res.ok) throw new Error("HTTP " + res.status);
               var json2 = await res.json();
