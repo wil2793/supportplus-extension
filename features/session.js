@@ -132,6 +132,13 @@
       const ctx = { userData: notionUsers[email] };
 
       if (!ctx.userData) {
+        // Try cached session first (survives Notion rate limits)
+        const cachedSession = await SP_Storage.get("sp_last_session");
+        if (cachedSession && cachedSession.email === email && cachedSession.active) {
+          // Have a valid cache — use it immediately without hitting Notion
+          ctx.userData = cachedSession;
+        } else {
+
         // Check directly in Notion before creating
         try {
           const checkData = await notionQuery(SP_CONFIG.NOTION_USERS_DB, {
@@ -143,7 +150,21 @@
             await triggerNotionSync();
             const freshStored = await SP_Storage.get("notionUsers");
             ctx.userData = (freshStored || {})[email];
-            if (!ctx.userData) return null;
+            if (!ctx.userData) {
+              // Sync failed but user exists — use cache if available
+              if (cachedSession && cachedSession.email === email && cachedSession.active) {
+                ctx.userData = cachedSession;
+              } else {
+                return null;
+              }
+            }
+          } else if (!checkData || checkData.object === "error") {
+            // Notion API failed (rate limit) — use cached session
+            if (cachedSession && cachedSession.email === email && cachedSession.active) {
+              ctx.userData = cachedSession;
+            } else {
+              return null;
+            }
           } else {
             // Create user as inactive
             await notionCreate({
@@ -157,8 +178,14 @@
             return null;
           }
         } catch (e) {
-          return null;
+          // Network/timeout error — use cached session
+          if (cachedSession && cachedSession.email === email && cachedSession.active) {
+            ctx.userData = cachedSession;
+          } else {
+            return null;
+          }
         }
+        } // end else (no cache)
       }
 
       if (!ctx.userData.active) return "inactive";
@@ -200,6 +227,29 @@
           canCommentClosed: state.canCommentClosed,
           canRejectTickets: state.canRejectTickets
         }
+      });
+
+      // Cache successful session for fallback during Notion outages
+      await SP_Storage.set("sp_last_session", {
+        email: email,
+        name: ctx.userData.name,
+        roleName: ctx.userData.roleName,
+        groups: ctx.userData.groups,
+        profileId: ctx.userData.profileId,
+        active: ctx.userData.active,
+        canMigrate: ctx.userData.canMigrate,
+        btnDashboard: ctx.userData.btnDashboard,
+        btnComments: ctx.userData.btnComments,
+        btnReports: ctx.userData.btnReports,
+        canDragDrop: ctx.userData.canDragDrop,
+        canReassignApp: ctx.userData.canReassignApp,
+        canAddIAM: ctx.userData.canAddIAM,
+        canShowLabels: ctx.userData.canShowLabels,
+        canReopenTickets: ctx.userData.canReopenTickets,
+        canCommentClosed: ctx.userData.canCommentClosed,
+        canRejectTickets: ctx.userData.canRejectTickets,
+        notionPageId: ctx.userData.notionPageId,
+        cachedAt: Date.now()
       });
 
       const role = (ctx.userData.roleName && ctx.userData.roleName.toLowerCase().includes("admin")) ? "admin" : "usuario";
