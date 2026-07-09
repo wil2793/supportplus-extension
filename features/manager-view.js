@@ -387,7 +387,7 @@
           renderGroupDetail(groupId, container, ctx.profiles, spToken, canDrag);
         });
       } else {
-        renderGroupDetail(groupId, container, profiles, spToken, canDrag);
+        renderGroupDetail(groupId, container, ctx.profiles, spToken, canDrag);
       }
     }).catch(function () {
       container.innerHTML = '<div style="color:#888;font-size:11px;">Error al cargar</div>';
