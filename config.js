@@ -5,7 +5,12 @@
 (function() {
 
   window.SP_CONFIG = {
-    // Notion Database IDs
+    // API Base URL
+    API_URL: "http://localhost:3500/api",
+
+    // [DEPRECATED] Legacy Notion Database IDs — retained only for backward compatibility
+    // with code that still references them. All Notion endpoints return empty stubs.
+    // These will be fully removed once the Notion references in content.js are cleaned up.
     NOTION_USERS_DB: "36620e0684b98051a190e51d38d97288",
     NOTION_ROLES_DB: "36720e0684b9807aba20c1c3d0536c09",
     NOTION_GROUPS_DB: "36620e0684b9800e9a57df46019a03e0",
@@ -20,11 +25,21 @@
     MONDAY_TICKET_COL_ID: "text_mm2c9nhc",
     MONDAY_PERSON_COL_ID: "multiple_person_mm25nvfq",
     MONDAY_SUBITEMS_EXCLUDE: "Subelementos",
+    MONDAY_BASE_URL: "https://macropay7.monday.com",
+    MONDAY_BOARD_ID: "18402162782",
 
     // SupportPlus API
     SP_API: "https://macropayapi.supportplus.mx/tickets/web",
     SP_SEARCH_API: "https://macropayapi.supportplus.mx/tickets/search-all-tickets",
     SP_SESSION_API: "https://macropay.supportplus.mx/api/auth/session",
+    SP_PARTICIPANTS_API: "https://macropayapi.supportplus.mx/ticket-participants/assign-visitor-participant",
+
+    // Reasignación a Aplicaciones
+    APPS_GROUP: { id: 53, label: "Soporte Aplicativos y Sistemas (general)" },
+
+    // IAM participants (auto-add)
+    IAM_PROFILES: [296, 126, 128],
+    IAM_NAMES: ["Carlos Alberto Lopez Mata", "Crhistian Uziel Sanchez Alvarez", "Leyver Adair Vasquez Velasco"],
 
     // Monday status mapping: SP status name -> Monday index
     STATUS_MAP: {

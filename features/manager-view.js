@@ -157,30 +157,24 @@
         const ticket = e.target.closest(".sp-mgr-ticket");
         if (ticket) ticket.style.opacity = "1";
       });
+      function resolveDropZone(e) {
+        return e.target.closest(".sp-mgr-ptickets") ||
+          (e.target.closest(".sp-mgr-column") && e.target.closest(".sp-mgr-column").querySelector(".sp-mgr-ptickets")) ||
+          null;
+      }
+
       container.addEventListener("dragover", function (e) {
         e.preventDefault();
-        const zone = e.target.closest(".sp-mgr-ptickets");
-        if (!zone) {
-          const col = e.target.closest(".sp-mgr-column");
-          zone = col ? col.querySelector(".sp-mgr-ptickets") : null;
-        }
+        const zone = resolveDropZone(e);
         if (zone) zone.classList.add("sp-drag-over");
       });
       container.addEventListener("dragleave", function (e) {
-        const zone = e.target.closest(".sp-mgr-ptickets");
-        if (!zone) {
-          const col = e.target.closest(".sp-mgr-column");
-          zone = col ? col.querySelector(".sp-mgr-ptickets") : null;
-        }
+        const zone = resolveDropZone(e);
         if (zone && !zone.contains(e.relatedTarget)) zone.classList.remove("sp-drag-over");
       });
       container.addEventListener("drop", async function (e) {
         e.preventDefault();
-        const zone = e.target.closest(".sp-mgr-ptickets");
-        if (!zone) {
-          const col = e.target.closest(".sp-mgr-column");
-          zone = col ? col.querySelector(".sp-mgr-ptickets") : null;
-        }
+        const zone = resolveDropZone(e);
         if (!zone) return;
         zone.classList.remove("sp-drag-over");
 
@@ -369,26 +363,16 @@
         return;
       }
 
-      // Apply blacklist
-      const userConfig = SP_Session.state.userConfig || {};
-      const blacklist = userConfig.blacklist || [];
+      // Apply blacklist — read fresh from storage
+      chrome.storage.local.get("userConfig", function (stored) {
+        const userConfig = stored.userConfig || {};
+        const blacklist = userConfig.blacklist || [];
 
-      if (blacklist.length > 0) {
-        // Resolve blacklisted profile IDs from Notion pages
-        Promise.all(blacklist.map(function (pageId) {
-          return SP_API_Lib.notionGetPage(pageId).then(function (data) {
-            return (data.properties && data.properties["Id Support Plus"] && data.properties["Id Support Plus"].number) || null;
-          }).catch(function () { return null; });
-        })).then(function (blacklistedIds) {
-          blacklistedIds = blacklistedIds.filter(Boolean);
-          if (blacklistedIds.length > 0) {
-            ctx.profiles = ctx.profiles.filter(function (p) { return !blacklistedIds.includes(p.profileId); });
-          }
-          renderGroupDetail(groupId, container, ctx.profiles, spToken, canDrag);
-        });
-      } else {
+        if (blacklist.length > 0) {
+          ctx.profiles = ctx.profiles.filter(function (p) { return !blacklist.includes(p.profileId); });
+        }
         renderGroupDetail(groupId, container, ctx.profiles, spToken, canDrag);
-      }
+      });
     }).catch(function () {
       container.innerHTML = '<div style="color:#888;font-size:11px;">Error al cargar</div>';
     });
@@ -403,6 +387,24 @@
     panel.id = "sp-manager-panel";
     panel.className = "sp-mgr-panel";
     grid.parentElement.insertBefore(panel, grid);
+
+    // Inject guardias calendar below the panel
+    if (!document.getElementById("sp-guardias-calendar-panel") && window.SP_Guardias) {
+      const calPanel = document.createElement("div");
+      calPanel.id = "sp-guardias-calendar-panel";
+      calPanel.style.cssText = "margin-top:12px;padding:16px;border-radius:8px;border:2px solid #1976D2;font-family:system-ui;color:inherit;";
+      calPanel.innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+        '<button id="sp-dba-guardias-prev" style="padding:6px 12px;border:1px solid currentColor;border-radius:6px;background:transparent;color:inherit;cursor:pointer;font-size:14px;">◀</button>' +
+        '<h4 style="margin:0;font-size:15px;font-weight:600;">📅 Guardias</h4>' +
+        '<button id="sp-dba-guardias-next" style="padding:6px 12px;border:1px solid currentColor;border-radius:6px;background:transparent;color:inherit;cursor:pointer;font-size:14px;">▶</button>' +
+        '</div>' +
+        '<div id="sp-dba-guardias-content"><div style="text-align:center;padding:20px;opacity:.6;">Cargando guardias...</div></div>';
+      grid.parentElement.insertBefore(calPanel, grid);
+      const userName = SP_Session.state.userName || "";
+      const userId = String(SP_Session.state.currentUserId || "");
+      window.SP_Guardias.load(0, { currentUserName: userName, currentUserId: userId });
+    }
 
     const singleGroup = (groups.length === 1);
     const GROUP_INFO = window.SP_Header ? window.SP_Header.getGroupInfo() : window.SP_CONFIG.GROUP_INFO;

@@ -6,10 +6,6 @@
   "use strict";
 
   const SP_CONFIG = window.SP_CONFIG;
-  const notionQuery = window.SP_API_Lib.notionQuery;
-  const notionCreate = window.SP_API_Lib.notionCreate;
-  const notionGetPage = window.SP_API_Lib.notionGetPage;
-  const triggerNotionSync = window.SP_API_Lib.triggerNotionSync;
   const getSpToken = window.SP_API_Lib.getSpToken;
 
   // ─── Session State ────────────────────────────────────────
@@ -34,6 +30,7 @@
     canReopenTickets: false,
     canCommentClosed: false,
     canRejectTickets: false,
+    canDBAInfo: false,
 
     // Config
     userConfig: {},
@@ -75,6 +72,7 @@
           state.canReopenTickets = r.subgroupPerms.canReopenTickets || false;
           state.canCommentClosed = r.subgroupPerms.canCommentClosed || false;
           state.canRejectTickets = r.subgroupPerms.canRejectTickets || false;
+          state.canDBAInfo = r.subgroupPerms.canDBAInfo || false;
         } else if (r.notionUsers && r.userEmail) {
           const u = r.notionUsers[(r.userEmail || "").toLowerCase()];
           if (u) {
@@ -85,6 +83,7 @@
             state.canReopenTickets = !!u.canReopenTickets;
             state.canCommentClosed = !!u.canCommentClosed;
             state.canRejectTickets = !!u.canRejectTickets;
+            state.canDBAInfo = !!u.canDBAInfo;
           }
         }
         if (r.userConfig) state.userConfig = r.userConfig;
@@ -96,7 +95,7 @@
   // ─── Check Session ────────────────────────────────────────
   async function checkSession() {
     try {
-      // Fetch session with timeout
+      // Fetch session from SupportPlus portal
       const controller = new AbortController();
       const timer = setTimeout(function () { controller.abort(); }, 15000);
       const res = await fetch(SP_CONFIG.SP_SESSION_API, {
@@ -116,81 +115,59 @@
       // Save email before triggering sync
       await SP_Storage.set("userEmail", email);
 
-      // Trigger background sync with timeout
+      // Trigger background sync (API)
       try {
         await Promise.race([
-          triggerNotionSync(),
+          new Promise(function (resolve) {
+            chrome.runtime.sendMessage({ type: "sync-notion" }, function (resp) { resolve(resp || {}); });
+          }),
           new Promise(function (resolve) { setTimeout(function () { resolve({ timeout: true }); }, 15000); })
         ]);
       } catch (e) { /* ignore */ }
 
-      // Read synced data
-      const stored = await SP_Storage.getMultiple(["notionUsers", "notionRoles", "notionRolesGroups", "suggestedComments", "userConfig", "workSchedule"]);
+      // Read synced data from storage
+      const stored = await SP_Storage.getMultiple(["notionUsers", "userConfig", "workSchedule"]);
       if (stored.workSchedule) state.workSchedule = stored.workSchedule;
 
-      const notionUsers = stored.notionUsers || {};
-      const ctx = { userData: notionUsers[email] };
+      const usersMap = stored.notionUsers || {};
+      const ctx = { userData: usersMap[email] };
 
       if (!ctx.userData) {
-        // Try cached session first (survives Notion rate limits)
+        // Try cached session first
         const cachedSession = await SP_Storage.get("sp_last_session");
         if (cachedSession && cachedSession.email === email && cachedSession.active) {
-          // Have a valid cache — use it immediately without hitting Notion
           ctx.userData = cachedSession;
         } else {
-
-        // Check directly in Notion before creating
-        try {
-          const checkData = await notionQuery(SP_CONFIG.NOTION_USERS_DB, {
-            filter: { property: "Correo", rich_text: { equals: email } },
-            page_size: 1
-          });
-          if (checkData && checkData.results && checkData.results.length > 0) {
-            // User exists but not in cache - re-sync
-            await triggerNotionSync();
-            const freshStored = await SP_Storage.get("notionUsers");
-            ctx.userData = (freshStored || {})[email];
-            if (!ctx.userData) {
-              // Sync failed but user exists — use cache if available
-              if (cachedSession && cachedSession.email === email && cachedSession.active) {
-                ctx.userData = cachedSession;
-              } else {
-                return null;
-              }
+          // Sync might not have finished — retry with increasing delays
+          for (var _retryAttempt = 0; _retryAttempt < 3; _retryAttempt++) {
+            await new Promise(function (r) { setTimeout(r, 1500 * (_retryAttempt + 1)); });
+            var retryStored = await SP_Storage.get("notionUsers");
+            var retryMap = retryStored || {};
+            if (retryMap[email]) {
+              ctx.userData = retryMap[email];
+              break;
             }
-          } else if (!checkData || checkData.object === "error") {
-            // Notion API failed (rate limit) — use cached session
-            if (cachedSession && cachedSession.email === email && cachedSession.active) {
-              ctx.userData = cachedSession;
-            } else {
-              return null;
-            }
-          } else {
-            // Create user as inactive
-            await notionCreate({
-              parent: { database_id: SP_CONFIG.NOTION_USERS_DB },
-              properties: {
-                "Nombre": { title: [{ text: { content: state.userName || email } }] },
-                "Correo": { rich_text: [{ text: { content: email } }] },
-                "Activo": { checkbox: false }
-              }
-            }).catch(function () { /* ignore */ });
-            return null;
           }
-        } catch (e) {
-          // Network/timeout error — use cached session
-          if (cachedSession && cachedSession.email === email && cachedSession.active) {
-            ctx.userData = cachedSession;
-          } else {
-            return null;
+          // If still nothing, allow with minimal permissions (won't show panels but won't block)
+          if (!ctx.userData) {
+            ctx.userData = {
+              name: state.userName,
+              active: true,
+              groups: [],
+              profileId: null,
+              canMigrate: false,
+              btnDashboard: false,
+              btnComments: false,
+              btnReports: false,
+              canDBAInfo: false
+            };
           }
         }
-        } // end else (no cache)
       }
 
       if (!ctx.userData.active) return "inactive";
 
-      // Set state from ctx.userData
+      // Set state from userData
       if (ctx.userData.profileId) state.profileId = ctx.userData.profileId;
       state.notionPageId = ctx.userData.notionPageId;
 
@@ -211,6 +188,7 @@
       state.canCommentClosed = !!ctx.userData.canCommentClosed;
       state.canRejectTickets = !!ctx.userData.canRejectTickets;
       state.canDragDrop = !!ctx.userData.canDragDrop;
+      state.canDBAInfo = !!ctx.userData.canDBAInfo;
 
       if (stored.userConfig) state.userConfig = stored.userConfig;
 
@@ -225,11 +203,12 @@
           canShowLabels: state.canShowLabels,
           canReopenTickets: state.canReopenTickets,
           canCommentClosed: state.canCommentClosed,
-          canRejectTickets: state.canRejectTickets
+          canRejectTickets: state.canRejectTickets,
+          canDBAInfo: state.canDBAInfo
         }
       });
 
-      // Cache successful session for fallback during Notion outages
+      // Cache session
       await SP_Storage.set("sp_last_session", {
         email: email,
         name: ctx.userData.name,
@@ -297,38 +276,26 @@
 
   // ─── Inject Role Label ────────────────────────────────────
   function injectRoleLabel() {
-    SP_Storage.get("userEmail").then(function (email) {
-      email = (email || "").toLowerCase();
+    SP_Storage.getMultiple(["userEmail", "notionUsers"]).then(function (stored) {
+      const email = (stored.userEmail || "").toLowerCase();
       if (!email) return;
+      const users = stored.notionUsers || {};
+      const userData = users[email];
+      if (!userData || !userData.roleName) return;
 
-      notionQuery(SP_CONFIG.NOTION_USERS_DB, {
-        filter: { property: "Correo", rich_text: { equals: email } },
-        page_size: 1
-      }).then(function (data) {
-        if (!data || !data.results || !data.results[0]) return;
-        const rolRel = data.results[0].properties.Rol && data.results[0].properties.Rol.relation ? data.results[0].properties.Rol.relation : [];
-        if (!rolRel.length) return;
-
-        notionGetPage(rolRel[0].id).then(function (roleData) {
-          const rn = "";
-          try { rn = roleData.properties.Nombre.title[0].plain_text; } catch (e) { return; }
-          if (!rn) return;
-
-          SP_DOM.waitForElement('[class*="warapperNameUserAndLogout"]', { maxAttempts: 30, interval: 300 })
-            .then(function (wrapper) {
-              if (!wrapper) return;
-              if (document.getElementById("sp-role-label")) return;
-              const nameEl = wrapper.querySelector("p");
-              if (!nameEl) return;
-              const rl = document.createElement("span");
-              rl.id = "sp-role-label";
-              rl.className = "sp-role-label";
-              rl.textContent = rn;
-              nameEl.appendChild(document.createElement("br"));
-              nameEl.appendChild(rl);
-            });
-        }).catch(function () { });
-      }).catch(function () { });
+      SP_DOM.waitForElement('[class*="warapperNameUserAndLogout"]', { maxAttempts: 30, interval: 300 })
+        .then(function (wrapper) {
+          if (!wrapper) return;
+          if (document.getElementById("sp-role-label")) return;
+          const nameEl = wrapper.querySelector("p");
+          if (!nameEl) return;
+          const rl = document.createElement("span");
+          rl.id = "sp-role-label";
+          rl.className = "sp-role-label";
+          rl.textContent = userData.roleName;
+          nameEl.appendChild(document.createElement("br"));
+          nameEl.appendChild(rl);
+        });
     });
   }
 
@@ -354,15 +321,12 @@
       state.hasMondayConfig = !!(groupId && config[groupId] && config[groupId].etiqueta) && state.canMigrateMonday;
     }).catch(function () { });
 
-    // Fire custom event so content.js (or other modules) can initialize features
     document.dispatchEvent(new CustomEvent("sp-session-ready", { detail: { state: state } }));
   }
 
   // ─── Initialize ───────────────────────────────────────────
-  // Load persisted state immediately
   loadPersistedState();
 
-  // Expose state and functions
   window.SP_Session = {
     state: state,
     checkSession: checkSession,

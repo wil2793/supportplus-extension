@@ -50,18 +50,17 @@
     const monthOpts = SP_CONFIG.MONTH_NAMES.map(function (m, i) {
       return '<option value="' + i + '"' + (i === currentMonth ? ' selected' : '') + '>' + m + '</option>';
     }).join("");
-    const yearOptParts = [];
-    for (var y = currentYear; y >= currentYear - 3; y--) {
-      yearOptParts.push('<option value="' + y + '"' + (y === currentYear ? ' selected' : '') + '>' + y + '</option>');
-    }
-    const yearOpts = yearOptParts.join("");
+    const yearOpts = Array.from({ length: 4 }, function (_, i) {
+      const y = currentYear - i;
+      return '<option value="' + y + '"' + (y === currentYear ? ' selected' : '') + '>' + y + '</option>';
+    }).join("");
 
     const groupCheckboxes = groupOptions.map(function (g) {
       return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;font-size:12px;">' +
         '<input type="checkbox" value="' + g.id + '" checked> ' + esc(g.name) + '</label>';
     }).join("");
 
-    const m = window.createModal({
+    const m = window.SP_Modal.info({
       id: "sp-report-modal",
       title: "📥 Exportar Reporte CSV",
       content:
@@ -93,7 +92,7 @@
         '<button id="sp-rpt-generate" style="flex:1;padding:10px;border:none;border-radius:6px;background:#1565C0;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">📥 Generar CSV</button>' +
         '<button id="sp-rpt-cancel" style="padding:10px 16px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">Cancelar</button>' +
         '</div>',
-      options: { maxWidth: "480px" }
+      maxWidth: "480px"
     });
     const overlay = m.overlay;
 
@@ -151,8 +150,7 @@
 
       try {
         const allTickets = [];
-        for (var i = 0; i < selectedGroups.length; i++) {
-          const group = selectedGroups[i];
+        for (const group of selectedGroups) {
           const loop = { page: 0, hasMore: true };
           while (loop.hasMore) {
             const url = SP_CONFIG.SP_SEARCH_API + "?resolutionGroupId=" + group.id + "&page=" + loop.page + "&size=100&initDate=" + encodeURIComponent(range.from) + "&endDate=" + encodeURIComponent(range.to);
@@ -162,7 +160,7 @@
             const data = json.data || json;
             const tickets = data.content || [];
             tickets.forEach(function (t) { t._groupName = group.name; });
-            allTickets = allTickets.concat(tickets);
+            allTickets.push.apply(allTickets, tickets);
             loop.hasMore = tickets.length === 100;
             loop.page++;
           }
@@ -266,10 +264,10 @@
       // Parse stats
       const statsByPerson = {};
       allItems.forEach(function (item) {
-        const person = "Sin asignar";
-        item.column_values.forEach(function (col) {
-          if (col.id === "multiple_person_mm25nvfq" && col.text) person = col.text;
+        const personCol = item.column_values.find(function (col) {
+          return col.id === "multiple_person_mm25nvfq" && col.text;
         });
+        const person = personCol ? personCol.text : "Sin asignar";
         if (!statsByPerson[person]) statsByPerson[person] = 0;
         statsByPerson[person]++;
       });
@@ -290,11 +288,12 @@
           '<div style="width:35px;font-size:13px;font-weight:700;text-align:center;">' + total + '</div></div>';
       }).join("");
 
-      window.createModal({
+      window.SP_Modal.info({
         id: "sp-monday-stats-modal",
         title: '📈 ' + esc(boardName) + ' (' + allItems.length + ' tickets)',
         content: '<h4 style="margin:0 0 12px;font-size:14px;color:#555;">Tickets por persona</h4><div style="flex:1;overflow:auto;">' + barsHTML + '</div>',
-        options: { maxWidth: "700px", width: "95%", maxHeight: "90vh" }
+        maxWidth: "700px",
+        modalOptions: { width: "95%", maxHeight: "90vh" }
       });
     } catch (err) {
       window.showErrorToast("Error: " + err.message);
