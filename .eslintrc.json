@@ -1,0 +1,39 @@
+{
+  "env": {
+    "browser": true,
+    "es2020": true,
+    "webextensions": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2020,
+    "sourceType": "script"
+  },
+  "rules": {
+    "no-var": "warn",
+    "prefer-const": "error",
+    "no-unused-vars": ["warn", { "args": "none" }],
+    "no-undef": "off",
+    "eqeqeq": ["warn", "smart"],
+    "no-implicit-globals": "off",
+    "no-redeclare": "warn",
+    "no-shadow": "warn",
+    "curly": ["warn", "multi-line"],
+    "no-throw-literal": "warn",
+    "no-return-assign": "warn",
+    "no-param-reassign": "off",
+    "no-console": "off",
+    "semi": ["warn", "always"]
+  },
+  "overrides": [
+    {
+      "files": ["api/**/*.js"],
+      "env": {
+        "node": true,
+        "browser": false
+      },
+      "parserOptions": {
+        "sourceType": "commonjs"
+      }
+    }
+  ]
+}

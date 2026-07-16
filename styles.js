@@ -388,6 +388,9 @@
 /* ─── Manager Panel Layout ─── */
 .sp-mgr-panel {
   margin-bottom: 12px;
+  padding: 16px;
+  border-radius: 8px;
+  border: 2px solid #4CAF50;
   font-family: system-ui;
 }
 .sp-mgr-columns-wrap {

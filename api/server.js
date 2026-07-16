@@ -18,7 +18,6 @@ app.use(auth);
 app.use("/api/usuarios", require("./routes/usuarios"));
 app.use("/api/grupos", require("./routes/grupos"));
 app.use("/api/roles", require("./routes/roles"));
-app.use("/api/subroles", require("./routes/subroles"));
 app.use("/api/comentarios", require("./routes/comentarios"));
 app.use("/api/versiones", require("./routes/versiones"));
 app.use("/api/configuracion", require("./routes/configuracion"));

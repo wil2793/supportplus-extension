@@ -4,6 +4,9 @@ Thumbs.db
 *.crx
 *.pem
 
+# Environment variables (secrets)
+.env
+
 # ZIPs
 *.zip
 

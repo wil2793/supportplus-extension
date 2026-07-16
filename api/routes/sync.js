@@ -7,20 +7,15 @@ const router = Router();
 router.get("/", asyncHandler(async (req, res) => {
   const pool = await getPool();
 
-  // Ejecutar todas las queries en paralelo
-  const [usuariosResult, rolesResult, gruposResult, subrolesResult, comentariosResult, versionesResult, configResult, usuarioGrupoResult, rolSubrolResult] = await Promise.all([
+  const [usuariosResult, rolesResult, gruposResult, comentariosResult, versionesResult, configResult, usuarioGrupoResult, usuarioRolResult] = await Promise.all([
     pool.request().query(`
-      SELECT u.IdUsuario, u.Nombre, u.Correo, u.IdSupportPlus, u.FK_IdcatRol, u.TokenMonday, u.FechaCumpleanos,
-             r.Nombre AS RolNombre, r.PuedeMigrarMonday, r.BotonDashboard, r.BotonComentario, r.BotonReporteExcel
-      FROM MSP_Usuario u
-      LEFT JOIN MSP_cat_Rol r ON u.FK_IdcatRol = r.IdcatRol
-      WHERE u.Activo = 1
+      SELECT IdUsuario, Nombre, Correo, TokenMonday, FechaCumpleanos, CargoCompleto
+      FROM vw_MSP_Usuario WITH (NOLOCK)
     `),
     pool.request().query(`SELECT IdcatRol, Nombre FROM MSP_cat_Rol WHERE Activo = 1`),
-    pool.request().query(`SELECT IdcatGrupo, Nombre, IdSupportPlus FROM MSP_cat_Grupo WHERE Activo = 1`),
-    pool.request().query(`SELECT IdcatSubRol, Nombre, Descripcion FROM MSP_cat_SubRol WHERE Activo = 1`),
+    pool.request().query(`SELECT IdcatGrupo, Nombre FROM MSP_cat_Grupo WHERE Activo = 1`),
     pool.request().query(`
-      SELECT cs.IdComentarioSugerido, cs.Nombre, cs.Comentario, cs.FK_IdcatGrupo, g.IdSupportPlus AS GrupoIdSP
+      SELECT cs.IdComentarioSugerido, cs.Nombre, cs.Comentario, cs.FK_IdcatGrupo, g.IdcatGrupo AS GrupoIdSP
       FROM MSP_ComentarioSugerido cs
       INNER JOIN MSP_cat_Grupo g ON cs.FK_IdcatGrupo = g.IdcatGrupo
       WHERE cs.Activo = 1
@@ -28,31 +23,31 @@ router.get("/", asyncHandler(async (req, res) => {
     pool.request().query(`SELECT IdVersion, Version, Cambio, ArchivoZipUrl FROM MSP_Version WHERE Activo = 1 ORDER BY IdVersion DESC`),
     pool.request().query(`SELECT Nombre, Valor FROM MSP_Configuracion WHERE Activo = 1`),
     pool.request().query(`
-      SELECT ug.FK_IdUsuario, g.IdSupportPlus
-      FROM MSP_UsuarioGrupo ug
+      SELECT ug.FK_IdUsuario, g.IdcatGrupo
+      FROM MSP_rel_UsuarioGrupo ug
       INNER JOIN MSP_cat_Grupo g ON ug.FK_IdcatGrupo = g.IdcatGrupo
       WHERE ug.Activo = 1 AND g.Activo = 1
     `),
     pool.request().query(`
-      SELECT rs.FK_IdcatRol, sr.Nombre AS SubRolNombre
-      FROM MSP_RolSubRol rs
-      INNER JOIN MSP_cat_SubRol sr ON rs.FK_IdcatSubRol = sr.IdcatSubRol
-      WHERE rs.Activo = 1 AND sr.Activo = 1
+      SELECT ur.FK_IdUsuario, r.Nombre AS RolNombre
+      FROM MSP_rel_UsuarioRol ur
+      INNER JOIN MSP_cat_Rol r ON ur.FK_IdcatRol = r.IdcatRol
+      WHERE ur.Activo = 1 AND r.Activo = 1
     `)
   ]);
 
-  // Build user-groups map (IdUsuario -> [IdSupportPlus])
+  // Build user-groups map (IdUsuario -> [IdcatGrupo])
   const userGroupsMap = {};
   for (const row of usuarioGrupoResult.recordset) {
     if (!userGroupsMap[row.FK_IdUsuario]) userGroupsMap[row.FK_IdUsuario] = [];
-    userGroupsMap[row.FK_IdUsuario].push(row.IdSupportPlus);
+    userGroupsMap[row.FK_IdUsuario].push(row.IdcatGrupo);
   }
 
-  // Build rol-subroles map (IdcatRol -> [subrolName])
-  const rolSubrolesMap = {};
-  for (const row of rolSubrolResult.recordset) {
-    if (!rolSubrolesMap[row.FK_IdcatRol]) rolSubrolesMap[row.FK_IdcatRol] = [];
-    rolSubrolesMap[row.FK_IdcatRol].push(row.SubRolNombre.toLowerCase());
+  // Build user-roles map (IdUsuario -> [rolName lowercase])
+  const userRolesMap = {};
+  for (const row of usuarioRolResult.recordset) {
+    if (!userRolesMap[row.FK_IdUsuario]) userRolesMap[row.FK_IdUsuario] = [];
+    userRolesMap[row.FK_IdUsuario].push(row.RolNombre.toLowerCase());
   }
 
   // Build config map
@@ -72,7 +67,7 @@ router.get("/", asyncHandler(async (req, res) => {
   // Build groupNames map
   const groupNames = {};
   for (const g of gruposResult.recordset) {
-    if (g.IdSupportPlus) groupNames[g.IdSupportPlus] = g.Nombre;
+    if (g.IdcatGrupo) groupNames[g.IdcatGrupo] = g.Nombre;
   }
 
   // Build usersMap
@@ -81,30 +76,29 @@ router.get("/", asyncHandler(async (req, res) => {
     const email = (u.Correo || "").toLowerCase();
     if (!email) continue;
 
-    const userSubroles = u.FK_IdcatRol ? (rolSubrolesMap[u.FK_IdcatRol] || []) : [];
+    const userRoles = userRolesMap[u.IdUsuario] || [];
     const userGroups = userGroupsMap[u.IdUsuario] || [];
 
     usersMap[email] = {
       name: u.Nombre,
-      role: "usuario",
-      roleName: u.RolNombre || "usuario",
+      roleName: u.CargoCompleto || "usuario",
       groups: userGroups,
-      profileId: u.IdSupportPlus,
+      profileId: u.IdUsuario,
       active: true,
-      canMigrate: !!u.PuedeMigrarMonday,
-      btnDashboard: u.BotonDashboard !== false && u.BotonDashboard !== 0,
-      btnComments: u.BotonComentario !== false && u.BotonComentario !== 0,
-      btnReports: u.BotonReporteExcel !== false && u.BotonReporteExcel !== 0,
-      notionPageId: String(u.IdUsuario),
+      canMigrate: userRoles.some(r => r.includes("migrar monday")),
+      btnDashboard: userRoles.some(r => r.includes("dashboard")),
+      btnComments: userRoles.some(r => r.includes("comentarios sugeridos")),
+      btnReports: userRoles.some(r => r.includes("reporte excel")),
       idUsuario: u.IdUsuario,
-      canDragDrop: userSubroles.some(s => s.includes("drag")),
-      canReassignApp: userSubroles.some(s => s.includes("migrar")),
-      canAddIAM: userSubroles.some(s => s.includes("iam")),
-      canShowLabels: userSubroles.some(s => s.includes("etiqueta")),
-      canReopenTickets: userSubroles.some(s => s.includes("reabrir")),
-      canCommentClosed: userSubroles.some(s => s.includes("comentar con ticket cerrado")),
-      canRejectTickets: userSubroles.some(s => s.includes("rechazar")),
-      canDBAInfo: userSubroles.some(s => s.includes("dba info")),
+      canDragDrop: userRoles.some(r => r.includes("drag")),
+      canReassignApp: userRoles.some(r => r.includes("migrar aplicaciones")),
+      canAddIAM: userRoles.some(r => r.includes("iam")),
+      canShowLabels: userRoles.some(r => r.includes("etiqueta")),
+      canReopenTickets: userRoles.some(r => r.includes("reabrir")),
+      canCommentClosed: userRoles.some(r => r.includes("comentar con ticket cerrado")),
+      canRejectTickets: userRoles.some(r => r.includes("rechazar")),
+      canDBAInfo: userRoles.some(r => r.includes("dba info")),
+      canGuardias: userRoles.some(r => r.includes("guardias")),
       cumpleanos: u.FechaCumpleanos ? u.FechaCumpleanos.toISOString().slice(0, 10) : null,
       tokenMonday: u.TokenMonday || null
     };
@@ -114,7 +108,7 @@ router.get("/", asyncHandler(async (req, res) => {
   const allVersions = versionesResult.recordset.map(v => ({ version: v.Version, changes: v.Cambio || "", zipUrl: v.ArchivoZipUrl || "" }));
 
   // Roles list
-  const rolesList = rolesResult.recordset.map(r => r.Nombre).filter(n => n.toLowerCase() !== "administrador");
+  const rolesList = rolesResult.recordset.map(r => r.Nombre);
 
   res.json({
     success: true,

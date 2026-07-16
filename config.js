@@ -27,6 +27,9 @@
     MONDAY_SUBITEMS_EXCLUDE: "Subelementos",
     MONDAY_BASE_URL: "https://macropay7.monday.com",
     MONDAY_BOARD_ID: "18402162782",
+    MONDAY_WORKSPACE_ID: "9956268",
+    MONDAY_FOLDER_ID: "16653587",
+    MONDAY_BOARD_ETIQUETA: "Tickets DBA",
 
     // SupportPlus API
     SP_API: "https://macropayapi.supportplus.mx/tickets/web",

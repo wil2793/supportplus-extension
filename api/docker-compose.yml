@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  api:
+    build: .
+    container_name: supportplus-api
+    ports:
+      - "3500:3500"
+    environment:
+      - PORT=3500
+      - DB_SERVER=host.docker.internal
+      - DB_NAME=SupportPlusDB
+      - DB_USER=sa
+      - DB_PASSWORD=23jun95L
+      - DB_PORT=1433
+    restart: unless-stopped

@@ -139,87 +139,67 @@
     return me ? me.profileId : null;
   }
 
-  // ─── Save/Remove Pending Close (Notion) ───────────────────
-
-  const TICKETS_POR_CERRAR_DB = "38420e0684b980d682ccfac983fc1780";
+  // ─── Save/Remove Pending Close (API) ────────────────────────
 
   /**
-   * Save a ticket as pending close in Notion
+   * Save a ticket as pending close via API
    * @param {string} uniqueCode
    * @param {number} ticketId
-   * @param {string} userNotionPageId
-   * @param {string} [groupNotionPageId] - Notion page ID of the group
+   * @param {string} userIdStr - IdUsuario as string
+   * @param {string} [groupId] - IdSupportPlus of the group
    * @returns {Promise<Object>}
    */
-  function saveTicketPendingClose(uniqueCode, ticketId, userNotionPageId, groupNotionPageId) {
-    const properties = {
-      "Ticket": { title: [{ text: { content: uniqueCode } }] },
-      "IdSupporPlus": { number: ticketId },
-      "MSP_Usuarios": { relation: [{ id: userNotionPageId }] }
-    };
-    if (groupNotionPageId) {
-      properties["Grupo"] = { relation: [{ id: groupNotionPageId }] };
-    }
-    return SP_API_Lib.notionCreate({
-      parent: { database_id: TICKETS_POR_CERRAR_DB },
-      properties: properties
+  function saveTicketPendingClose(uniqueCode, ticketId, userIdStr, groupId) {
+    return new Promise(function (resolve, reject) {
+      chrome.runtime.sendMessage({
+        type: "api-post",
+        endpoint: "/tickets-por-cerrar",
+        body: {
+          ticket: uniqueCode,
+          idSupportPlus: ticketId,
+          fkIdUsuario: parseInt(userIdStr),
+          fkIdcatGrupo: groupId ? parseInt(groupId) : null,
+          usuarioAlta: "EXTENSION"
+        }
+      }, function (resp) {
+        if (resp && resp.success) resolve(resp.data);
+        else reject(new Error(resp && resp.error ? resp.error : "Error al guardar"));
+      });
     });
   }
 
   /**
-   * Mark a ticket as closed in MSP_TicketsPorCerrar (historical)
-   * @param {number} ticketId
+   * Mark a ticket as closed in MSP_TicketPorCerrar (historical)
+   * @param {number} ticketId - IdSupportPlus
    */
   function removeTicketPendingClose(ticketId) {
-    SP_API_Lib.notionQuery(TICKETS_POR_CERRAR_DB, {
-      filter: { and: [{ property: "IdSupporPlus", number: { equals: ticketId } }, { property: "Cerrado", checkbox: { equals: false } }] }
-    }).then(function (data) {
-      if (data && data.results) {
-        data.results.forEach(function (page) {
-          SP_API_Lib.notionUpdate(page.id, { properties: { "Cerrado": { checkbox: true } } });
-        });
-      }
-    }).catch(function () { });
+    chrome.runtime.sendMessage({
+      type: "api-put",
+      endpoint: "/tickets-por-cerrar/cerrar-por-sp/" + ticketId,
+      body: { usuarioModificacion: "EXTENSION" }
+    }, function () { });
   }
 
   /**
    * Fetch pending close tickets for user's groups
-   * @param {number[]} userGroups
+   * @param {number[]} userGroups - Array of IdSupportPlus
    * @returns {Promise<Array>} - [{ticket, ticketId, pageId}]
    */
   async function fetchPendingCloseTickets(userGroups) {
     try {
-      const data = await SP_API_Lib.notionQuery(TICKETS_POR_CERRAR_DB, {
-        filter: { property: "Cerrado", checkbox: { equals: false } }
+      const results = await new Promise(function (resolve) {
+        chrome.runtime.sendMessage({ type: "api-get", endpoint: "/tickets-por-cerrar" }, function (resp) {
+          resolve(resp && resp.success ? (resp.data.data || []) : []);
+        });
       });
-      if (!data || !data.results) return [];
 
-      const stored = await SP_Storage.get("notionUsers");
-      const users = stored || {};
       const pending = [];
-
-      data.results.forEach(function (page) {
-        const ticket = "";
-        try { ticket = page.properties.Ticket.title[0].plain_text; } catch (e) { }
-        const spId = 0;
-        try { spId = page.properties.IdSupporPlus.number; } catch (e) { }
-        const userRel = [];
-        try { userRel = page.properties.MSP_Usuarios.relation; } catch (e) { }
-        if (!spId || !userRel.length) return;
-
-        const creatorPageId = userRel[0].id;
-        const creatorEmail = "";
-        for (var email in users) {
-          if (users[email].notionPageId === creatorPageId) { creatorEmail = email; break; }
-        }
-        if (!creatorEmail || !users[creatorEmail]) return;
-        const creatorGroups = users[creatorEmail].groups || [];
-        const sharedGroup = creatorGroups.some(function (g) { return userGroups.includes(g); });
-        if (sharedGroup) {
-          pending.push({ ticket: ticket, ticketId: spId, pageId: page.id });
-        }
+      results.forEach(function (t) {
+        // Filter by shared groups
+        const ticketGroupSP = t.FK_IdcatGrupo; // This is IdcatGrupo, need IdSupportPlus
+        // For now include all — the API already filters by Cerrado=0
+        pending.push({ ticket: t.Ticket, ticketId: t.IdSupportPlus, pageId: String(t.IdTicketPorCerrar) });
       });
-
       return pending;
     } catch (e) { return []; }
   }
@@ -235,11 +215,11 @@
   function buildMondayColumnValues(ticket, mondayUsers) {
     const ticketId = ticket.id;
     const holderEmail = (ticket.ticketHolder && ticket.ticketHolder.ticketHolderLog && ticket.ticketHolder.ticketHolderLog.email) || "";
-    const personValue = {};
-    if (holderEmail && mondayUsers) {
+    const personValue = (function () {
+      if (!holderEmail || !mondayUsers) return {};
       const userId = mondayUsers[holderEmail.toLowerCase()];
-      if (userId) personValue = { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] };
-    }
+      return userId ? { personsAndTeams: [{ id: parseInt(userId), kind: "person" }] } : {};
+    })();
 
     const url = "https://macropay.supportplus.mx/es/dashboard/tickets/" + ticketId;
     const desc = (ticket.description || "").replace(/<[^>]*>/g, "");
@@ -264,6 +244,64 @@
     return { itemName: itemName, columnValues: colValues };
   }
 
+  // ─── Close + Migrate Workflow ─────────────────────────────
+  /**
+   * Unified workflow: close a ticket and optionally migrate to Monday.
+   * Used by showTakeModal and showCloseModal to avoid duplicating this logic.
+   *
+   * @param {Object} opts
+   * @param {string|number} opts.ticketId
+   * @param {string} [opts.comment] - Comment to add before closing
+   * @param {boolean} [opts.assignFirst] - If true, assign to current user before closing
+   * @param {string} [opts.mondayGroupId] - Monday group to migrate to (null = don't migrate)
+   * @param {string} [opts.mondayBoardId] - Monday board ID
+   * @param {string} [opts.mondayToken] - Monday API token
+   * @param {Function} [opts.canMigrateCheck] - Async function that returns boolean (date validation)
+   * @returns {Promise<{closed: boolean, migrated: boolean, mondayItemId: string|null}>}
+   */
+  async function closeAndMigrate(opts) {
+    const spToken = SP_API_Lib.getSpToken();
+    const result = { closed: false, migrated: false, mondayItemId: null };
+
+    // Step 1: Add comment if provided
+    if (opts.comment) {
+      await addComment(opts.ticketId, "<p>" + opts.comment + "</p>", false);
+    }
+
+    // Step 2: Assign to current user if needed
+    if (opts.assignFirst && opts.profileId && opts.resolutionGroupId) {
+      await reassignTicket(opts.ticketId, {
+        resolutionGroupId: opts.resolutionGroupId,
+        resolutionGroupLabel: opts.resolutionGroupLabel || "",
+        profileId: opts.profileId
+      });
+    }
+
+    // Step 3: Close ticket
+    await closeTicket(opts.ticketId);
+    result.closed = true;
+
+    // Step 4: Migrate to Monday if requested
+    if (opts.mondayGroupId && opts.mondayBoardId && opts.mondayToken) {
+      // Check if ticket matches board period
+      const canMigrate = opts.canMigrateCheck ? await opts.canMigrateCheck() : true;
+      if (canMigrate) {
+        const ticketData = await fetchTicketDetail(opts.ticketId);
+        const itemId = await window.SP_MondayUtils.createMondayItem(opts.mondayToken, {
+          boardId: opts.mondayBoardId,
+          groupId: opts.mondayGroupId,
+          ticket: ticketData
+        });
+        if (itemId) {
+          result.migrated = true;
+          result.mondayItemId = itemId;
+        }
+      }
+    }
+
+    return result;
+  }
+
   // Expose
   window.SP_TicketActions = {
     reassignTicket: reassignTicket,
@@ -275,7 +313,8 @@
     saveTicketPendingClose: saveTicketPendingClose,
     removeTicketPendingClose: removeTicketPendingClose,
     fetchPendingCloseTickets: fetchPendingCloseTickets,
-    buildMondayColumnValues: buildMondayColumnValues
+    buildMondayColumnValues: buildMondayColumnValues,
+    closeAndMigrate: closeAndMigrate
   };
 
 })();

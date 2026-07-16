@@ -1,10 +1,11 @@
 -- ============================================================
 -- Vista: vw_MSP_ControlGuardia
--- Descripcion: Retorna el calendario de guardias activas
---              con datos del usuario asignado y del usuario
---              anterior (en caso de cambio por solicitud).
+-- Descripcion: Retorna el calendario de guardias activas con
+--              los usuarios asignados a cada fecha via la tabla
+--              de relacion MSP_rel_ControlGuardiaUsuario.
+--              Una guardia puede tener multiples usuarios.
 -- Autor: SISTEMA
--- Fecha: 2026-07-14
+-- Fecha: 2026-07-15
 -- Base de datos: SupportPlusDB
 -- ============================================================
 
@@ -21,18 +22,15 @@ AS
 SELECT
   cg.IdControlGuardia,
   cg.Fecha,
-  cg.FK_IdUsuario,
+  cgu.IdrelControlGuardiaUsuario,
+  cgu.FK_IdUsuario,
   u.Nombre        AS UsuarioNombre,
-  u.Correo        AS UsuarioCorreo,
-  cg.FK_IdUsuarioAnterior,
-  ua.Nombre       AS UsuarioAnteriorNombre,
-  cg.Activo,
-  cg.UsuarioAlta,
-  cg.FechaAlta
+  u.Correo        AS UsuarioCorreo
 FROM dbo.MSP_ControlGuardia cg
+INNER JOIN dbo.MSP_rel_ControlGuardiaUsuario cgu
+  ON cg.IdControlGuardia = cgu.FK_IdControlGuardia
+  AND cgu.Activo = 1
 INNER JOIN dbo.MSP_Usuario u
-  ON cg.FK_IdUsuario = u.IdUsuario
-LEFT JOIN dbo.MSP_Usuario ua
-  ON cg.FK_IdUsuarioAnterior = ua.IdUsuario
+  ON cgu.FK_IdUsuario = u.IdUsuario
 WHERE cg.Activo = 1;
 GO

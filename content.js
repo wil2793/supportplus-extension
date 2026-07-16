@@ -74,11 +74,114 @@
   // Persisted state now loaded by features/session.js (loadPersistedState)
 
   // updateMondayPerson & updateMondayStatus: delegate to lib/monday-utils.js
+  // If ticket doesn't exist in Monday, create it first.
+  async function ensureTicketInMonday(ticketId, uniqueCode) {
+    if (!uniqueCode) return false;
+    var mondayToken = await window.SP_API_Lib.getMondayToken();
+    if (!mondayToken) return false;
+    // Check cache
+    var cached = getCache() || {};
+    if (cached[uniqueCode]) return true;
+    // Check in Monday
+    var existingId = await checkTicketExistsInMonday(mondayToken, uniqueCode);
+    if (existingId) {
+      addToCache(uniqueCode, existingId);
+      return true;
+    }
+    // Doesn't exist — create it
+    try {
+      var spToken = getToken();
+      if (!spToken) return false;
+      var res = await fetch(SP_API + "/" + ticketId, {
+        headers: {
+          accept: "application/json",
+          authorization: "Bearer " + spToken,
+        },
+      });
+      if (!res.ok) return false;
+      var json = await res.json();
+      var t = json.data || json;
+      var ticketDate = new Date(t.createdAt);
+      var boardId = await getMondayBoardForMonth(
+        ticketDate.getFullYear(),
+        ticketDate.getMonth(),
+      );
+      if (!boardId) return false;
+      var boardData = await mondayQuery(
+        mondayToken,
+        "query ($boardId: [ID!]!) { boards(ids: $boardId) { id groups { id title } } }",
+        { boardId: boardId },
+      );
+      var boards = boardData.boards || [];
+      if (!boards.length || !boards[0].groups || !boards[0].groups.length)
+        return false;
+      var groupId = boards[0].groups[0].id;
+      var url = BASE_URL + "/" + ticketId;
+      var desc = (t.description || "").replace(/<[^>]*>/g, "");
+      var itemName = t.subject || "Sin asunto";
+      var createdDate = ticketDate.toISOString().slice(0, 10);
+      var spPriority = (
+        t.incidentPriorityName ||
+        (t.incidentPriority && t.incidentPriority.name) ||
+        ""
+      )
+        .toLowerCase()
+        .trim();
+      var priorityIndex =
+        PRIORITY_MAP[spPriority] !== undefined
+          ? PRIORITY_MAP[spPriority]
+          : PRIORITY_MAP["medio"];
+      var holderEmail =
+        t.ticketHolder && t.ticketHolder.ticketHolderLog
+          ? t.ticketHolder.ticketHolderLog.email || ""
+          : "";
+      var personValue = {};
+      if (holderEmail) {
+        var users = await getMondayUsers(mondayToken);
+        var userId = users[holderEmail.toLowerCase()];
+        if (userId)
+          personValue = {
+            personsAndTeams: [{ id: parseInt(userId), kind: "person" }],
+          };
+      }
+      var columnValues = JSON.stringify({
+        descripci_n_mkn9e5f4: { text: desc },
+        ...(personValue.personsAndTeams
+          ? { multiple_person_mm25nvfq: personValue }
+          : {}),
+        status: { index: 1 },
+        priority_mkn9kbe9: { index: priorityIndex },
+        cronograma_mkn9hwe3: { from: createdDate, to: createdDate },
+        link_mknkdctz: { url: url, text: uniqueCode || url },
+        text_mm2c9nhc: uniqueCode || String(ticketId),
+      });
+      var result = await mondayQuery(
+        mondayToken,
+        "mutation ($boardId: ID!, $groupId: String!, $itemName: String!, $columnValues: JSON!) { create_item(board_id: $boardId, group_id: $groupId, item_name: $itemName, column_values: $columnValues) { id } }",
+        {
+          boardId: boardId,
+          groupId: groupId,
+          itemName: itemName,
+          columnValues: columnValues,
+        },
+      );
+      if (result.create_item && result.create_item.id) {
+        addToCache(uniqueCode, result.create_item.id);
+        return true;
+      }
+    } catch (e) {
+      SP_Log.warn("ensureTicketInMonday failed:", e.message);
+    }
+    return false;
+  }
+
   async function updateMondayPerson(ticketId, uniqueCode, analystEmail) {
     try {
+      if (!canMigrateMonday) return;
       var mondayToken = await window.SP_API_Lib.getMondayToken();
       if (!mondayToken || !analystEmail) return;
       var code = uniqueCode || String(ticketId);
+      await ensureTicketInMonday(ticketId, code);
       await window.SP_MondayUtils.updateMondayPerson(
         mondayToken,
         code,
@@ -92,9 +195,11 @@
 
   async function updateMondayStatus(ticketId, uniqueCode, newStatusName) {
     try {
+      if (!canMigrateMonday) return;
       var mondayToken = await window.SP_API_Lib.getMondayToken();
       if (!mondayToken) return;
       var code = uniqueCode || String(ticketId);
+      await ensureTicketInMonday(ticketId, code);
       await window.SP_MondayUtils.updateMondayStatus(
         mondayToken,
         code,
@@ -1794,26 +1899,35 @@
     const GUARDIAS_PANEL_ID = "sp-guardias-calendar-panel";
     function injectGuardiasCalendar() {
       if (document.getElementById(GUARDIAS_PANEL_ID)) return;
-      const panel = document.getElementById("sp-manager-panel") || document.getElementById(TEAM_PANEL_ID);
+      const panel =
+        document.getElementById("sp-manager-panel") ||
+        document.getElementById(TEAM_PANEL_ID);
       if (!panel) return;
 
       const calPanel = document.createElement("div");
       calPanel.id = GUARDIAS_PANEL_ID;
-      calPanel.style.cssText = "margin-top:12px;padding:16px;border-radius:8px;border:2px solid #1976D2;font-family:system-ui;color:inherit;";
+      calPanel.style.cssText =
+        "margin-top:12px;padding:16px;border-radius:8px;border:2px solid #1976D2;font-family:system-ui;color:inherit;";
       calPanel.innerHTML =
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
         '<button id="sp-dba-guardias-prev" style="padding:6px 12px;border:1px solid currentColor;border-radius:6px;background:transparent;color:inherit;cursor:pointer;font-size:14px;">◀</button>' +
         '<h4 style="margin:0;font-size:15px;font-weight:600;">📅 Guardias</h4>' +
         '<button id="sp-dba-guardias-next" style="padding:6px 12px;border:1px solid currentColor;border-radius:6px;background:transparent;color:inherit;cursor:pointer;font-size:14px;">▶</button>' +
-        '</div>' +
+        "</div>" +
         '<div id="sp-dba-guardias-content"><div style="text-align:center;padding:20px;opacity:.6;">Cargando guardias...</div></div>';
 
       panel.after(calPanel);
 
       if (window.SP_Guardias) {
-        const userName = window.SP_Session.state.userName || getLoggedUserName() || "";
-        const userId = String(window.SP_Session.state.currentUserId || _state.currentUserId || "");
-        window.SP_Guardias.load(0, { currentUserName: userName, currentUserId: userId });
+        const userName =
+          window.SP_Session.state.userName || getLoggedUserName() || "";
+        const userId = String(
+          window.SP_Session.state.currentUserId || _state.currentUserId || "",
+        );
+        window.SP_Guardias.load(0, {
+          currentUserName: userName,
+          currentUserId: userId,
+        });
       }
     }
 
@@ -2067,7 +2181,9 @@
           found = profiles.find(function (p) {
             var full = (p.profileFullName || "").toLowerCase();
             var parts = nameLower.split(/\s+/);
-            var matches = parts.filter(function (w) { return w.length > 2 && full.includes(w); });
+            var matches = parts.filter(function (w) {
+              return w.length > 2 && full.includes(w);
+            });
             return matches.length >= 2;
           });
         }
@@ -2397,7 +2513,8 @@
               !dMatch ||
               (parseInt(dMatch[2]) - 1 === boardDate.month &&
                 parseInt(dMatch[1]) === boardDate.year);
-            if (matches) cell.appendChild(createButton(id));
+            if (matches && synced[id])
+              cell.appendChild(createSyncedBadge(synced[id]));
           }
         }
 
@@ -2459,7 +2576,7 @@
           '<button id="sp-take-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">✊ Tomar ticket</button>' +
           '<button id="sp-take-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
           "</div>",
-        maxWidth: "420px"
+        maxWidth: "420px",
       });
       overlay = m.overlay;
       injectSLCopyButtons(overlay);
@@ -2864,7 +2981,7 @@
           '<button id="sp-close-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">🔐 Cerrar ticket</button>' +
           '<button id="sp-close-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
           "</div>",
-        maxWidth: "420px"
+        maxWidth: "420px",
       });
       var overlay = m.overlay;
       injectSLCopyButtons(overlay);
@@ -3275,7 +3392,7 @@
           '<button id="sp-close-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
           "</div>",
         maxWidth: "560px",
-        modalOptions: { maxHeight: "85vh" }
+        modalOptions: { maxHeight: "85vh" },
       });
       var overlay = m.overlay;
 
@@ -3476,30 +3593,12 @@
               (currentToken ? "••••••••" : "") +
               '" placeholder="Pega tu token de Monday aquí..." style="width:100%;padding:8px;font-size:12px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;margin-bottom:4px;">' +
               '<div style="font-size:10px;color:#999;margin-bottom:12px;">Tu token personal de Monday. Se guarda encriptado.</div>' +
-              (canMigrateMonday
-                ? '<label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Board</label>' +
-                  '<div style="position:relative;margin-bottom:4px;">' +
-                  '<input id="sp-cfg-board-search" type="text" value="' +
-                  currentBoardName.replace(/"/g, "&quot;") +
-                  '" placeholder="Buscar board..." style="width:100%;padding:8px;font-size:12px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;">' +
-                  '<div id="sp-cfg-board-results" style="position:absolute;top:100%;left:0;right:0;max-height:180px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:4px;display:none;z-index:10;font-size:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>' +
-                  "</div>" +
-                  '<div id="sp-cfg-board-status" style="font-size:11px;color:#888;margin-bottom:12px;min-height:16px;">' +
-                  (currentBoardName
-                    ? "✅ " + currentBoardName
-                    : "Carga los boards primero") +
-                  "</div>" +
-                  '<button id="sp-cfg-load-boards" style="width:100%;padding:8px;font-size:12px;cursor:pointer;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;margin-bottom:12px;">🔄 Cargar boards</button>' +
-                  '<input type="hidden" id="sp-cfg-board-id" value="' +
-                  currentBoardId +
-                  '">'
-                : "") +
               "</div>" +
               '<div style="display:flex;gap:8px;margin-top:12px;">' +
               '<button id="sp-cfg-save" style="flex:1;padding:10px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">💾 Guardar</button>' +
               '<button id="sp-cfg-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
               "</div>",
-            maxWidth: "450px"
+            maxWidth: "450px",
           });
           var overlay = cfgM.overlay;
 
@@ -3602,99 +3701,6 @@
           // Load initially if area set
           if (currentArea) loadMembersForConfig(currentArea);
 
-          // Load boards (only if board elements exist)
-          var allBoards = [];
-          var loadBoardsBtn = document.getElementById("sp-cfg-load-boards");
-          var boardSearchEl = document.getElementById("sp-cfg-board-search");
-          if (loadBoardsBtn) {
-            loadBoardsBtn.addEventListener("click", async function () {
-              var token = await getMondayToken();
-              if (!token) {
-                document.getElementById("sp-cfg-board-status").textContent =
-                  "⚠️ Token de Monday no configurado";
-                return;
-              }
-              document.getElementById("sp-cfg-board-status").textContent =
-                "Cargando...";
-              try {
-                var res = await fetch("https://api.monday.com/v2", {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    Authorization: token,
-                  },
-                  body: JSON.stringify({
-                    query: "{ boards(limit:500) { id name } }",
-                  }),
-                });
-                var json = await res.json();
-                if (json.errors) throw new Error(json.errors[0].message);
-                allBoards = json.data.boards.sort(function (a, b) {
-                  return a.name.localeCompare(b.name);
-                });
-                document.getElementById("sp-cfg-board-status").textContent =
-                  allBoards.length + " boards cargados. Escribe para buscar.";
-              } catch (e) {
-                document.getElementById("sp-cfg-board-status").textContent =
-                  "❌ " + e.message;
-              }
-            });
-          }
-
-          // Board search
-          function filterCfgBoards() {
-            if (!boardSearchEl) return;
-            var query = boardSearchEl.value.toLowerCase().trim();
-            var results = document.getElementById("sp-cfg-board-results");
-            if (!results) return;
-            if (!query || !allBoards.length) {
-              results.style.display = "none";
-              return;
-            }
-            var filtered = allBoards
-              .filter(function (b) {
-                return b.name.toLowerCase().includes(query);
-              })
-              .slice(0, 15);
-            if (!filtered.length) {
-              results.innerHTML =
-                '<div style="padding:6px 8px;color:#888;">Sin resultados</div>';
-              results.style.display = "block";
-              return;
-            }
-            results.innerHTML = filtered
-              .map(function (b) {
-                return (
-                  '<div class="sp-cfg-board-opt" data-id="' +
-                  b.id +
-                  '" data-name="' +
-                  b.name.replace(/"/g, "&quot;") +
-                  '" style="padding:8px;cursor:pointer;border-bottom:1px solid #f0f0f0;">' +
-                  b.name +
-                  "</div>"
-                );
-              })
-              .join("");
-            results.style.display = "block";
-          }
-          if (boardSearchEl) {
-            boardSearchEl.addEventListener("input", filterCfgBoards);
-            boardSearchEl.addEventListener("focus", filterCfgBoards);
-          }
-          var boardResultsEl = document.getElementById("sp-cfg-board-results");
-          if (boardResultsEl) {
-            boardResultsEl.addEventListener("click", function (e) {
-              var opt = e.target.closest(".sp-cfg-board-opt");
-              if (!opt) return;
-              document.getElementById("sp-cfg-board-id").value = opt.dataset.id;
-              document.getElementById("sp-cfg-board-search").value =
-                opt.dataset.name;
-              document.getElementById("sp-cfg-board-status").textContent =
-                "✅ " + opt.dataset.name;
-              boardResultsEl.style.display = "none";
-            });
-          }
-
           // Save
           document
             .getElementById("sp-cfg-save")
@@ -3703,49 +3709,33 @@
               var mondayTokenInput = document
                 .getElementById("sp-cfg-monday-token")
                 .value.trim();
-              var boardIdEl = document.getElementById("sp-cfg-board-id");
-              var boardSearchEl = document.getElementById(
-                "sp-cfg-board-search",
-              );
-              var boardId = boardIdEl ? boardIdEl.value : "";
-              var boardName = boardSearchEl ? boardSearchEl.value.trim() : "";
               var area = document.getElementById("sp-cfg-area").value;
               var onlyWithTickets = onlyWithTicketsEl.checked;
 
-              // If user entered a new Monday token (not the placeholder), save it to Notion
+              // If user entered a new Monday token (not the placeholder), save to API
               if (mondayTokenInput && mondayTokenInput !== "••••••••") {
                 token = mondayTokenInput;
                 var encoded = btoa(mondayTokenInput);
-                // Update token_monday column in user's Notion page
                 chrome.storage.local.get(
                   ["notionUsers", "userEmail"],
                   function (nd) {
                     var email = (nd.userEmail || "").toLowerCase();
                     var users = nd.notionUsers || {};
                     var user = users[email];
-                    if (user && user.notionPageId) {
+                    if (user && user.idUsuario) {
                       chrome.runtime.sendMessage({
-                        type: "notion-update",
-                        pageId: user.notionPageId,
-                        body: {
-                          properties: {
-                            token_monday: {
-                              rich_text: [{ text: { content: encoded } }],
-                            },
-                          },
-                        },
+                        type: "api-put",
+                        endpoint: "/usuarios/" + user.idUsuario,
+                        body: { tokenMonday: encoded },
                       });
                     }
                   },
                 );
-                // Update local cache immediately
                 _mondayTokenCache = mondayTokenInput;
               }
 
               var saveData = {
                 mondayToken: token,
-                mondayBoardId: boardId,
-                mondayBoardName: boardName,
                 teamArea: area,
               };
               // Collect blacklisted profileIds (unchecked = blacklisted)
@@ -4242,7 +4232,7 @@
             "</select>" +
             '<div style="background:#FFF3E0;border:1px solid #FF8F00;border-radius:6px;padding:10px;margin-bottom:12px;font-size:0.8rem;color:#E65100;">⚠️ La generación del dashboard puede tardar varios minutos. Puedes seguir trabajando con normalidad, se te avisará cuando esté listo.</div>' +
             '<button id="sp-dash-group-confirm" style="width:100%;padding:10px;border:none;border-radius:6px;background:#00796B;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">Generar</button>',
-          maxWidth: "400px"
+          maxWidth: "400px",
         });
         document
           .getElementById("sp-dash-group-confirm")
@@ -4453,7 +4443,7 @@
           "</div>" +
           '<div id="sp-dash-results" style="flex:1;overflow:auto;min-height:200px;"></div>',
         maxWidth: "700px",
-        modalOptions: { width: "95%", maxHeight: "90vh" }
+        modalOptions: { width: "95%", maxHeight: "90vh" },
       });
 
       document.getElementById("sp-dash-results").innerHTML =
@@ -4527,164 +4517,351 @@
 
     function showWaterModal() {
       var existing = document.getElementById("sp-water-modal");
-      if (existing) { existing.remove(); return; }
+      if (existing) {
+        existing.remove();
+        return;
+      }
       showLoadingToast("Cargando DBA Info...");
 
       // Load products and active log from API
       Promise.all([
-        new Promise(function (resolve) { chrome.runtime.sendMessage({ type: "api-get", endpoint: "/productos" }, function (resp) { resolve(resp && resp.success && resp.data ? resp.data.data : []); }); }),
-        new Promise(function (resolve) { chrome.runtime.sendMessage({ type: "api-get", endpoint: "/productos/log" }, function (resp) { resolve(resp && resp.success && resp.data ? resp.data.data : []); }); })
-      ]).then(function (results) {
-        var lt = document.getElementById("sp-loading-toast"); if (lt) lt.remove();
-        var products = (results[0] || []).map(function (p) { return { id: p.IdcatProducto, name: p.Nombre, producto: p.Descripcion || p.Nombre, cantidad: p.Cantidad || 1 }; });
-        var todayLog = (results[1] || []).map(function (l) { return { id: l.IdLogProducto, productId: l.FK_IdcatProducto, userId: l.FK_IdUsuario, name: l.ProductoNombre, userName: l.UsuarioNombre, date: l.FechaAlta }; });
-
-        // Build user list from usersMap (stored as notionUsers)
-        chrome.storage.local.get(["notionUsers", "userEmail"], function (stored) {
-          var currentEmail = (stored.userEmail || "").toLowerCase();
-          var usersMap = stored.notionUsers || {};
-          var currentUser = usersMap[currentEmail];
-          var currentUserId = currentUser ? currentUser.idUsuario : null;
-
-          // Collect users that have DBA Info permission
-          var users = [];
-          Object.keys(usersMap).forEach(function (email) {
-            var u = usersMap[email];
-            if (!u || !u.canDBAInfo) return;
-            var cumpleDisplay = "";
-            var cumpleColor = "";
-            if (u.cumpleanos) {
-              var parts = u.cumpleanos.split("-");
-              var day = parseInt(parts[2]);
-              var month = parseInt(parts[1]) - 1;
-              var meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
-              cumpleDisplay = day + " de " + meses[month];
-              var now = new Date();
-              var thisYearBday = new Date(now.getFullYear(), month, day);
-              var diffDays = Math.floor((thisYearBday - now) / (1000 * 60 * 60 * 24));
-              if (diffDays < 0) cumpleColor = "#D32F2F";
-              else if (diffDays <= 30) cumpleColor = "#F9A825";
-              else cumpleColor = "#2E7D32";
-            }
-            users.push({ id: u.idUsuario, nombre: u.name, correo: email, cumple: cumpleDisplay, cumpleColor: cumpleColor });
+        new Promise(function (resolve) {
+          chrome.runtime.sendMessage(
+            { type: "api-get", endpoint: "/productos" },
+            function (resp) {
+              resolve(resp && resp.success && resp.data ? resp.data.data : []);
+            },
+          );
+        }),
+        new Promise(function (resolve) {
+          chrome.runtime.sendMessage(
+            { type: "api-get", endpoint: "/productos/log" },
+            function (resp) {
+              resolve(resp && resp.success && resp.data ? resp.data.data : []);
+            },
+          );
+        }),
+      ])
+        .then(function (results) {
+          var lt = document.getElementById("sp-loading-toast");
+          if (lt) lt.remove();
+          var products = (results[0] || []).map(function (p) {
+            return {
+              id: p.IdcatProducto,
+              name: p.Nombre,
+              producto: p.Descripcion || p.Nombre,
+              cantidad: p.Cantidad || 1,
+            };
+          });
+          var todayLog = (results[1] || []).map(function (l) {
+            return {
+              id: l.IdLogProducto,
+              productId: l.FK_IdcatProducto,
+              userId: l.FK_IdUsuario,
+              name: l.ProductoNombre,
+              userName: l.UsuarioNombre,
+              date: l.FechaAlta,
+            };
           });
 
-          if (!users.length) { showErrorToast("No hay usuarios con acceso a DBA Info"); return; }
+          // Build user list from usersMap (stored as notionUsers)
+          chrome.storage.local.get(
+            ["notionUsers", "userEmail"],
+            function (stored) {
+              var currentEmail = (stored.userEmail || "").toLowerCase();
+              var usersMap = stored.notionUsers || {};
+              var currentUser = usersMap[currentEmail];
+              var currentUserId = currentUser ? currentUser.idUsuario : null;
 
-          // Build log count map: userId_productId -> count
-          var logCountMap = {};
-          todayLog.forEach(function (l) { var key = l.userId + "_" + l.productId; logCountMap[key] = (logCountMap[key] || 0) + 1; });
+              // Collect users that have DBA Info permission
+              var users = [];
+              Object.keys(usersMap).forEach(function (email) {
+                var u = usersMap[email];
+                if (!u || !u.canDBAInfo) return;
+                var cumpleDisplay = "";
+                var cumpleColor = "";
+                if (u.cumpleanos) {
+                  var parts = u.cumpleanos.split("-");
+                  var day = parseInt(parts[2]);
+                  var month = parseInt(parts[1]) - 1;
+                  var meses = [
+                    "enero",
+                    "febrero",
+                    "marzo",
+                    "abril",
+                    "mayo",
+                    "junio",
+                    "julio",
+                    "agosto",
+                    "septiembre",
+                    "octubre",
+                    "noviembre",
+                    "diciembre",
+                  ];
+                  cumpleDisplay = day + " de " + meses[month];
+                  var now = new Date();
+                  var thisYearBday = new Date(now.getFullYear(), month, day);
+                  var diffDays = Math.floor(
+                    (thisYearBday - now) / (1000 * 60 * 60 * 24),
+                  );
+                  if (diffDays < 0) cumpleColor = "#D32F2F";
+                  else if (diffDays <= 30) cumpleColor = "#F9A825";
+                  else cumpleColor = "#2E7D32";
+                }
+                users.push({
+                  id: u.idUsuario,
+                  nombre: u.name,
+                  correo: email,
+                  cumple: cumpleDisplay,
+                  cumpleColor: cumpleColor,
+                });
+              });
 
-          // Sort products
-          products.sort(function (a, b) { return a.name.localeCompare(b.name); });
-
-          // Generate columns (each product has N columns based on cantidad)
-          var columns = [];
-          products.forEach(function (p) { for (var i = 0; i < p.cantidad; i++) { columns.push({ productId: p.id, productName: p.name, colName: p.cantidad > 1 ? p.name + " " + (i + 1) : p.producto, colIndex: i }); } });
-
-          // Build product headers
-          var productHeaders = columns.map(function (col) { return '<th style="padding:6px 10px;text-align:center;">' + col.colName + '</th>'; }).join("");
-
-          // Check product completion
-          var productCompletionMap = {};
-          products.forEach(function (p) { productCompletionMap[p.id] = users.every(function (u) { return (logCountMap[u.id + "_" + p.id] || 0) >= p.cantidad; }); });
-
-          // Build table rows
-          var tableRows = users.map(function (u, idx) {
-            var cells = columns.map(function (col) {
-              var userCount = logCountMap[u.id + "_" + col.productId] || 0;
-              var producto = products.find(function (p) { return p.id === col.productId; });
-              var cantidad = producto ? producto.cantidad : 1;
-              var isMarked = userCount > col.colIndex;
-              var isMe = u.id === currentUserId;
-              var timesMarked = isMarked ? Math.floor((userCount - col.colIndex - 1) / cantidad) + 1 : 0;
-              if (isMe && !isMarked && col.colIndex === userCount) {
-                return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;"><input type="checkbox" class="sp-dba-check" data-product-id="' + col.productId + '" data-product-name="' + col.colName + '" data-user-id="' + u.id + '" style="cursor:pointer;width:16px;height:16px;"></td>';
+              if (!users.length) {
+                showErrorToast("No hay usuarios con acceso a DBA Info");
+                return;
               }
-              var display = isMarked ? '\u2705' + (timesMarked > 1 ? ' <span style="font-size:9px;color:#888;">(x' + timesMarked + ')</span>' : '') : '\u2014';
-              return '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' + display + '</td>';
-            }).join("");
-            var cumpleCell = '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;color:' + (u.cumpleColor || '#333') + ';font-weight:600;">' + (u.cumple || '-') + '</td>';
-            return '<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;">' + (idx + 1) + '</td><td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:600;">' + u.nombre + '</td>' + cells + cumpleCell + '</tr>';
-          }).join("");
 
-          // Reset buttons
-          var resetBtnsHTML = '';
-          products.forEach(function (p) { if (productCompletionMap[p.id]) { resetBtnsHTML += '<button class="sp-dba-reset-btn" data-product-id="' + p.id + '" data-product-name="' + p.name + '" style="padding:6px 14px;border:none;border-radius:6px;background:#1565C0;color:#fff;cursor:pointer;font-size:12px;font-weight:600;margin-right:8px;margin-bottom:4px;">\uD83D\uDD04 Reiniciar ' + p.name + '</button>'; } });
+              // Build log count map: userId_productId -> count
+              var logCountMap = {};
+              todayLog.forEach(function (l) {
+                var key = l.userId + "_" + l.productId;
+                logCountMap[key] = (logCountMap[key] || 0) + 1;
+              });
 
-          // Build modal
-          var overlay = document.createElement("div");
-          overlay.id = "sp-water-modal";
-          overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
-          overlay.innerHTML = '<div style="background:#fff;padding:20px;border-radius:12px;max-width:900px;width:95%;max-height:90vh;overflow:auto;font-family:system-ui;">' +
-            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-            '<h3 style="margin:0;font-size:16px;">🏠 DBA Info</h3>' +
-            '<button id="sp-water-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
-            '</div>' +
-            '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
-            '<thead><tr style="background:#f5f5f5;"><th style="padding:6px 10px;text-align:left;">#</th><th style="padding:6px 10px;text-align:left;">Nombre</th>' + productHeaders + '<th style="padding:6px 10px;text-align:center;">🎂</th></tr></thead>' +
-            '<tbody>' + tableRows + '</tbody></table>' +
-            (resetBtnsHTML ? '<div style="margin-top:12px;text-align:center;">' + resetBtnsHTML + '</div>' : '') +
-            '</div>';
-          document.body.appendChild(overlay);
+              // Sort products
+              products.sort(function (a, b) {
+                return a.name.localeCompare(b.name);
+              });
 
-          document.getElementById("sp-water-close").addEventListener("click", function () { overlay.remove(); });
-          overlay.addEventListener("click", function (e) { if (e.target === overlay) overlay.remove(); });
-
-          // Handle checkbox clicks (register product consumption)
-          overlay.querySelectorAll(".sp-dba-check").forEach(function (cb) {
-            cb.addEventListener("change", function () {
-              if (!cb.checked) return;
-              cb.disabled = true;
-              var productId = parseInt(cb.dataset.productId);
-              var userId = parseInt(cb.dataset.userId);
-              chrome.runtime.sendMessage({
-                type: "api-post",
-                endpoint: "/productos/log",
-                body: { fkIdProducto: productId, fkIdUsuario: userId, usuarioAlta: currentEmail }
-              }, function (resp) {
-                if (resp && resp.success) {
-                  cb.parentElement.innerHTML = '\u2705';
-                  showSuccessToast("\u2705 " + cb.dataset.productName + " registrado");
-                } else {
-                  showErrorToast("Error al registrar");
-                  cb.checked = false;
-                  cb.disabled = false;
+              // Generate columns (each product has N columns based on cantidad)
+              var columns = [];
+              products.forEach(function (p) {
+                for (var i = 0; i < p.cantidad; i++) {
+                  columns.push({
+                    productId: p.id,
+                    productName: p.name,
+                    colName:
+                      p.cantidad > 1 ? p.name + " " + (i + 1) : p.producto,
+                    colIndex: i,
+                  });
                 }
               });
-            });
-          });
 
-          // Reset buttons
-          overlay.querySelectorAll(".sp-dba-reset-btn").forEach(function (btn) {
-            btn.addEventListener("click", function () {
-              var productId = parseInt(btn.dataset.productId);
-              var productName = btn.dataset.productName;
-              if (!confirm("\u00bfReiniciar el conteo de " + productName + "?")) return;
-              btn.disabled = true;
-              btn.textContent = "\u23f3 Reiniciando...";
-              chrome.runtime.sendMessage({
-                type: "api-put",
-                endpoint: "/productos/log/reiniciar",
-                body: { fkIdProducto: productId, usuarioModificacion: currentEmail }
-              }, function (resp) {
-                if (resp && resp.success) {
-                  showSuccessToast("\u2705 Conteo de " + productName + " reiniciado");
+              // Build product headers
+              var productHeaders = columns
+                .map(function (col) {
+                  return (
+                    '<th style="padding:6px 10px;text-align:center;">' +
+                    col.colName +
+                    "</th>"
+                  );
+                })
+                .join("");
+
+              // Check product completion
+              var productCompletionMap = {};
+              products.forEach(function (p) {
+                productCompletionMap[p.id] = users.every(function (u) {
+                  return (logCountMap[u.id + "_" + p.id] || 0) >= p.cantidad;
+                });
+              });
+
+              // Build table rows
+              var tableRows = users
+                .map(function (u, idx) {
+                  var cells = columns
+                    .map(function (col) {
+                      var userCount =
+                        logCountMap[u.id + "_" + col.productId] || 0;
+                      var producto = products.find(function (p) {
+                        return p.id === col.productId;
+                      });
+                      var cantidad = producto ? producto.cantidad : 1;
+                      var isMarked = userCount > col.colIndex;
+                      var isMe = u.id === currentUserId;
+                      var timesMarked = isMarked
+                        ? Math.floor(
+                            (userCount - col.colIndex - 1) / cantidad,
+                          ) + 1
+                        : 0;
+                      if (isMe && !isMarked && col.colIndex === userCount) {
+                        return (
+                          '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;"><input type="checkbox" class="sp-dba-check" data-product-id="' +
+                          col.productId +
+                          '" data-product-name="' +
+                          col.colName +
+                          '" data-user-id="' +
+                          u.id +
+                          '" style="cursor:pointer;width:16px;height:16px;"></td>'
+                        );
+                      }
+                      var display = isMarked
+                        ? "\u2705" +
+                          (timesMarked > 1
+                            ? ' <span style="font-size:9px;color:#888;">(x' +
+                              timesMarked +
+                              ")</span>"
+                            : "")
+                        : "\u2014";
+                      return (
+                        '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">' +
+                        display +
+                        "</td>"
+                      );
+                    })
+                    .join("");
+                  var cumpleCell =
+                    '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;color:' +
+                    (u.cumpleColor || "#333") +
+                    ';font-weight:600;">' +
+                    (u.cumple || "-") +
+                    "</td>";
+                  return (
+                    '<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;">' +
+                    (idx + 1) +
+                    '</td><td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:600;">' +
+                    u.nombre +
+                    "</td>" +
+                    cells +
+                    cumpleCell +
+                    "</tr>"
+                  );
+                })
+                .join("");
+
+              // Reset buttons
+              var resetBtnsHTML = "";
+              products.forEach(function (p) {
+                if (productCompletionMap[p.id]) {
+                  resetBtnsHTML +=
+                    '<button class="sp-dba-reset-btn" data-product-id="' +
+                    p.id +
+                    '" data-product-name="' +
+                    p.name +
+                    '" style="padding:6px 14px;border:none;border-radius:6px;background:#1565C0;color:#fff;cursor:pointer;font-size:12px;font-weight:600;margin-right:8px;margin-bottom:4px;">\uD83D\uDD04 Reiniciar ' +
+                    p.name +
+                    "</button>";
+                }
+              });
+
+              // Build modal
+              var overlay = document.createElement("div");
+              overlay.id = "sp-water-modal";
+              overlay.style.cssText =
+                "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+              overlay.innerHTML =
+                '<div style="background:#fff;padding:20px;border-radius:12px;max-width:900px;width:95%;max-height:90vh;overflow:auto;font-family:system-ui;">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+                '<h3 style="margin:0;font-size:16px;">🏠 DBA Info</h3>' +
+                '<button id="sp-water-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>' +
+                "</div>" +
+                '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+                '<thead><tr style="background:#f5f5f5;"><th style="padding:6px 10px;text-align:left;">#</th><th style="padding:6px 10px;text-align:left;">Nombre</th>' +
+                productHeaders +
+                '<th style="padding:6px 10px;text-align:center;">🎂</th></tr></thead>' +
+                "<tbody>" +
+                tableRows +
+                "</tbody></table>" +
+                (resetBtnsHTML
+                  ? '<div style="margin-top:12px;text-align:center;">' +
+                    resetBtnsHTML +
+                    "</div>"
+                  : "") +
+                "</div>";
+              document.body.appendChild(overlay);
+
+              document
+                .getElementById("sp-water-close")
+                .addEventListener("click", function () {
                   overlay.remove();
-                  showWaterModal();
-                } else {
-                  showErrorToast("Error al reiniciar");
-                  btn.disabled = false;
-                  btn.textContent = "\uD83D\uDD04 Reiniciar " + productName;
-                }
+                });
+              overlay.addEventListener("click", function (e) {
+                if (e.target === overlay) overlay.remove();
               });
-            });
-          });
+
+              // Handle checkbox clicks (register product consumption)
+              overlay.querySelectorAll(".sp-dba-check").forEach(function (cb) {
+                cb.addEventListener("change", function () {
+                  if (!cb.checked) return;
+                  cb.disabled = true;
+                  var productId = parseInt(cb.dataset.productId);
+                  var userId = parseInt(cb.dataset.userId);
+                  chrome.runtime.sendMessage(
+                    {
+                      type: "api-post",
+                      endpoint: "/productos/log",
+                      body: {
+                        fkIdProducto: productId,
+                        fkIdUsuario: userId,
+                        usuarioAlta: currentEmail,
+                      },
+                    },
+                    function (resp) {
+                      if (resp && resp.success) {
+                        cb.parentElement.innerHTML = "\u2705";
+                        showSuccessToast(
+                          "\u2705 " + cb.dataset.productName + " registrado",
+                        );
+                      } else {
+                        showErrorToast("Error al registrar");
+                        cb.checked = false;
+                        cb.disabled = false;
+                      }
+                    },
+                  );
+                });
+              });
+
+              // Reset buttons
+              overlay
+                .querySelectorAll(".sp-dba-reset-btn")
+                .forEach(function (btn) {
+                  btn.addEventListener("click", function () {
+                    var productId = parseInt(btn.dataset.productId);
+                    var productName = btn.dataset.productName;
+                    if (
+                      !confirm(
+                        "\u00bfReiniciar el conteo de " + productName + "?",
+                      )
+                    )
+                      return;
+                    btn.disabled = true;
+                    btn.textContent = "\u23f3 Reiniciando...";
+                    chrome.runtime.sendMessage(
+                      {
+                        type: "api-put",
+                        endpoint: "/productos/log/reiniciar",
+                        body: {
+                          fkIdProducto: productId,
+                          usuarioModificacion: currentEmail,
+                        },
+                      },
+                      function (resp) {
+                        if (resp && resp.success) {
+                          showSuccessToast(
+                            "\u2705 Conteo de " + productName + " reiniciado",
+                          );
+                          overlay.remove();
+                          showWaterModal();
+                        } else {
+                          showErrorToast("Error al reiniciar");
+                          btn.disabled = false;
+                          btn.textContent =
+                            "\uD83D\uDD04 Reiniciar " + productName;
+                        }
+                      },
+                    );
+                  });
+                });
+            },
+          );
+        })
+        .catch(function (err) {
+          var lt = document.getElementById("sp-loading-toast");
+          if (lt) lt.remove();
+          showErrorToast("Error: " + (err.message || err));
         });
-      }).catch(function (err) {
-        var lt = document.getElementById("sp-loading-toast"); if (lt) lt.remove();
-        showErrorToast("Error: " + (err.message || err));
-      });
     }
 
     // --- Suggested Comments Button ---
@@ -7712,11 +7889,19 @@
           }
         }
 
-        // Migrate only button (removed - auto-migrate handles this)
+        // Auto-migrate to Monday when opening ticket (if not already there)
         var migrateOnlyBtn = document.getElementById("sp-qd-migrate-btn");
         if (migrateOnlyBtn) {
           migrateOnlyBtn.style.display = "none";
         }
+        (async function () {
+          try {
+            if (!canMigrateMonday) return;
+            var code = t.uniqueCode || "";
+            if (!code) return;
+            await ensureTicketInMonday(ticketId, code);
+          } catch (e) { /* silent */ }
+        })();
 
         // Reopen button - reassigns to current holder to reopen
         var reopenBtn = document.getElementById("sp-qd-reopen-btn");
@@ -8980,7 +9165,7 @@
               '<button id="sp-pending-close-confirm" style="flex:1;padding:10px;border:none;border-radius:6px;background:#2E7D32;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">✅ Cerrar todos</button>' +
               '<button id="sp-pending-close-cancel" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>' +
               "</div>",
-            maxWidth: "450px"
+            maxWidth: "450px",
           });
 
           document
@@ -9286,7 +9471,7 @@
           <button id="sp-monday-close" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;">Cerrar</button>
         </div>`,
         maxWidth: "520px",
-        modalOptions: { maxHeight: "85vh" }
+        modalOptions: { maxHeight: "85vh" },
       });
       const overlay = mondayM.overlay;
       injectSLCopyButtons(overlay);
