@@ -14,12 +14,10 @@
     userName: "",
     userEmail: "",
     profileId: null,
-    notionPageId: null,
     groups: [],
     teamArea: "",
 
     // Permissions
-    canMigrateMonday: false,
     canDragDrop: false,
     btnDashboard: true,
     btnComments: true,
@@ -39,7 +37,6 @@
     // Runtime flags
     versionBlocked: false,
     lastDropTime: 0,
-    hasMondayConfig: false
   };
 
   // ─── Work Schedule Helper ─────────────────────────────────
@@ -62,7 +59,7 @@
 
   // ─── Load persisted state from storage ────────────────────
   function loadPersistedState() {
-    return SP_Storage.getMultiple(["subgroupPerms", "userConfig", "notionUsers", "userEmail", "workSchedule"])
+    return SP_Storage.getMultiple(["subgroupPerms", "userConfig", "usersMap", "userEmail", "workSchedule"])
       .then(function (r) {
         if (r.subgroupPerms) {
           state.canDragDrop = r.subgroupPerms.canDragDrop || false;
@@ -73,8 +70,8 @@
           state.canCommentClosed = r.subgroupPerms.canCommentClosed || false;
           state.canRejectTickets = r.subgroupPerms.canRejectTickets || false;
           state.canDBAInfo = r.subgroupPerms.canDBAInfo || false;
-        } else if (r.notionUsers && r.userEmail) {
-          const u = r.notionUsers[(r.userEmail || "").toLowerCase()];
+        } else if (r.usersMap && r.userEmail) {
+          const u = r.usersMap[(r.userEmail || "").toLowerCase()];
           if (u) {
             state.canDragDrop = !!u.canDragDrop;
             state.btnReassignApp = !!u.canReassignApp;
@@ -119,17 +116,17 @@
       try {
         await Promise.race([
           new Promise(function (resolve) {
-            chrome.runtime.sendMessage({ type: "sync-notion" }, function (resp) { resolve(resp || {}); });
+            chrome.runtime.sendMessage({ type: "sync" }, function (resp) { resolve(resp || {}); });
           }),
           new Promise(function (resolve) { setTimeout(function () { resolve({ timeout: true }); }, 15000); })
         ]);
       } catch (e) { /* ignore */ }
 
       // Read synced data from storage
-      const stored = await SP_Storage.getMultiple(["notionUsers", "userConfig", "workSchedule"]);
+      const stored = await SP_Storage.getMultiple(["usersMap", "userConfig", "workSchedule"]);
       if (stored.workSchedule) state.workSchedule = stored.workSchedule;
 
-      const usersMap = stored.notionUsers || {};
+      const usersMap = stored.usersMap || {};
       const ctx = { userData: usersMap[email] };
 
       if (!ctx.userData) {
@@ -141,7 +138,7 @@
           // Sync might not have finished — retry with increasing delays
           for (var _retryAttempt = 0; _retryAttempt < 3; _retryAttempt++) {
             await new Promise(function (r) { setTimeout(r, 1500 * (_retryAttempt + 1)); });
-            var retryStored = await SP_Storage.get("notionUsers");
+            var retryStored = await SP_Storage.get("usersMap");
             var retryMap = retryStored || {};
             if (retryMap[email]) {
               ctx.userData = retryMap[email];
@@ -169,7 +166,6 @@
 
       // Set state from userData
       if (ctx.userData.profileId) state.profileId = ctx.userData.profileId;
-      state.notionPageId = ctx.userData.notionPageId;
 
       if (ctx.userData.groups && ctx.userData.groups.length > 0) {
         state.groups = ctx.userData.groups;
@@ -177,7 +173,6 @@
       }
 
       // Set permissions
-      state.canMigrateMonday = !!ctx.userData.canMigrate;
       state.btnDashboard = ctx.userData.btnDashboard !== false;
       state.btnComments = ctx.userData.btnComments !== false;
       state.btnReports = ctx.userData.btnReports !== false;
@@ -227,14 +222,12 @@
         canReopenTickets: ctx.userData.canReopenTickets,
         canCommentClosed: ctx.userData.canCommentClosed,
         canRejectTickets: ctx.userData.canRejectTickets,
-        notionPageId: ctx.userData.notionPageId,
         cachedAt: Date.now()
       });
 
       const role = (ctx.userData.roleName && ctx.userData.roleName.toLowerCase().includes("admin")) ? "admin" : "usuario";
       state.userRole = role;
 
-      return { role: role, roleName: ctx.userData.roleName || "usuario", notionPageId: ctx.userData.notionPageId };
     } catch (e) {
       return { role: "usuario", roleName: "Usuario" };
     }
@@ -276,10 +269,10 @@
 
   // ─── Inject Role Label ────────────────────────────────────
   function injectRoleLabel() {
-    SP_Storage.getMultiple(["userEmail", "notionUsers"]).then(function (stored) {
+    SP_Storage.getMultiple(["userEmail", "usersMap"]).then(function (stored) {
       const email = (stored.userEmail || "").toLowerCase();
       if (!email) return;
-      const users = stored.notionUsers || {};
+      const users = stored.usersMap || {};
       const userData = users[email];
       if (!userData || !userData.roleName) return;
 
@@ -318,7 +311,6 @@
     SP_Storage.get("groupMondayConfig").then(function (config) {
       config = config || {};
       const groupId = state.teamArea || (state.groups.length ? state.groups[0] : "");
-      state.hasMondayConfig = !!(groupId && config[groupId] && config[groupId].etiqueta) && state.canMigrateMonday;
     }).catch(function () { });
 
     document.dispatchEvent(new CustomEvent("sp-session-ready", { detail: { state: state } }));

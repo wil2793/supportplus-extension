@@ -29,9 +29,9 @@
   async function handleReportClick() {
     if (_reportState.generating) return;
 
-    const stored = await SP_Storage.getMultiple(["notionUsers", "userEmail", "groupNames"]);
+    const stored = await SP_Storage.getMultiple(["usersMap", "userEmail", "groupNames"]);
     const email = (stored.userEmail || "").toLowerCase();
-    const users = stored.notionUsers || {};
+    const users = stored.usersMap || {};
     const userData = users[email];
     const userGroups = userData ? (userData.groups || []) : [];
     const groupNamesMap = stored.groupNames || {};

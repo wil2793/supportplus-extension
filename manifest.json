@@ -62,8 +62,7 @@
         "features/ticket-actions.js",
         "features/reports.js",
         "features/guardias.js",
-        "content.js",
-        "monday-sync.js"
+        "content.js"
       ],
       "run_at": "document_idle"
     }

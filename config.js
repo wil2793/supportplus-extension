@@ -2,24 +2,10 @@
 // CONFIG.JS - Centralized constants and configuration
 // ============================================================
 
-(function() {
-
+(function () {
   window.SP_CONFIG = {
     // API Base URL
     API_URL: "http://localhost:3500/api",
-
-    // [DEPRECATED] Legacy Notion Database IDs — retained only for backward compatibility
-    // with code that still references them. All Notion endpoints return empty stubs.
-    // These will be fully removed once the Notion references in content.js are cleaned up.
-    NOTION_USERS_DB: "36620e0684b98051a190e51d38d97288",
-    NOTION_ROLES_DB: "36720e0684b9807aba20c1c3d0536c09",
-    NOTION_GROUPS_DB: "36620e0684b9800e9a57df46019a03e0",
-    NOTION_COMMENTS_DB: "36920e0684b980a19fdbd27302a65feb",
-    NOTION_USER_CONFIG_DB: "37320e0684b9806b84ecc4aae906f645",
-    NOTION_SUBGRUPO_DB: "36c20e0684b9800db6afe60707a87df7",
-    NOTION_VERSIONS_DB: "36f20e0684b98004b283ec713d3cde8a",
-    NOTION_PRODUCTS_DB: "36c20e0684b980b7984bc6c5751a1057",
-    NOTION_LOG_DB: "36c20e0684b98030b292c088101e8184",
 
     // Monday.com
     MONDAY_TICKET_COL_ID: "text_mm2c9nhc",
@@ -33,28 +19,47 @@
 
     // SupportPlus API
     SP_API: "https://macropayapi.supportplus.mx/tickets/web",
-    SP_SEARCH_API: "https://macropayapi.supportplus.mx/tickets/search-all-tickets",
+    SP_SEARCH_API:
+      "https://macropayapi.supportplus.mx/tickets/search-all-tickets",
     SP_SESSION_API: "https://macropay.supportplus.mx/api/auth/session",
-    SP_PARTICIPANTS_API: "https://macropayapi.supportplus.mx/ticket-participants/assign-visitor-participant",
+    SP_PARTICIPANTS_API:
+      "https://macropayapi.supportplus.mx/ticket-participants/assign-visitor-participant",
 
     // Reasignación a Aplicaciones
     APPS_GROUP: { id: 53, label: "Soporte Aplicativos y Sistemas (general)" },
 
     // IAM participants (auto-add)
     IAM_PROFILES: [296, 126, 128],
-    IAM_NAMES: ["Carlos Alberto Lopez Mata", "Crhistian Uziel Sanchez Alvarez", "Leyver Adair Vasquez Velasco"],
+    IAM_NAMES: [
+      "Carlos Alberto Lopez Mata",
+      "Crhistian Uziel Sanchez Alvarez",
+      "Leyver Adair Vasquez Velasco",
+    ],
 
     // Monday status mapping: SP status name -> Monday index
     STATUS_MAP: {
-      "cerrado": 1,
-      "asignado": 0,
+      cerrado: 1,
+      asignado: 0,
       "en atención": 0,
       "en espera": 5,
-      "estancado": 2
+      estancado: 2,
     },
 
     // Month names (Spanish)
-    MONTH_NAMES: ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"],
+    MONTH_NAMES: [
+      "Enero",
+      "Febrero",
+      "Marzo",
+      "Abril",
+      "Mayo",
+      "Junio",
+      "Julio",
+      "Agosto",
+      "Septiembre",
+      "Octubre",
+      "Noviembre",
+      "Diciembre",
+    ],
 
     // Priority mapping
     PRIORITY_MAP: { critico: 10, alto: 110, medio: 109, bajo: 7 },
@@ -72,7 +77,7 @@
       CERRADO: 9,
       RECHAZADO: 10,
       CANCELADO: 11,
-      REABIERTO: 35
+      REABIERTO: 35,
     },
 
     // GROUP_INFO - Resolution groups from SupportPlus
@@ -136,19 +141,21 @@
       { id: 88, name: "Soporte a Tiendas - Interno" },
       { id: 89, name: "Viaticos" },
       { id: 90, name: "Compras Tecnologia" },
-      { id: 91, name: "Compras Internas" }
-    ]
+      { id: 91, name: "Compras Internas" },
+    ],
   };
 
   // Helper: map SP status to Monday index
-  window.mapStatusToMonday = function(statusName) {
+  window.mapStatusToMonday = function (statusName) {
     var s = (statusName || "").toLowerCase();
-    return window.SP_CONFIG.STATUS_MAP[s] !== undefined ? window.SP_CONFIG.STATUS_MAP[s] : 5;
+    return window.SP_CONFIG.STATUS_MAP[s] !== undefined
+      ? window.SP_CONFIG.STATUS_MAP[s]
+      : 5;
   };
 
   // Status colors (background for rows/cards)
   window.SP_CONFIG.STATUS_COLORS = {
-    "Asignado": "rgba(33, 150, 243, 0.18)",
+    Asignado: "rgba(33, 150, 243, 0.18)",
     "En validación": "rgba(156, 39, 176, 0.18)",
     "En atención": "rgba(255, 152, 0, 0.18)",
     "Por aprobador": "rgba(121, 85, 72, 0.18)",
@@ -156,16 +163,16 @@
     "Por revisar": "rgba(63, 81, 181, 0.18)",
     "En aplicaciones": "rgba(233, 30, 99, 0.18)",
     "Por confirmar": "rgba(255, 193, 7, 0.20)",
-    "Cerrado": "rgba(76, 175, 80, 0.18)",
-    "Rechazado": "rgba(244, 67, 54, 0.18)",
-    "Cancelado": "rgba(158, 158, 158, 0.20)",
-    "Reabierto": "rgba(255, 87, 34, 0.18)",
-    "En espera": "rgba(255, 235, 59, 0.20)"
+    Cerrado: "rgba(76, 175, 80, 0.18)",
+    Rechazado: "rgba(244, 67, 54, 0.18)",
+    Cancelado: "rgba(158, 158, 158, 0.20)",
+    Reabierto: "rgba(255, 87, 34, 0.18)",
+    "En espera": "rgba(255, 235, 59, 0.20)",
   };
 
   // Status colors (text for labels)
   window.SP_CONFIG.STATUS_TEXT_COLORS = {
-    "Asignado": "#1565C0",
+    Asignado: "#1565C0",
     "En validación": "#7B1FA2",
     "En atención": "#E65100",
     "Por aprobador": "#5D4037",
@@ -173,11 +180,10 @@
     "Por revisar": "#283593",
     "En aplicaciones": "#C2185B",
     "Por confirmar": "#F9A825",
-    "Cerrado": "#2E7D32",
-    "Rechazado": "#C62828",
-    "Cancelado": "#616161",
-    "Reabierto": "#D84315",
-    "En espera": "#F57F17"
+    Cerrado: "#2E7D32",
+    Rechazado: "#C62828",
+    Cancelado: "#616161",
+    Reabierto: "#D84315",
+    "En espera": "#F57F17",
   };
-
 })();

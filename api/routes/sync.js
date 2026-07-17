@@ -85,7 +85,7 @@ router.get("/", asyncHandler(async (req, res) => {
       groups: userGroups,
       profileId: u.IdUsuario,
       active: true,
-      canMigrate: userRoles.some(r => r.includes("migrar monday")),
+      canMigrate: !!u.TokenMonday,
       btnDashboard: userRoles.some(r => r.includes("dashboard")),
       btnComments: userRoles.some(r => r.includes("comentarios sugeridos")),
       btnReports: userRoles.some(r => r.includes("reporte excel")),

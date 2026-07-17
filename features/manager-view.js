@@ -627,8 +627,8 @@
     const contentEl = document.getElementById("sp-birthday-content");
     if (!contentEl) return;
 
-    chrome.storage.local.get(["notionUsers"], function (stored) {
-      const usersMap = stored.notionUsers || {};
+    chrome.storage.local.get(["usersMap"], function (stored) {
+      const usersMap = stored.usersMap || {};
       const now = new Date();
       const today = (now.getMonth() + 1) * 100 + now.getDate(); // MMDD as number
 

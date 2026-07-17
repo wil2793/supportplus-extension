@@ -72,9 +72,8 @@ async function syncFromAPI() {
   };
 
   await chrome.storage.local.set({
-    notionUsers: d.usersMap,
-    notionRoles: d.rolesList,
-    notionRolesGroups: {},
+    usersMap: d.usersMap,
+    rolesList: d.rolesList,
     groupNames: d.groupNames,
     groupMondayConfig: storedData.groupMondayConfig || {},
     suggestedComments: d.suggestedComments,
@@ -84,7 +83,7 @@ async function syncFromAPI() {
     allVersions: d.allVersions,
     userConfig,
     workSchedule,
-    notionSyncTime: Date.now()
+    syncTime: Date.now()
   });
 
   console.log("[SP] Synced:", Object.keys(d.usersMap).length, "users, v:", d.latestVersion);
@@ -112,7 +111,7 @@ chrome.runtime.onStartup.addListener(() => syncWithRetry());
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const handle = async () => {
     switch (msg.type) {
-      case "sync-notion":
+      case "sync":
         await syncFromAPI();
         return { success: true };
 
@@ -144,20 +143,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const buffer = await res.blob().then(b => b.arrayBuffer());
         return { success: true, data: Array.from(new Uint8Array(buffer)) };
       }
-
-      // Legacy Notion handlers — return empty responses so content.js doesn't crash
-      case "notion-query":
-        return { success: true, data: { results: [] } };
-      case "notion-create":
-        return { success: true, data: { id: "stub" } };
-      case "notion-update":
-        return { success: true, data: {} };
-      case "notion-delete":
-        return { success: true, data: {} };
-      case "notion-page":
-        return { success: true, data: { properties: {} } };
-      case "notion-pages-batch":
-        return { success: true, data: [] };
 
       default:
         return { success: false, error: "Unknown type: " + msg.type };

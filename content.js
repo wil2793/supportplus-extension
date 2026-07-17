@@ -42,7 +42,7 @@
   var _ss = window.SP_Session.state;
   var currentUserRole = _ss.userRole;
   var currentUserGroups = _ss.groups;
-  var canMigrateMonday = _ss.canMigrateMonday;
+  // canMigrateMonday removed
   var canDragDrop = _ss.canDragDrop;
   var _btnDashboard = _ss.btnDashboard;
   var _btnComments = _ss.btnComments;
@@ -54,7 +54,6 @@
   var _canCommentClosed = _ss.canCommentClosed;
   var _canRejectTickets = _ss.canRejectTickets;
   var _lastDropTime = 0;
-  var _mondayGroupCache = {};
   var _autoMigrateQueue = Promise.resolve();
   var _userConfig = _ss.userConfig;
   var _workSchedule = _ss.workSchedule;
@@ -107,15 +106,37 @@
         ticketDate.getMonth(),
       );
       if (!boardId) return false;
+
+      // Get board groups
       var boardData = await mondayQuery(
         mondayToken,
         "query ($boardId: [ID!]!) { boards(ids: $boardId) { id groups { id title } } }",
         { boardId: boardId },
       );
       var boards = boardData.boards || [];
-      if (!boards.length || !boards[0].groups || !boards[0].groups.length)
-        return false;
-      var groupId = boards[0].groups[0].id;
+      if (!boards.length) return false;
+
+      // Determine group by department name (default: Macropay)
+      var department = (t.ticketInfo && t.ticketInfo.departmentName) || "Macropay";
+      var boardGroups = boards[0].groups || [];
+      var targetGroup = boardGroups.find(function (g) {
+        return g.title.trim().toLowerCase() === department.trim().toLowerCase();
+      });
+
+      // If group doesn't exist, create it
+      var groupId;
+      if (targetGroup) {
+        groupId = targetGroup.id;
+      } else {
+        var createGroupRes = await mondayQuery(
+          mondayToken,
+          'mutation ($boardId: ID!, $groupName: String!) { create_group(board_id: $boardId, group_name: $groupName) { id } }',
+          { boardId: boardId, groupName: department }
+        );
+        groupId = createGroupRes.create_group && createGroupRes.create_group.id;
+        if (!groupId) return false;
+      }
+
       var url = BASE_URL + "/" + ticketId;
       var desc = (t.description || "").replace(/<[^>]*>/g, "");
       var itemName = t.subject || "Sin asunto";
@@ -154,6 +175,7 @@
         cronograma_mkn9hwe3: { from: createdDate, to: createdDate },
         link_mknkdctz: { url: url, text: uniqueCode || url },
         text_mm2c9nhc: uniqueCode || String(ticketId),
+        text_mm44vbfc: String(ticketId),
       });
       var result = await mondayQuery(
         mondayToken,
@@ -177,7 +199,7 @@
 
   async function updateMondayPerson(ticketId, uniqueCode, analystEmail) {
     try {
-      if (!canMigrateMonday) return;
+      // canMigrateMonday removed - only token check needed
       var mondayToken = await window.SP_API_Lib.getMondayToken();
       if (!mondayToken || !analystEmail) return;
       var code = uniqueCode || String(ticketId);
@@ -195,7 +217,7 @@
 
   async function updateMondayStatus(ticketId, uniqueCode, newStatusName) {
     try {
-      if (!canMigrateMonday) return;
+      // canMigrateMonday removed - only token check needed
       var mondayToken = await window.SP_API_Lib.getMondayToken();
       if (!mondayToken) return;
       var code = uniqueCode || String(ticketId);
@@ -250,7 +272,7 @@
     var ss = window.SP_Session.state;
     currentUserRole = ss.userRole;
     currentUserGroups = ss.groups;
-    canMigrateMonday = ss.canMigrateMonday;
+    // canMigrateMonday removed
     canDragDrop = ss.canDragDrop;
     _btnDashboard = ss.btnDashboard;
     _btnComments = ss.btnComments;
@@ -282,7 +304,6 @@
         var groupId =
           window.SP_Session.state.teamArea ||
           (currentUserGroups.length ? currentUserGroups[0] : "");
-        hasMondayConfig =
           !!(groupId && config[groupId] && config[groupId].etiqueta) &&
           canMigrateMonday;
       })
@@ -372,11 +393,7 @@
       };
     }
 
-    // [DEPRECATED] resolveGroupPageId — Notion is no longer used.
-    // Returns empty string. Callers are safe: saveTicketPendingClose accepts null/empty for groupId.
-    async function resolveGroupPageId(groupId) {
-      return "";
-    }
+    
 
     // Helper: add hover text toggle to a button (disabled-aware)
     function hoverText(btn, normal, hover) {
@@ -1060,7 +1077,7 @@
     }
 
     function injectBulkButton() {
-      if (!canMigrateMonday) return;
+      // canMigrateMonday removed - only token check needed
       if (document.getElementById(BULK_BTN_ID)) return;
       let container = document.querySelector(".MuiBox-root .MuiStack-root");
       let insertMethod = "prepend";
@@ -1269,7 +1286,6 @@
     // --- Team panel ---
     const TEAM_PANEL_ID = "sp-team-panel";
     var teamPanelLoading = false;
-    var hasMondayConfig = false;
     var mondayBoardConfigured = false;
 
     // Check if current group has Monday config
@@ -1284,13 +1300,10 @@
           config[groupId] &&
           config[groupId].etiqueta
         );
-        hasMondayConfig = mondayBoardConfigured && canMigrateMonday;
       });
     } catch (e) {}
 
-    // Re-check hasMondayConfig after role is loaded (called from initByRole)
     function updateMondayConfig() {
-      hasMondayConfig = mondayBoardConfigured && canMigrateMonday;
     }
 
     const TEAM_AREAS = {};
@@ -2664,25 +2677,21 @@
                 try {
                   var storedP = await new Promise(function (r) {
                     chrome.storage.local.get(
-                      ["notionUsers", "userEmail"],
+                      ["usersMap", "userEmail"],
                       function (d) {
                         r(d);
                       },
                     );
                   });
                   var pEmail = (storedP.userEmail || "").toLowerCase();
-                  var pUsers = storedP.notionUsers || {};
-                  var pUserPageId =
-                    pEmail && pUsers[pEmail] ? pUsers[pEmail].notionPageId : "";
-                  if (pUserPageId) {
-                    var pGroupPageId = await resolveGroupPageId(
-                      getTeamConfig().resolutionGroupId,
-                    );
+                  var pUsers = storedP.usersMap || {};
+                  var pUser = pUsers[pEmail];
+                  if (pUser && pUser.idUsuario) {
                     await saveTicketPendingClose(
                       info?.uniqueCode || "T" + ticketId,
                       ticketId,
-                      pUserPageId,
-                      pGroupPageId,
+                      String(pUser.idUsuario),
+                      "",
                     );
                   }
                 } catch (e) {}
@@ -3717,10 +3726,10 @@
                 token = mondayTokenInput;
                 var encoded = btoa(mondayTokenInput);
                 chrome.storage.local.get(
-                  ["notionUsers", "userEmail"],
+                  ["usersMap", "userEmail"],
                   function (nd) {
                     var email = (nd.userEmail || "").toLowerCase();
-                    var users = nd.notionUsers || {};
+                    var users = nd.usersMap || {};
                     var user = users[email];
                     if (user && user.idUsuario) {
                       chrome.runtime.sendMessage({
@@ -3749,12 +3758,12 @@
                     blacklistProfileIds.push(parseInt(cb.dataset.pid));
                 });
               }
-              // Save to Notion user config
+              // Save user config to API
               chrome.storage.local.get(
-                ["userConfig", "notionUsers", "userEmail"],
+                ["userConfig", "usersMap", "userEmail"],
                 function (nd) {
                   var email = (nd.userEmail || "").toLowerCase();
-                  var users = nd.notionUsers || {};
+                  var users = nd.usersMap || {};
                   var user = users[email];
 
                   // Save config to API — resolve user by email via background
@@ -4564,12 +4573,12 @@
             };
           });
 
-          // Build user list from usersMap (stored as notionUsers)
+          // Build user list from usersMap (stored as usersMap)
           chrome.storage.local.get(
-            ["notionUsers", "userEmail"],
+            ["usersMap", "userEmail"],
             function (stored) {
               var currentEmail = (stored.userEmail || "").toLowerCase();
-              var usersMap = stored.notionUsers || {};
+              var usersMap = stored.usersMap || {};
               var currentUser = usersMap[currentEmail];
               var currentUserId = currentUser ? currentUser.idUsuario : null;
 
@@ -4913,48 +4922,8 @@
       var userPageId = null;
       var today = new Date().toISOString().slice(0, 10);
 
-      // Get group page ID and user page ID
-      chrome.storage.local.get(["notionUsers", "userEmail"], function (stored) {
-        var email = (stored.userEmail || "").toLowerCase();
-        var users = stored.notionUsers || {};
-        // Find user pageId by searching Notion users DB
-        chrome.runtime.sendMessage(
-          {
-            type: "notion-query",
-            dbId: "36620e0684b98051a190e51d38d97288",
-            body: {},
-          },
-          function (resp) {
-            if (resp && resp.success && resp.data.results) {
-              var foundUser = resp.data.results.find(function (p) {
-                var correo = (
-                  p.properties.Correo?.rich_text?.[0]?.plain_text || ""
-                ).toLowerCase();
-                return correo === email;
-              });
-              if (foundUser) userPageId = foundUser.id;
-            }
-          },
-        );
-        chrome.runtime.sendMessage(
-          {
-            type: "notion-query",
-            dbId: "36620e0684b9800e9a57df46019a03e0",
-            body: {},
-          },
-          function (resp) {
-            if (resp && resp.success && resp.data.results) {
-              var found = resp.data.results.find(function (p) {
-                var idSP =
-                  p.properties.IdSupportPlus?.rich_text?.[0]?.plain_text ||
-                  p.properties.IdSupportPlus?.title?.[0]?.plain_text;
-                return idSP === String(groupId);
-              });
-              if (found) groupPageId = found.id;
-            }
-          },
-        );
-      });
+      // Variables for suggested comments
+      var groupId = getTeamConfig().resolutionGroupId;
 
       function loadList() {
         var listDiv = document.getElementById("sp-sug-list");
@@ -5000,14 +4969,14 @@
               };
               chrome.runtime.sendMessage(
                 {
-                  type: "notion-update",
+                  type: "api-put",
                   pageId: btn.dataset.id,
                   body: { properties: updateProps },
                 },
                 function () {
                   btn.textContent = "✅";
                   chrome.runtime.sendMessage(
-                    { type: "sync-notion" },
+                    { type: "sync" },
                     function () {
                       loadList();
                     },
@@ -5032,7 +5001,7 @@
                 };
               chrome.runtime.sendMessage(
                 {
-                  type: "notion-update",
+                  type: "api-put",
                   pageId: btn.dataset.id,
                   body: { properties: deleteProps },
                 },
@@ -5040,7 +5009,7 @@
                   var row = btn.closest("[data-id]");
                   if (row) row.remove();
                   chrome.runtime.sendMessage(
-                    { type: "sync-notion" },
+                    { type: "sync" },
                     function () {
                       loadList();
                     },
@@ -5053,7 +5022,7 @@
       }
 
       // Sync first, then load list
-      chrome.runtime.sendMessage({ type: "sync-notion" }, function () {
+      chrome.runtime.sendMessage({ type: "sync" }, function () {
         loadList();
       });
 
@@ -5079,7 +5048,7 @@
           };
           chrome.runtime.sendMessage(
             {
-              type: "notion-create",
+              type: "api-post",
               body: {
                 parent: { database_id: "36920e0684b980a19fdbd27302a65feb" },
                 properties: createProps,
@@ -5090,7 +5059,7 @@
               addBtn.disabled = false;
               addBtn.textContent = "+ Agregar";
               showSuccessToast("Comentario agregado");
-              chrome.runtime.sendMessage({ type: "sync-notion" }, function () {
+              chrome.runtime.sendMessage({ type: "sync" }, function () {
                 loadList();
               });
             },
@@ -5580,13 +5549,13 @@
         var json = await res.json();
         var t = json.data || json;
 
-        // Check if ticket is pending close in Notion
+        // Check if ticket is pending close
         var isPendingClose = false;
         try {
           var pendingResp = await new Promise(function (resolve) {
             chrome.runtime.sendMessage(
               {
-                type: "notion-query",
+                type: "api-get",
                 dbId: "38420e0684b980d682ccfac983fc1780",
                 body: {
                   filter: {
@@ -5625,7 +5594,7 @@
             if (!mondayToken) {
               // Force sync and retry once
               await new Promise(function (r) {
-                chrome.runtime.sendMessage({ type: "sync-notion" }, r);
+                chrome.runtime.sendMessage({ type: "sync" }, r);
               });
               await new Promise(function (r) {
                 setTimeout(r, 2000);
@@ -5733,7 +5702,7 @@
         var serviceName = t.service?.name || "";
         var groupName = t.resolutionGroup?.name || "";
 
-        // Subgroup permissions already loaded in checkSession from Notion directly
+        // Subgroup permissions loaded from API sync
         var _canCommentClosedResolved = _canCommentClosed;
         var _canReopenTicketsResolved = _canReopenTickets;
         // Fallback: read from storage if not loaded yet
@@ -5927,7 +5896,6 @@
               return "";
             var isMigrated =
               t.uniqueCode && getCache() && getCache()[t.uniqueCode];
-            var showMondayOption = hasMondayConfig && !isMigrated;
             var closeHTML =
               '<div style="margin-bottom:8px;">' +
               '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">' +
@@ -5949,7 +5917,6 @@
           })() +
           // Migrate only (if closed, not migrated, and Monday configured)
           (statusName === "Cerrado" &&
-          hasMondayConfig &&
           !(t.uniqueCode && getCache() && getCache()[t.uniqueCode])
             ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
               '<button id="sp-qd-migrate-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🙂 Migrar a Monday</button>' +
@@ -7381,7 +7348,7 @@
                     try {
                       var storedPending = await new Promise(function (r) {
                         chrome.storage.local.get(
-                          ["notionUsers", "userEmail"],
+                          ["usersMap", "userEmail"],
                           function (d) {
                             r(d);
                           },
@@ -7390,20 +7357,14 @@
                       var pendingEmail = (
                         storedPending.userEmail || ""
                       ).toLowerCase();
-                      var pendingUsers = storedPending.notionUsers || {};
-                      var pendingUserPageId =
-                        pendingEmail && pendingUsers[pendingEmail]
-                          ? pendingUsers[pendingEmail].notionPageId
-                          : "";
-                      if (pendingUserPageId) {
-                        var pendGroupPageId = await resolveGroupPageId(
-                          getTeamConfig().resolutionGroupId,
-                        );
+                      var pendingUsers = storedPending.usersMap || {};
+                      var pendingUser = pendingEmail ? pendingUsers[pendingEmail] : null;
+                      if (pendingUser && pendingUser.idUsuario) {
                         await saveTicketPendingClose(
                           t.uniqueCode || "T" + ticketId,
                           ticketId,
-                          pendingUserPageId,
-                          pendGroupPageId,
+                          String(pendingUser.idUsuario),
+                          "",
                         );
                       }
                     } catch (e) {}
@@ -7599,7 +7560,7 @@
           closeActionBtn.addEventListener("click", async function () {
             // Check if within work hours
             if (!isWithinWorkHours()) {
-              // Outside work hours - save to Notion and show warning
+              // Outside work hours - save to API and show warning
               closeForm.style.display = "none";
               var warningDiv = document.getElementById(
                 "sp-qd-outside-hours-warning",
@@ -7622,27 +7583,24 @@
                 _workSchedule.diaFinal +
                 ').<br><span id="sp-qd-saving-pending" style="color:#888;margin-top:4px;display:inline-block;">Guardando...</span>';
               closeActionBtn.parentElement.appendChild(warningDiv);
-              // Save to Notion
+              // Save pending close
               try {
                 var analystPageId = "";
                 var storedData = await new Promise(function (r) {
-                  chrome.storage.local.get(["notionUsers"], function (d) {
+                  chrome.storage.local.get(["usersMap"], function (d) {
                     r(d);
                   });
                 });
-                var users = storedData.notionUsers || {};
-                // Use the ticket's analyst (holder) email to find their Notion page
+                var users = storedData.usersMap || {};
+                // Use the ticket holder email to find their user ID
                 var analystEmail = (
                   t.ticketHolder?.ticketHolderLog?.email || ""
                 ).toLowerCase();
                 if (analystEmail && users[analystEmail]) {
-                  analystPageId = users[analystEmail].notionPageId || "";
                 }
                 if (!analystPageId)
-                  throw new Error("No se encontró al analista en Notion");
-                var closeGroupPageId = await resolveGroupPageId(
-                  getTeamConfig().resolutionGroupId,
-                );
+                  throw new Error("No se encontró al analista");
+                var closeGroupPageId = "";
                 await saveTicketPendingClose(
                   t.uniqueCode || "T" + ticketId,
                   ticketId,
@@ -7896,10 +7854,26 @@
         }
         (async function () {
           try {
-            if (!canMigrateMonday) return;
+            // canMigrateMonday removed - only token check needed
+            var mondayToken = await getMondayToken();
+            if (!mondayToken) return;
             var code = t.uniqueCode || "";
             if (!code) return;
-            await ensureTicketInMonday(ticketId, code);
+
+            // Check if exists in Monday
+            var cached = getCache() || {};
+            var existingItemId = cached[code] || await checkTicketExistsInMonday(mondayToken, code);
+
+            if (existingItemId) {
+              addToCache(code, existingItemId);
+              // Update status and person if different
+              var currentStatus = (t.ticketStatusName || "").toLowerCase();
+              var holderEmail = t.ticketHolder && t.ticketHolder.ticketHolderLog ? t.ticketHolder.ticketHolderLog.email || "" : "";
+              await window.SP_MondayUtils.updateMondayItem(mondayToken, code, { statusName: currentStatus, email: holderEmail });
+            } else {
+              // Create it
+              await ensureTicketInMonday(ticketId, code);
+            }
           } catch (e) { /* silent */ }
         })();
 
@@ -8836,7 +8810,7 @@
     _folioObserver.observe(document.body, { childList: true, subtree: true });
     setTimeout(injectFolioButtons, 500);
 
-    // Inject row buttons and basic header (no Notion dependency)
+    // Inject row buttons and basic header
     function injectButtonsImmediate() {
       injectConfigButton();
       injectSearchButton();
@@ -9054,13 +9028,11 @@
       var grid = document.querySelector(".MuiDataGrid-root");
       if (!grid) return;
       try {
-        var groupPageId = await resolveGroupPageId(
-          getTeamConfig().resolutionGroupId,
-        );
+        var groupPageId = "";
         var pendingResp = await new Promise(function (resolve) {
           chrome.runtime.sendMessage(
             {
-              type: "notion-query",
+              type: "api-get",
               dbId: "38420e0684b980d682ccfac983fc1780",
               body: groupPageId
                 ? {
@@ -9204,9 +9176,9 @@
                     ticketData.ticketStatus?.type?.name === "Cerrado";
 
                   if (alreadyClosed) {
-                    // Already closed — just mark in Notion
+                    // Already closed — mark as done
                     chrome.runtime.sendMessage({
-                      type: "notion-update",
+                      type: "api-put",
                       pageId: ticketList[i].pageId,
                       body: { properties: { Cerrado: { checkbox: true } } },
                     });
@@ -9230,7 +9202,7 @@
                     if (!closeRes.ok)
                       throw new Error("HTTP " + closeRes.status);
                     chrome.runtime.sendMessage({
-                      type: "notion-update",
+                      type: "api-put",
                       pageId: ticketList[i].pageId,
                       body: { properties: { Cerrado: { checkbox: true } } },
                     });
@@ -9787,11 +9759,11 @@
     };
   } // end initExtension
 
-  // Re-sync Notion on page focus (detect changes without reload)
+  // Re-sync on page focus (detect changes without reload)
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") {
       try {
-        chrome.runtime.sendMessage({ type: "sync-notion" }, function () {
+        chrome.runtime.sendMessage({ type: "sync" }, function () {
           // Refresh work schedule
           chrome.storage.local.get("workSchedule", function (ws) {
             if (ws.workSchedule) _workSchedule = ws.workSchedule;
