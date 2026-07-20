@@ -7,8 +7,8 @@ const config = {
   password: process.env.DB_PASSWORD || "",
   port: parseInt(process.env.DB_PORT) || 1433,
   options: {
-    encrypt: true,
-    trustServerCertificate: true
+    encrypt: false,
+    trustServerCertificate: false
   },
   pool: {
     max: 10,

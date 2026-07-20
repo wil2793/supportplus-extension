@@ -6,7 +6,7 @@ const router = Router();
 router.get("/", asyncHandler(async (req, res) => {
   const rows = await query(`
     SELECT IdUsuario, Nombre, Correo, CargoCompleto
-    FROM vw_MSP_Usuario WITH (NOLOCK)
+    FROM vw_ESP_Usuario WITH (NOLOCK)
     ORDER BY Nombre
   `);
   success(res, rows);
@@ -16,7 +16,7 @@ router.get("/", asyncHandler(async (req, res) => {
 router.get("/:id", asyncHandler(async (req, res) => {
   const row = await queryOne(
     `SELECT IdUsuario, Nombre, Correo, TokenMonday, FechaCumpleanos, Cargo, NivelCargo, CargoCompleto
-     FROM vw_MSP_Usuario WITH (NOLOCK)
+     FROM vw_ESP_Usuario WITH (NOLOCK)
      WHERE IdUsuario = @id`,
     { id: { type: sql.Int, value: req.params.id } }
   );
@@ -28,7 +28,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
 router.get("/correo/:correo", asyncHandler(async (req, res) => {
   const row = await queryOne(
     `SELECT IdUsuario, Nombre, Correo, TokenMonday, FechaCumpleanos, Cargo, NivelCargo, CargoCompleto
-     FROM vw_MSP_Usuario WITH (NOLOCK)
+     FROM vw_ESP_Usuario WITH (NOLOCK)
      WHERE Correo = @correo`,
     { correo: { type: sql.VarChar(150), value: req.params.correo } }
   );
@@ -40,8 +40,8 @@ router.get("/correo/:correo", asyncHandler(async (req, res) => {
 router.get("/:id/grupos", asyncHandler(async (req, res) => {
   const rows = await query(
     `SELECT g.IdcatGrupo, g.Nombre
-     FROM MSP_rel_UsuarioGrupo ug
-     INNER JOIN MSP_cat_Grupo g ON ug.FK_IdcatGrupo = g.IdcatGrupo
+     FROM ESP_rel_UsuarioGrupo ug
+     INNER JOIN ESP_cat_Grupo g ON ug.FK_IdcatGrupo = g.IdcatGrupo
      WHERE ug.FK_IdUsuario = @id AND ug.Activo = 1 AND g.Activo = 1`,
     { id: { type: sql.Int, value: req.params.id } }
   );
@@ -52,8 +52,8 @@ router.get("/:id/grupos", asyncHandler(async (req, res) => {
 router.get("/:id/roles", asyncHandler(async (req, res) => {
   const rows = await query(
     `SELECT r.IdcatRol, r.Nombre, r.Descripcion
-     FROM MSP_rel_UsuarioRol ur
-     INNER JOIN MSP_cat_Rol r ON ur.FK_IdcatRol = r.IdcatRol
+     FROM ESP_rel_UsuarioRol ur
+     INNER JOIN ESP_cat_Rol r ON ur.FK_IdcatRol = r.IdcatRol
      WHERE ur.FK_IdUsuario = @id AND ur.Activo = 1 AND r.Activo = 1`,
     { id: { type: sql.Int, value: req.params.id } }
   );
@@ -66,7 +66,7 @@ router.post("/", asyncHandler(async (req, res) => {
   if (!nombre || !correo) return fail(res, "nombre y correo son requeridos");
 
   const inserted = await insertOne(
-    `INSERT INTO MSP_Usuario (Nombre, Correo, FK_IdcatCargo, FK_IdcatNivelCargo, TokenMonday, UsuarioAlta)
+    `INSERT INTO ESP_Usuario (Nombre, Correo, FK_IdcatCargo, FK_IdcatNivelCargo, TokenMonday, UsuarioAlta)
      OUTPUT INSERTED.IdUsuario
      VALUES (@nombre, @correo, @cargo, @nivel, @token, @usuario)`,
     {
@@ -86,7 +86,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
   const { nombre, correo, fkIdcatCargo, fkIdcatNivelCargo, tokenMonday, usuarioModificacion } = req.body;
 
   await execute(
-    `UPDATE MSP_Usuario SET
+    `UPDATE ESP_Usuario SET
        Nombre = ISNULL(@nombre, Nombre),
        Correo = ISNULL(@correo, Correo),
        FK_IdcatCargo = ISNULL(@cargo, FK_IdcatCargo),
@@ -112,7 +112,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
 router.delete("/:id", asyncHandler(async (req, res) => {
   const { usuarioBaja } = req.body;
   await execute(
-    `UPDATE MSP_Usuario SET Activo = 0, UsuarioBaja = @usuario, FechaBaja = GETDATE() WHERE IdUsuario = @id`,
+    `UPDATE ESP_Usuario SET Activo = 0, UsuarioBaja = @usuario, FechaBaja = GETDATE() WHERE IdUsuario = @id`,
     {
       id: { type: sql.Int, value: req.params.id },
       usuario: { type: sql.VarChar(50), value: usuarioBaja || "SISTEMA" }

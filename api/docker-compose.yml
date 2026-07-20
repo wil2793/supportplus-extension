@@ -8,9 +8,9 @@ services:
       - "3500:3500"
     environment:
       - PORT=3500
-      - DB_SERVER=host.docker.internal
-      - DB_NAME=SupportPlusDB
-      - DB_USER=sa
-      - DB_PASSWORD=23jun95L
+      - DB_SERVER=10.60.29.89
+      - DB_NAME=ExtensionSupportPlus
+      - DB_USER=dba-william_alpuche_shamb
+      - DB_PASSWORD=KpjfCk92{t/.%!6}!IDQ
       - DB_PORT=1433
     restart: unless-stopped

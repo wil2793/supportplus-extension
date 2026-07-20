@@ -10,28 +10,28 @@ router.get("/", asyncHandler(async (req, res) => {
   const [usuariosResult, rolesResult, gruposResult, comentariosResult, versionesResult, configResult, usuarioGrupoResult, usuarioRolResult] = await Promise.all([
     pool.request().query(`
       SELECT IdUsuario, Nombre, Correo, TokenMonday, FechaCumpleanos, CargoCompleto
-      FROM vw_MSP_Usuario WITH (NOLOCK)
+      FROM vw_ESP_Usuario WITH (NOLOCK)
     `),
-    pool.request().query(`SELECT IdcatRol, Nombre FROM MSP_cat_Rol WHERE Activo = 1`),
-    pool.request().query(`SELECT IdcatGrupo, Nombre FROM MSP_cat_Grupo WHERE Activo = 1`),
+    pool.request().query(`SELECT IdcatRol, Nombre FROM ESP_cat_Rol WHERE Activo = 1`),
+    pool.request().query(`SELECT IdcatGrupo, Nombre FROM ESP_cat_Grupo WHERE Activo = 1`),
     pool.request().query(`
       SELECT cs.IdComentarioSugerido, cs.Nombre, cs.Comentario, cs.FK_IdcatGrupo, g.IdcatGrupo AS GrupoIdSP
-      FROM MSP_ComentarioSugerido cs
-      INNER JOIN MSP_cat_Grupo g ON cs.FK_IdcatGrupo = g.IdcatGrupo
+      FROM ESP_ComentarioSugerido cs
+      INNER JOIN ESP_cat_Grupo g ON cs.FK_IdcatGrupo = g.IdcatGrupo
       WHERE cs.Activo = 1
     `),
-    pool.request().query(`SELECT IdVersion, Version, Cambio, ArchivoZipUrl FROM MSP_Version WHERE Activo = 1 ORDER BY IdVersion DESC`),
-    pool.request().query(`SELECT Nombre, Valor FROM MSP_Configuracion WHERE Activo = 1`),
+    pool.request().query(`SELECT IdVersion, Version, Cambio, ArchivoZipUrl FROM ESP_Version WHERE Activo = 1 ORDER BY IdVersion DESC`),
+    pool.request().query(`SELECT Nombre, Valor FROM ESP_Configuracion WHERE Activo = 1`),
     pool.request().query(`
       SELECT ug.FK_IdUsuario, g.IdcatGrupo
-      FROM MSP_rel_UsuarioGrupo ug
-      INNER JOIN MSP_cat_Grupo g ON ug.FK_IdcatGrupo = g.IdcatGrupo
+      FROM ESP_rel_UsuarioGrupo ug
+      INNER JOIN ESP_cat_Grupo g ON ug.FK_IdcatGrupo = g.IdcatGrupo
       WHERE ug.Activo = 1 AND g.Activo = 1
     `),
     pool.request().query(`
       SELECT ur.FK_IdUsuario, r.Nombre AS RolNombre
-      FROM MSP_rel_UsuarioRol ur
-      INNER JOIN MSP_cat_Rol r ON ur.FK_IdcatRol = r.IdcatRol
+      FROM ESP_rel_UsuarioRol ur
+      INNER JOIN ESP_cat_Rol r ON ur.FK_IdcatRol = r.IdcatRol
       WHERE ur.Activo = 1 AND r.Activo = 1
     `)
   ]);

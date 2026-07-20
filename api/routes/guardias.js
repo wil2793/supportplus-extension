@@ -13,7 +13,7 @@ router.get("/", asyncHandler(async (req, res) => {
 
   const rows = await query(
     `SELECT IdControlGuardia, Fecha, FK_IdUsuario, UsuarioNombre, UsuarioCorreo
-     FROM vw_MSP_ControlGuardia WITH (NOLOCK)
+     FROM vw_ESP_ControlGuardia WITH (NOLOCK)
      WHERE Fecha >= @start AND Fecha <= @end
      ORDER BY Fecha`,
     {
@@ -36,7 +36,7 @@ router.post("/", asyncHandler(async (req, res) => {
 
   // Create guardia entry
   const inserted = await insertOne(
-    `INSERT INTO MSP_ControlGuardia (Fecha, UsuarioAlta)
+    `INSERT INTO ESP_ControlGuardia (Fecha, UsuarioAlta)
      OUTPUT INSERTED.IdControlGuardia
      VALUES (@fecha, @alta)`,
     {
@@ -50,7 +50,7 @@ router.post("/", asyncHandler(async (req, res) => {
   // Insert relationship(s)
   for (const uid of usuarios) {
     await execute(
-      `INSERT INTO MSP_rel_ControlGuardiaUsuario (FK_IdControlGuardia, FK_IdUsuario, UsuarioAlta)
+      `INSERT INTO ESP_rel_ControlGuardiaUsuario (FK_IdControlGuardia, FK_IdUsuario, UsuarioAlta)
        VALUES (@idGuardia, @idUsuario, @alta)`,
       {
         idGuardia: { type: sql.Int, value: idGuardia },
@@ -72,18 +72,18 @@ router.put("/:id/agregar-usuario", asyncHandler(async (req, res) => {
   const alta = usuarioAlta || "SISTEMA";
 
   // Check guardia exists
-  const guardia = await queryOne("SELECT 1 FROM MSP_ControlGuardia WHERE IdControlGuardia = @id AND Activo = 1", { id: { type: sql.Int, value: idGuardia } });
+  const guardia = await queryOne("SELECT 1 FROM ESP_ControlGuardia WHERE IdControlGuardia = @id AND Activo = 1", { id: { type: sql.Int, value: idGuardia } });
   if (!guardia) return fail(res, "Guardia no encontrada", 404);
 
   // Check not already assigned
   const exists = await queryOne(
-    "SELECT 1 FROM MSP_rel_ControlGuardiaUsuario WHERE FK_IdControlGuardia = @idG AND FK_IdUsuario = @idU AND Activo = 1",
+    "SELECT 1 FROM ESP_rel_ControlGuardiaUsuario WHERE FK_IdControlGuardia = @idG AND FK_IdUsuario = @idU AND Activo = 1",
     { idG: { type: sql.Int, value: idGuardia }, idU: { type: sql.Int, value: fkIdUsuario } }
   );
   if (exists) return fail(res, "Usuario ya asignado a esta guardia");
 
   await execute(
-    `INSERT INTO MSP_rel_ControlGuardiaUsuario (FK_IdControlGuardia, FK_IdUsuario, UsuarioAlta)
+    `INSERT INTO ESP_rel_ControlGuardiaUsuario (FK_IdControlGuardia, FK_IdUsuario, UsuarioAlta)
      VALUES (@idGuardia, @idUsuario, @alta)`,
     {
       idGuardia: { type: sql.Int, value: idGuardia },
@@ -102,7 +102,7 @@ router.put("/:id/quitar-usuario", asyncHandler(async (req, res) => {
   const mod = usuarioModificacion || "SISTEMA";
 
   await execute(
-    `UPDATE MSP_rel_ControlGuardiaUsuario
+    `UPDATE ESP_rel_ControlGuardiaUsuario
      SET Activo = 0, UsuarioBaja = @mod, FechaBaja = GETDATE()
      WHERE FK_IdControlGuardia = @idG AND FK_IdUsuario = @idU AND Activo = 1`,
     {
@@ -122,7 +122,7 @@ router.post("/solicitud", asyncHandler(async (req, res) => {
   }
 
   const inserted = await insertOne(
-    `INSERT INTO MSP_SolicitudCambioGuardia (MotivoCambio, FK_IdControlGuardiaSolicitado, FK_IdControlGuardiaOfrecido, FK_IdUsuarioSolicitante, UsuarioAlta)
+    `INSERT INTO ESP_SolicitudCambioGuardia (MotivoCambio, FK_IdControlGuardiaSolicitado, FK_IdControlGuardiaOfrecido, FK_IdUsuarioSolicitante, UsuarioAlta)
      OUTPUT INSERTED.IdSolicitudCambio
      VALUES (@motivo, @solicitado, @ofrecido, @solicitante, @usuario)`,
     {
@@ -144,10 +144,10 @@ router.get("/solicitudes", asyncHandler(async (req, res) => {
            sc.FK_IdControlGuardiaSolicitado, sc.FK_IdControlGuardiaOfrecido,
            sc.FK_IdUsuarioSolicitante, us.Nombre AS SolicitanteNombre,
            gs.Fecha AS FechaSolicitada, go2.Fecha AS FechaOfrecida
-    FROM MSP_SolicitudCambioGuardia sc
-    INNER JOIN MSP_Usuario us ON sc.FK_IdUsuarioSolicitante = us.IdUsuario
-    INNER JOIN MSP_ControlGuardia gs ON sc.FK_IdControlGuardiaSolicitado = gs.IdControlGuardia
-    INNER JOIN MSP_ControlGuardia go2 ON sc.FK_IdControlGuardiaOfrecido = go2.IdControlGuardia
+    FROM ESP_SolicitudCambioGuardia sc
+    INNER JOIN ESP_Usuario us ON sc.FK_IdUsuarioSolicitante = us.IdUsuario
+    INNER JOIN ESP_ControlGuardia gs ON sc.FK_IdControlGuardiaSolicitado = gs.IdControlGuardia
+    INNER JOIN ESP_ControlGuardia go2 ON sc.FK_IdControlGuardiaOfrecido = go2.IdControlGuardia
     WHERE sc.Activo = 1 ${pendienteFilter}
     ORDER BY sc.FechaAlta DESC
   `);
@@ -161,18 +161,18 @@ router.put("/solicitud/:id/aceptar", asyncHandler(async (req, res) => {
 
   // Get solicitud
   const solicitud = await queryOne(
-    "SELECT * FROM MSP_SolicitudCambioGuardia WHERE IdSolicitudCambio = @id AND Activo = 1",
+    "SELECT * FROM ESP_SolicitudCambioGuardia WHERE IdSolicitudCambio = @id AND Activo = 1",
     { id: { type: sql.Int, value: req.params.id } }
   );
   if (!solicitud) return fail(res, "Solicitud no encontrada", 404);
 
   // Get users assigned to each guardia
   const userSolicitado = await queryOne(
-    "SELECT FK_IdUsuario FROM MSP_rel_ControlGuardiaUsuario WHERE FK_IdControlGuardia = @id AND Activo = 1",
+    "SELECT FK_IdUsuario FROM ESP_rel_ControlGuardiaUsuario WHERE FK_IdControlGuardia = @id AND Activo = 1",
     { id: { type: sql.Int, value: solicitud.FK_IdControlGuardiaSolicitado } }
   );
   const userOfrecido = await queryOne(
-    "SELECT FK_IdUsuario FROM MSP_rel_ControlGuardiaUsuario WHERE FK_IdControlGuardia = @id AND Activo = 1",
+    "SELECT FK_IdUsuario FROM ESP_rel_ControlGuardiaUsuario WHERE FK_IdControlGuardia = @id AND Activo = 1",
     { id: { type: sql.Int, value: solicitud.FK_IdControlGuardiaOfrecido } }
   );
 
@@ -180,29 +180,29 @@ router.put("/solicitud/:id/aceptar", asyncHandler(async (req, res) => {
 
   // Swap: deactivate old assignments, create new ones
   await execute(
-    `UPDATE MSP_rel_ControlGuardiaUsuario SET Activo = 0, UsuarioBaja = @mod, FechaBaja = GETDATE()
+    `UPDATE ESP_rel_ControlGuardiaUsuario SET Activo = 0, UsuarioBaja = @mod, FechaBaja = GETDATE()
      WHERE FK_IdControlGuardia = @idG AND FK_IdUsuario = @idU AND Activo = 1`,
     { idG: { type: sql.Int, value: solicitud.FK_IdControlGuardiaSolicitado }, idU: { type: sql.Int, value: userSolicitado.FK_IdUsuario }, mod: { type: sql.VarChar(50), value: mod } }
   );
   await execute(
-    `UPDATE MSP_rel_ControlGuardiaUsuario SET Activo = 0, UsuarioBaja = @mod, FechaBaja = GETDATE()
+    `UPDATE ESP_rel_ControlGuardiaUsuario SET Activo = 0, UsuarioBaja = @mod, FechaBaja = GETDATE()
      WHERE FK_IdControlGuardia = @idG AND FK_IdUsuario = @idU AND Activo = 1`,
     { idG: { type: sql.Int, value: solicitud.FK_IdControlGuardiaOfrecido }, idU: { type: sql.Int, value: userOfrecido.FK_IdUsuario }, mod: { type: sql.VarChar(50), value: mod } }
   );
 
   // Insert swapped
   await execute(
-    "INSERT INTO MSP_rel_ControlGuardiaUsuario (FK_IdControlGuardia, FK_IdUsuario, UsuarioAlta) VALUES (@idG, @idU, @mod)",
+    "INSERT INTO ESP_rel_ControlGuardiaUsuario (FK_IdControlGuardia, FK_IdUsuario, UsuarioAlta) VALUES (@idG, @idU, @mod)",
     { idG: { type: sql.Int, value: solicitud.FK_IdControlGuardiaSolicitado }, idU: { type: sql.Int, value: solicitud.FK_IdUsuarioSolicitante }, mod: { type: sql.VarChar(50), value: mod } }
   );
   await execute(
-    "INSERT INTO MSP_rel_ControlGuardiaUsuario (FK_IdControlGuardia, FK_IdUsuario, UsuarioAlta) VALUES (@idG, @idU, @mod)",
+    "INSERT INTO ESP_rel_ControlGuardiaUsuario (FK_IdControlGuardia, FK_IdUsuario, UsuarioAlta) VALUES (@idG, @idU, @mod)",
     { idG: { type: sql.Int, value: solicitud.FK_IdControlGuardiaOfrecido }, idU: { type: sql.Int, value: userSolicitado.FK_IdUsuario }, mod: { type: sql.VarChar(50), value: mod } }
   );
 
   // Mark solicitud as accepted
   await execute(
-    "UPDATE MSP_SolicitudCambioGuardia SET Aceptado = 1, UsuarioModificacion = @mod, FechaModificacion = GETDATE() WHERE IdSolicitudCambio = @id",
+    "UPDATE ESP_SolicitudCambioGuardia SET Aceptado = 1, UsuarioModificacion = @mod, FechaModificacion = GETDATE() WHERE IdSolicitudCambio = @id",
     { id: { type: sql.Int, value: parseInt(req.params.id) }, mod: { type: sql.VarChar(50), value: mod } }
   );
 

@@ -4,7 +4,7 @@ const router = Router();
 
 // GET /api/configuracion - Listar configuración global
 router.get("/", asyncHandler(async (req, res) => {
-  const rows = await query(`SELECT IdConfiguracion, Nombre, Valor FROM MSP_Configuracion WHERE Activo = 1`);
+  const rows = await query(`SELECT IdConfiguracion, Nombre, Valor FROM ESP_Configuracion WHERE Activo = 1`);
   const config = {};
   rows.forEach(r => { config[r.Nombre] = r.Valor; });
   res.json({ success: true, data: config, raw: rows });
@@ -16,7 +16,7 @@ router.put("/:nombre", asyncHandler(async (req, res) => {
   if (valor == null) return fail(res, "valor es requerido");
 
   await execute(
-    `UPDATE MSP_Configuracion SET
+    `UPDATE ESP_Configuracion SET
        Valor = @valor,
        UsuarioModificacion = @usuario,
        FechaModificacion = GETDATE()
@@ -34,7 +34,7 @@ router.put("/:nombre", asyncHandler(async (req, res) => {
 router.get("/usuario/:idUsuario", asyncHandler(async (req, res) => {
   const row = await queryOne(
     `SELECT cu.IdConfiguracionUsuario, cu.MostrarSoloConTickets, cu.BlacklistProfileIds
-     FROM MSP_ConfiguracionUsuario cu
+     FROM ESP_ConfiguracionUsuario cu
      WHERE cu.FK_IdUsuario = @id AND cu.Activo = 1`,
     { id: { type: sql.Int, value: req.params.idUsuario } }
   );
@@ -57,7 +57,7 @@ router.post("/usuario", asyncHandler(async (req, res) => {
 
   // Check if exists
   const existing = await queryOne(
-    `SELECT IdConfiguracionUsuario FROM MSP_ConfiguracionUsuario WHERE FK_IdUsuario = @id AND Activo = 1`,
+    `SELECT IdConfiguracionUsuario FROM ESP_ConfiguracionUsuario WHERE FK_IdUsuario = @id AND Activo = 1`,
     { id: { type: sql.Int, value: fkIdUsuario } }
   );
 
@@ -71,7 +71,7 @@ router.post("/usuario", asyncHandler(async (req, res) => {
         };
         if (profileIdsStr !== null) {
           await execute(
-            `UPDATE MSP_ConfiguracionUsuario SET
+            `UPDATE ESP_ConfiguracionUsuario SET
                MostrarSoloConTickets = @solo,
                BlacklistProfileIds = @blacklist,
                UsuarioModificacion = @usuario,
@@ -81,7 +81,7 @@ router.post("/usuario", asyncHandler(async (req, res) => {
           );
         } else {
           await execute(
-            `UPDATE MSP_ConfiguracionUsuario SET
+            `UPDATE ESP_ConfiguracionUsuario SET
                MostrarSoloConTickets = @solo,
                UsuarioModificacion = @usuario,
                FechaModificacion = GETDATE()
@@ -93,7 +93,7 @@ router.post("/usuario", asyncHandler(async (req, res) => {
       })()
     : await (async function () {
         const inserted = await insertOne(
-          `INSERT INTO MSP_ConfiguracionUsuario (FK_IdUsuario, MostrarSoloConTickets, BlacklistProfileIds, UsuarioAlta)
+          `INSERT INTO ESP_ConfiguracionUsuario (FK_IdUsuario, MostrarSoloConTickets, BlacklistProfileIds, UsuarioAlta)
            OUTPUT INSERTED.IdConfiguracionUsuario
            VALUES (@idUser, @solo, @blacklist, @usuario)`,
           {

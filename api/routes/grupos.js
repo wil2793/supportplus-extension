@@ -6,7 +6,7 @@ const router = Router();
 router.get("/", asyncHandler(async (req, res) => {
   const rows = await query(`
     SELECT IdcatGrupo, Nombre
-    FROM MSP_cat_Grupo WHERE Activo = 1 ORDER BY Nombre
+    FROM ESP_cat_Grupo WHERE Activo = 1 ORDER BY Nombre
   `);
   success(res, rows);
 }));
@@ -14,7 +14,7 @@ router.get("/", asyncHandler(async (req, res) => {
 // GET /api/grupos/:id - Obtener grupo por ID
 router.get("/:id", asyncHandler(async (req, res) => {
   const row = await queryOne(
-    `SELECT * FROM MSP_cat_Grupo WHERE IdcatGrupo = @id AND Activo = 1`,
+    `SELECT * FROM ESP_cat_Grupo WHERE IdcatGrupo = @id AND Activo = 1`,
     { id: { type: sql.Int, value: req.params.id } }
   );
   if (!row) return fail(res, "Grupo no encontrado", 404);
@@ -25,8 +25,8 @@ router.get("/:id", asyncHandler(async (req, res) => {
 router.get("/:id/usuarios", asyncHandler(async (req, res) => {
   const rows = await query(
     `SELECT u.IdUsuario, u.Nombre, u.Correo, u.IdUsuario
-     FROM MSP_rel_UsuarioGrupo ug
-     INNER JOIN MSP_Usuario u ON ug.FK_IdUsuario = u.IdUsuario
+     FROM ESP_rel_UsuarioGrupo ug
+     INNER JOIN ESP_Usuario u ON ug.FK_IdUsuario = u.IdUsuario
      WHERE ug.FK_IdcatGrupo = @id AND ug.Activo = 1 AND u.Activo = 1
      ORDER BY u.Nombre`,
     { id: { type: sql.Int, value: req.params.id } }
@@ -41,7 +41,7 @@ router.post("/:id/usuarios", asyncHandler(async (req, res) => {
 
   // Check if already exists
   const existing = await queryOne(
-    `SELECT IdrelUsuarioGrupo FROM MSP_rel_UsuarioGrupo WHERE FK_IdUsuario = @usuario AND FK_IdcatGrupo = @grupo AND Activo = 1`,
+    `SELECT IdrelUsuarioGrupo FROM ESP_rel_UsuarioGrupo WHERE FK_IdUsuario = @usuario AND FK_IdcatGrupo = @grupo AND Activo = 1`,
     {
       usuario: { type: sql.Int, value: fkIdUsuario },
       grupo: { type: sql.Int, value: req.params.id }
@@ -50,7 +50,7 @@ router.post("/:id/usuarios", asyncHandler(async (req, res) => {
   if (existing) return success(res, { idUsuarioGrupo: existing.IdrelUsuarioGrupo, existed: true });
 
   const inserted = await insertOne(
-    `INSERT INTO MSP_rel_UsuarioGrupo (FK_IdUsuario, FK_IdcatGrupo, UsuarioAlta)
+    `INSERT INTO ESP_rel_UsuarioGrupo (FK_IdUsuario, FK_IdcatGrupo, UsuarioAlta)
      OUTPUT INSERTED.IdrelUsuarioGrupo
      VALUES (@usuario, @grupo, @alta)`,
     {
@@ -68,7 +68,7 @@ router.post("/", asyncHandler(async (req, res) => {
   if (!nombre || !idcatGrupo) return fail(res, "idcatGrupo y nombre son requeridos");
 
   const inserted = await insertOne(
-    `INSERT INTO MSP_cat_Grupo (IdcatGrupo, Nombre, UsuarioAlta)
+    `INSERT INTO ESP_cat_Grupo (IdcatGrupo, Nombre, UsuarioAlta)
      OUTPUT INSERTED.IdcatGrupo
      VALUES (@id, @nombre, @usuario)`,
     {
@@ -85,7 +85,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
   const { nombre, usuarioModificacion } = req.body;
 
   await execute(
-    `UPDATE MSP_cat_Grupo SET
+    `UPDATE ESP_cat_Grupo SET
        Nombre = ISNULL(@nombre, Nombre),
        UsuarioModificacion = @usuario,
        FechaModificacion = GETDATE()
@@ -102,7 +102,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
 // DELETE /api/grupos/:id - Baja lógica
 router.delete("/:id", asyncHandler(async (req, res) => {
   await execute(
-    `UPDATE MSP_cat_Grupo SET Activo = 0, UsuarioBaja = @usuario, FechaBaja = GETDATE() WHERE IdcatGrupo = @id`,
+    `UPDATE ESP_cat_Grupo SET Activo = 0, UsuarioBaja = @usuario, FechaBaja = GETDATE() WHERE IdcatGrupo = @id`,
     {
       id: { type: sql.Int, value: req.params.id },
       usuario: { type: sql.VarChar(50), value: (req.body.usuarioBaja || "SISTEMA") }

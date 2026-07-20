@@ -10,9 +10,9 @@ router.get("/", asyncHandler(async (req, res) => {
   const rows = await query(
     `SELECT t.IdTicketPorCerrar, t.Ticket, t.IdSupportPlus, t.FK_IdUsuario, t.FK_IdcatGrupo, t.Cerrado,
             u.Nombre AS UsuarioNombre, u.Correo AS UsuarioCorreo, g.Nombre AS GrupoNombre
-     FROM MSP_TicketPorCerrar t
-     INNER JOIN MSP_Usuario u ON t.FK_IdUsuario = u.IdUsuario
-     LEFT JOIN MSP_cat_Grupo g ON t.FK_IdcatGrupo = g.IdcatGrupo
+     FROM ESP_TicketPorCerrar t
+     INNER JOIN ESP_Usuario u ON t.FK_IdUsuario = u.IdUsuario
+     LEFT JOIN ESP_cat_Grupo g ON t.FK_IdcatGrupo = g.IdcatGrupo
      WHERE t.Activo = 1 AND t.Cerrado = 0${grupoFilter}
      ORDER BY t.FechaAlta DESC`,
     params
@@ -23,7 +23,7 @@ router.get("/", asyncHandler(async (req, res) => {
 // GET /api/tickets-por-cerrar/existe/:idSupportPlus - Verificar si ticket ya existe
 router.get("/existe/:idSupportPlus", asyncHandler(async (req, res) => {
   const row = await queryOne(
-    `SELECT TOP 1 IdTicketPorCerrar, Cerrado FROM MSP_TicketPorCerrar WHERE IdSupportPlus = @idSP AND Activo = 1`,
+    `SELECT TOP 1 IdTicketPorCerrar, Cerrado FROM ESP_TicketPorCerrar WHERE IdSupportPlus = @idSP AND Activo = 1`,
     { idSP: { type: sql.Int, value: req.params.idSupportPlus } }
   );
   if (!row) return res.json({ success: true, exists: false });
@@ -36,7 +36,7 @@ router.post("/", asyncHandler(async (req, res) => {
   if (!ticket || !idSupportPlus || !fkIdUsuario) return fail(res, "ticket, idSupportPlus y fkIdUsuario son requeridos");
 
   const inserted = await insertOne(
-    `INSERT INTO MSP_TicketPorCerrar (Ticket, IdSupportPlus, FK_IdUsuario, FK_IdcatGrupo, UsuarioAlta)
+    `INSERT INTO ESP_TicketPorCerrar (Ticket, IdSupportPlus, FK_IdUsuario, FK_IdcatGrupo, UsuarioAlta)
      OUTPUT INSERTED.IdTicketPorCerrar
      VALUES (@ticket, @idSP, @usuario, @grupo, @alta)`,
     {
@@ -53,7 +53,7 @@ router.post("/", asyncHandler(async (req, res) => {
 // PUT /api/tickets-por-cerrar/:id/cerrar - Marcar como cerrado
 router.put("/:id/cerrar", asyncHandler(async (req, res) => {
   await execute(
-    `UPDATE MSP_TicketPorCerrar SET Cerrado = 1, UsuarioModificacion = @usuario, FechaModificacion = GETDATE()
+    `UPDATE ESP_TicketPorCerrar SET Cerrado = 1, UsuarioModificacion = @usuario, FechaModificacion = GETDATE()
      WHERE IdTicketPorCerrar = @id`,
     {
       id: { type: sql.Int, value: req.params.id },
@@ -66,7 +66,7 @@ router.put("/:id/cerrar", asyncHandler(async (req, res) => {
 // PUT /api/tickets-por-cerrar/cerrar-por-sp/:idSupportPlus - Marcar como cerrado por IdSupportPlus
 router.put("/cerrar-por-sp/:idSupportPlus", asyncHandler(async (req, res) => {
   await execute(
-    `UPDATE MSP_TicketPorCerrar SET Cerrado = 1, UsuarioModificacion = @usuario, FechaModificacion = GETDATE()
+    `UPDATE ESP_TicketPorCerrar SET Cerrado = 1, UsuarioModificacion = @usuario, FechaModificacion = GETDATE()
      WHERE IdSupportPlus = @idSP AND Cerrado = 0`,
     {
       idSP: { type: sql.Int, value: req.params.idSupportPlus },
@@ -79,7 +79,7 @@ router.put("/cerrar-por-sp/:idSupportPlus", asyncHandler(async (req, res) => {
 // DELETE /api/tickets-por-cerrar/:id - Baja lógica
 router.delete("/:id", asyncHandler(async (req, res) => {
   await execute(
-    `UPDATE MSP_TicketPorCerrar SET Activo = 0, UsuarioBaja = @usuario, FechaBaja = GETDATE() WHERE IdTicketPorCerrar = @id`,
+    `UPDATE ESP_TicketPorCerrar SET Activo = 0, UsuarioBaja = @usuario, FechaBaja = GETDATE() WHERE IdTicketPorCerrar = @id`,
     {
       id: { type: sql.Int, value: req.params.id },
       usuario: { type: sql.VarChar(50), value: (req.body.usuarioBaja || "SISTEMA") }

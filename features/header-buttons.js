@@ -151,8 +151,33 @@
     const btn = e && e.target ? e.target : null;
     if (btn) { btn.textContent = "⏳ Descargando..."; btn.disabled = true; }
 
-    // Determine filename: try to extract from URL, fallback to version-based name
+    // Determine filename
     const _fnRef = { name: "v" + (version || "update") + ".zip" };
+
+    // ─── Base64 mode: decode directly without fetch ───
+    if (url && url.startsWith("base64:")) {
+      try {
+        const b64 = url.substring(7); // remove "base64:" prefix
+        const binaryStr = atob(b64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (var i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: "application/zip" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = _fnRef.name;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        if (btn) btn.textContent = "✅ Descargado";
+      } catch (ex) {
+        console.error("[SP] Error decoding base64 zip:", ex);
+        if (btn) { btn.textContent = "❌ Error"; setTimeout(function () { btn.textContent = "📥 Descargar"; btn.disabled = false; }, 3000); }
+      }
+      return;
+    }
+
+    // ─── URL mode: fetch via proxy ───
     try {
       const urlPath = new URL(url).pathname;
       const urlFileName = urlPath.split("/").pop();

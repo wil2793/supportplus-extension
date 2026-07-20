@@ -10,8 +10,8 @@ router.get("/", asyncHandler(async (req, res) => {
 
   const rows = await query(
     `SELECT cs.IdComentarioSugerido, cs.Nombre, cs.Comentario, cs.FK_IdcatGrupo, g.Nombre AS GrupoNombre, g.IdcatGrupo AS GrupoIdSupportPlus
-     FROM MSP_ComentarioSugerido cs
-     INNER JOIN MSP_cat_Grupo g ON cs.FK_IdcatGrupo = g.IdcatGrupo
+     FROM ESP_ComentarioSugerido cs
+     INNER JOIN ESP_cat_Grupo g ON cs.FK_IdcatGrupo = g.IdcatGrupo
      WHERE cs.Activo = 1${grupoFilter}
      ORDER BY cs.Nombre`,
     params
@@ -25,7 +25,7 @@ router.post("/", asyncHandler(async (req, res) => {
   if (!comentario || !fkIdcatGrupo) return fail(res, "comentario y fkIdcatGrupo son requeridos");
 
   const inserted = await insertOne(
-    `INSERT INTO MSP_ComentarioSugerido (Nombre, Comentario, FK_IdcatGrupo, UsuarioAlta)
+    `INSERT INTO ESP_ComentarioSugerido (Nombre, Comentario, FK_IdcatGrupo, UsuarioAlta)
      OUTPUT INSERTED.IdComentarioSugerido
      VALUES (@nombre, @comentario, @grupo, @usuario)`,
     {
@@ -43,7 +43,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
   const { nombre, comentario, usuarioModificacion } = req.body;
 
   await execute(
-    `UPDATE MSP_ComentarioSugerido SET
+    `UPDATE ESP_ComentarioSugerido SET
        Nombre = ISNULL(@nombre, Nombre),
        Comentario = ISNULL(@comentario, Comentario),
        UsuarioModificacion = @usuario,
@@ -62,7 +62,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
 // DELETE /api/comentarios/:id - Baja lógica
 router.delete("/:id", asyncHandler(async (req, res) => {
   await execute(
-    `UPDATE MSP_ComentarioSugerido SET Activo = 0, UsuarioBaja = @usuario, FechaBaja = GETDATE() WHERE IdComentarioSugerido = @id`,
+    `UPDATE ESP_ComentarioSugerido SET Activo = 0, UsuarioBaja = @usuario, FechaBaja = GETDATE() WHERE IdComentarioSugerido = @id`,
     {
       id: { type: sql.Int, value: req.params.id },
       usuario: { type: sql.VarChar(50), value: (req.body.usuarioBaja || "SISTEMA") }

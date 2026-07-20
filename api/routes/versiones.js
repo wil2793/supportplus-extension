@@ -6,7 +6,7 @@ const router = Router();
 router.get("/", asyncHandler(async (req, res) => {
   const rows = await query(`
     SELECT IdVersion, Version, Cambio, ArchivoZipUrl, FechaAlta
-    FROM MSP_Version WHERE Activo = 1 ORDER BY IdVersion DESC
+    FROM ESP_Version WHERE Activo = 1 ORDER BY IdVersion DESC
   `);
   success(res, rows);
 }));
@@ -15,7 +15,7 @@ router.get("/", asyncHandler(async (req, res) => {
 router.get("/latest", asyncHandler(async (req, res) => {
   const row = await queryOne(`
     SELECT TOP 1 IdVersion, Version, Cambio, ArchivoZipUrl, FechaAlta
-    FROM MSP_Version WHERE Activo = 1 ORDER BY IdVersion DESC
+    FROM ESP_Version WHERE Activo = 1 ORDER BY IdVersion DESC
   `);
   if (!row) return fail(res, "No hay versiones", 404);
   success(res, row);
@@ -27,7 +27,7 @@ router.post("/", asyncHandler(async (req, res) => {
   if (!version) return fail(res, "version es requerido");
 
   const inserted = await insertOne(
-    `INSERT INTO MSP_Version (Version, Cambio, ArchivoZipUrl, UsuarioAlta)
+    `INSERT INTO ESP_Version (Version, Cambio, ArchivoZipUrl, UsuarioAlta)
      OUTPUT INSERTED.IdVersion
      VALUES (@version, @cambio, @zip, @usuario)`,
     {
