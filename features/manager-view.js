@@ -400,7 +400,12 @@
       prodPanel.id = "sp-productos-panel";
       prodPanel.style.cssText = "flex:2;min-width:300px;padding:16px;border-radius:8px;border:2px solid #FF8F00;font-family:system-ui;color:inherit;";
       prodPanel.innerHTML =
-        '<h4 style="margin:0 0 12px;font-size:15px;font-weight:600;">🧃 Productos</h4>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+        '<h4 style="margin:0;font-size:15px;font-weight:600;">🧃 Productos</h4>' +
+        '<div style="display:flex;gap:6px;">' +
+        (SP_Session.state.canAddParticipant ? '<button id="sp-add-user-btn" style="padding:4px 10px;border:1px solid #4CAF50;border-radius:6px;background:transparent;color:#4CAF50;cursor:pointer;font-size:11px;font-weight:600;">+ Participante</button>' : '') +
+        (SP_Session.state.canAddProduct ? '<button id="sp-add-role-btn" style="padding:4px 10px;border:1px solid #1976D2;border-radius:6px;background:transparent;color:#1976D2;cursor:pointer;font-size:11px;font-weight:600;">+ Producto</button>' : '') +
+        '</div></div>' +
         '<div id="sp-productos-tabs"></div>' +
         '<div id="sp-productos-content"><div style="text-align:center;padding:20px;opacity:.6;">Cargando...</div></div>';
 
@@ -428,6 +433,12 @@
       grid.parentElement.insertBefore(rowContainer, grid);
       loadProductosPanel();
       loadBirthdayPanel();
+
+      // Button handlers
+      const addUserBtn = document.getElementById("sp-add-user-btn");
+      const addRoleBtn = document.getElementById("sp-add-role-btn");
+      if (addUserBtn) addUserBtn.addEventListener("click", showAddUserModal);
+      if (addRoleBtn) addRoleBtn.addEventListener("click", showAddRoleModal);
 
       if (window.SP_Guardias) {
         const userName = SP_Session.state.userName || "";
@@ -576,7 +587,7 @@
   function initManagerView() {
     const groups = SP_Session.state.groups;
     if (!groups || !groups.length) return;
-    const canDrag = SP_Session.state.canDragDrop;
+    const canDrag = true; // All users can drag and drop
     const _mgrState = { loading: false, attempts: 0, debounceTimer: null };
 
     function tryInject() {
@@ -778,6 +789,175 @@
           }
         });
       });
+    });
+  }
+
+  // ─── Add User Modal (assign products to a user) ────────────
+  function showAddUserModal() {
+    const m = window.SP_Modal.form({
+      id: "sp-add-user-modal",
+      title: "👤 Agregar participante a productos",
+      content:
+        '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Buscar usuario</label>' +
+        '<input id="sp-au-search" type="text" placeholder="Nombre o correo..." style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:12px;box-sizing:border-box;margin-bottom:4px;">' +
+        '<div id="sp-au-results" style="max-height:120px;overflow-y:auto;border:1px solid #ddd;border-radius:6px;display:none;margin-bottom:12px;font-size:12px;"></div>' +
+        '<div id="sp-au-selected" style="margin-bottom:12px;font-size:13px;font-weight:600;color:#4CAF50;min-height:20px;"></div>' +
+        '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Productos a asignar</label>' +
+        '<div id="sp-au-products" style="max-height:150px;overflow-y:auto;border:1px solid #ddd;border-radius:6px;padding:8px;"></div>',
+      submitText: "Cerrar",
+      submitColor: "#4CAF50",
+      maxWidth: "450px",
+      onSubmit: function (api) {
+        api.close();
+        loadProductosPanel();
+      },
+      onReady: function (api) {
+        const searchEl = document.getElementById("sp-au-search");
+        const resultsEl = document.getElementById("sp-au-results");
+        const selectedEl = document.getElementById("sp-au-selected");
+        const productsEl = document.getElementById("sp-au-products");
+
+        let allProducts = [];
+        // Load all products
+        chrome.runtime.sendMessage({ type: "api-get", endpoint: "/productos" }, function (resp) {
+          allProducts = (resp && resp.success && resp.data && resp.data.data) ? resp.data.data : [];
+          productsEl.innerHTML = '<div style="opacity:.5;font-size:11px;">Selecciona un usuario primero</div>';
+        });
+
+        // User search
+        let allUsers = [];
+        chrome.runtime.sendMessage({ type: "api-get", endpoint: "/usuarios" }, function (resp) {
+          allUsers = (resp && resp.success && resp.data && resp.data.data) ? resp.data.data : [];
+        });
+
+        searchEl.addEventListener("input", function () {
+          const q = searchEl.value.toLowerCase().trim();
+          if (!q || q.length < 2) { resultsEl.style.display = "none"; return; }
+          const filtered = allUsers.filter(u => u.Nombre.toLowerCase().includes(q) || u.Correo.toLowerCase().includes(q)).slice(0, 10);
+          resultsEl.innerHTML = filtered.map(u => '<div class="sp-au-opt" data-id="' + u.IdUsuario + '" data-name="' + u.Nombre + '" style="padding:6px 8px;cursor:pointer;border-bottom:1px solid #f0f0f0;">' + u.Nombre + ' <span style="opacity:.5;font-size:10px;">' + u.Correo + '</span></div>').join("");
+          resultsEl.style.display = filtered.length ? "block" : "none";
+        });
+
+        resultsEl.addEventListener("click", function (e) {
+          const opt = e.target.closest(".sp-au-opt");
+          if (!opt) return;
+          searchEl.value = opt.dataset.name;
+          searchEl.dataset.userId = opt.dataset.id;
+          selectedEl.textContent = "✓ " + opt.dataset.name;
+          resultsEl.style.display = "none";
+          // Load products assigned to this user
+          loadUserProducts(parseInt(opt.dataset.id));
+        });
+
+        function loadUserProducts(userId) {
+          productsEl.innerHTML = '<div style="opacity:.5;font-size:11px;">Cargando...</div>';
+          chrome.runtime.sendMessage({ type: "api-get", endpoint: "/productos/usuario/" + userId }, function (resp) {
+            const assigned = (resp && resp.success && resp.data && resp.data.data) ? resp.data.data : [];
+            const assignedIds = new Set(assigned.map(a => a.IdcatProducto));
+            productsEl.innerHTML = allProducts.map(p => {
+              const checked = assignedIds.has(p.IdcatProducto) ? " checked" : "";
+              return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;"><input type="checkbox" class="sp-au-prod-check" data-prod-id="' + p.IdcatProducto + '"' + checked + '> ' + p.Nombre + '</label>';
+            }).join("");
+
+            // Attach change listeners
+            productsEl.querySelectorAll(".sp-au-prod-check").forEach(function (cb) {
+              cb.addEventListener("change", function () {
+                const prodId = parseInt(cb.dataset.prodId);
+                cb.disabled = true;
+                if (cb.checked) {
+                  chrome.runtime.sendMessage({ type: "api-post", endpoint: "/productos/asignar-usuario", body: { fkIdProducto: prodId, fkIdUsuario: userId, usuarioAlta: "EXTENSION" } }, function () { cb.disabled = false; });
+                } else {
+                  chrome.runtime.sendMessage({ type: "api-put", endpoint: "/productos/quitar-usuario", body: { fkIdProducto: prodId, fkIdUsuario: userId, usuarioModificacion: "EXTENSION" } }, function () { cb.disabled = false; });
+                }
+              });
+            });
+          });
+        }
+      }
+    });
+  }
+
+  // ─── Add Product Modal (create product with users) ──────────────
+  function showAddRoleModal() {
+    const m = window.SP_Modal.form({
+      id: "sp-add-role-modal",
+      title: "🧃 Crear nuevo producto",
+      content:
+        '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Nombre del producto</label>' +
+        '<input id="sp-ar-name" type="text" placeholder="Nombre del producto..." style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:12px;box-sizing:border-box;margin-bottom:8px;">' +
+        '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Cantidad (turnos por persona)</label>' +
+        '<input id="sp-ar-qty" type="number" value="1" min="1" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:12px;box-sizing:border-box;margin-bottom:12px;">' +
+        '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Buscar usuarios a asignar</label>' +
+        '<input id="sp-ar-search" type="text" placeholder="Nombre o correo..." style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:12px;box-sizing:border-box;margin-bottom:4px;">' +
+        '<div id="sp-ar-results" style="max-height:120px;overflow-y:auto;border:1px solid #ddd;border-radius:6px;display:none;margin-bottom:8px;font-size:12px;"></div>' +
+        '<div id="sp-ar-selected" style="display:flex;flex-wrap:wrap;gap:4px;min-height:20px;margin-bottom:8px;"></div>',
+      submitText: "Crear producto",
+      submitColor: "#FF8F00",
+      maxWidth: "450px",
+      onSubmit: function (api) {
+        const name = document.getElementById("sp-ar-name").value.trim();
+        if (!name) { window.showErrorToast("Escribe un nombre para el producto"); api.resetButton(); return; }
+        const qty = parseInt(document.getElementById("sp-ar-qty").value) || 1;
+        const chips = document.querySelectorAll("#sp-ar-selected .sp-ar-chip");
+        const userIds = Array.from(chips).map(c => c.dataset.id);
+        api.setLoading("Creando...");
+        chrome.runtime.sendMessage({ type: "api-post", endpoint: "/productos/crear", body: { nombre: name, cantidad: qty, usuarioAlta: "EXTENSION" } }, function (resp) {
+          if (!resp || !resp.success || !resp.data || !resp.data.data) { api.close(); window.showErrorToast("Error al crear producto"); return; }
+          const newProdId = resp.data.data.idcatProducto;
+          if (userIds.length) {
+            let pending = userIds.length;
+            userIds.forEach(function (uid) {
+              chrome.runtime.sendMessage({ type: "api-post", endpoint: "/productos/asignar-usuario", body: { fkIdProducto: newProdId, fkIdUsuario: parseInt(uid), usuarioAlta: "EXTENSION" } }, function () {
+                pending--;
+                if (pending <= 0) { api.close(); window.showSuccessToast("Producto '" + name + "' creado"); loadProductosPanel(); }
+              });
+            });
+          } else {
+            api.close();
+            window.showSuccessToast("Producto '" + name + "' creado (sin usuarios)"); loadProductosPanel();
+          }
+        });
+      },
+      onReady: function (api) {
+        const searchEl = document.getElementById("sp-ar-search");
+        const resultsEl = document.getElementById("sp-ar-results");
+        const selectedEl = document.getElementById("sp-ar-selected");
+
+        let allUsers = [];
+        const selectedUsers = {};
+        chrome.runtime.sendMessage({ type: "api-get", endpoint: "/usuarios" }, function (resp) {
+          allUsers = (resp && resp.success && resp.data && resp.data.data) ? resp.data.data : [];
+        });
+
+        searchEl.addEventListener("input", function () {
+          const q = searchEl.value.toLowerCase().trim();
+          if (!q || q.length < 2) { resultsEl.style.display = "none"; return; }
+          const filtered = allUsers.filter(u => !selectedUsers[u.IdUsuario] && (u.Nombre.toLowerCase().includes(q) || u.Correo.toLowerCase().includes(q))).slice(0, 10);
+          resultsEl.innerHTML = filtered.map(u => '<div class="sp-ar-opt" data-id="' + u.IdUsuario + '" data-name="' + u.Nombre + '" style="padding:6px 8px;cursor:pointer;border-bottom:1px solid #f0f0f0;">' + u.Nombre + ' <span style="opacity:.5;font-size:10px;">' + u.Correo + '</span></div>').join("");
+          resultsEl.style.display = filtered.length ? "block" : "none";
+        });
+
+        resultsEl.addEventListener("click", function (e) {
+          const opt = e.target.closest(".sp-ar-opt");
+          if (!opt) return;
+          selectedUsers[opt.dataset.id] = opt.dataset.name;
+          renderChips();
+          searchEl.value = "";
+          resultsEl.style.display = "none";
+        });
+
+        function renderChips() {
+          selectedEl.innerHTML = Object.entries(selectedUsers).map(([id, name]) =>
+            '<span class="sp-ar-chip" data-id="' + id + '" style="padding:3px 8px;background:#FF8F00;color:#fff;border-radius:12px;font-size:11px;display:inline-flex;align-items:center;gap:4px;">' + name + ' <span class="sp-ar-remove" data-id="' + id + '" style="cursor:pointer;font-weight:700;">×</span></span>'
+          ).join("");
+          selectedEl.querySelectorAll(".sp-ar-remove").forEach(btn => {
+            btn.addEventListener("click", function () {
+              delete selectedUsers[btn.dataset.id];
+              renderChips();
+            });
+          });
+        }
+      }
     });
   }
 

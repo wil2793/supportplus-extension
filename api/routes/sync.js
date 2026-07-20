@@ -90,15 +90,15 @@ router.get("/", asyncHandler(async (req, res) => {
       btnComments: userRoles.some(r => r.includes("comentarios sugeridos")),
       btnReports: userRoles.some(r => r.includes("reporte excel")),
       idUsuario: u.IdUsuario,
-      canDragDrop: userRoles.some(r => r.includes("drag")),
       canReassignApp: userRoles.some(r => r.includes("migrar aplicaciones")),
       canAddIAM: userRoles.some(r => r.includes("iam")),
       canShowLabels: userRoles.some(r => r.includes("etiqueta")),
       canReopenTickets: userRoles.some(r => r.includes("reabrir")),
       canCommentClosed: userRoles.some(r => r.includes("comentar con ticket cerrado")),
       canRejectTickets: userRoles.some(r => r.includes("rechazar")),
-      canDBAInfo: userRoles.some(r => r.includes("dba info")),
       canGuardias: userRoles.some(r => r.includes("guardias")),
+      canAddParticipant: userRoles.some(r => r.includes("agregar participante")),
+      canAddProduct: userRoles.some(r => r.includes("agregar producto")),
       cumpleanos: u.FechaCumpleanos ? u.FechaCumpleanos.toISOString().slice(0, 10) : null,
       tokenMonday: u.TokenMonday || null
     };

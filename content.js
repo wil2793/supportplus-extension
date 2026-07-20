@@ -43,7 +43,6 @@
   var currentUserRole = _ss.userRole;
   var currentUserGroups = _ss.groups;
   // canMigrateMonday removed
-  var canDragDrop = _ss.canDragDrop;
   var _btnDashboard = _ss.btnDashboard;
   var _btnComments = _ss.btnComments;
   var _btnReports = _ss.btnReports;
@@ -273,7 +272,6 @@
     currentUserRole = ss.userRole;
     currentUserGroups = ss.groups;
     // canMigrateMonday removed
-    canDragDrop = ss.canDragDrop;
     _btnDashboard = ss.btnDashboard;
     _btnComments = ss.btnComments;
     _btnReports = ss.btnReports;
@@ -4504,25 +4502,7 @@
         });
     }
 
-    // --- DBA Info Button ---
-    const WATER_BTN_ID = "sp-water-btn";
-    function injectWaterButton() {
-      if (document.getElementById(WATER_BTN_ID)) return;
-      // Only show if user has "DBA Info" subrol
-      if (!window.SP_Session.state.canDBAInfo) return;
-      var refBtn =
-        document.getElementById(DASHBOARD_BTN_ID) ||
-        document.getElementById(SEARCH_BTN_ID);
-      if (!refBtn) return;
-      var btn = createHeaderButton({
-        id: WATER_BTN_ID,
-        icon: "🏠",
-        label: "DBA Info",
-        color: "#0288D1",
-        onClick: showWaterModal,
-      });
-      refBtn.parentElement.insertBefore(btn, refBtn.nextSibling);
-    }
+    // --- DBA Info Button removed (functionality moved to main view) ---
 
     function showWaterModal() {
       var existing = document.getElementById("sp-water-modal");
@@ -4586,7 +4566,7 @@
               var users = [];
               Object.keys(usersMap).forEach(function (email) {
                 var u = usersMap[email];
-                if (!u || !u.canDBAInfo) return;
+                if (!u) return;
                 var cumpleDisplay = "";
                 var cumpleColor = "";
                 if (u.cumpleanos) {
@@ -8873,7 +8853,6 @@
 
       // Permission-dependent header buttons
       injectDashboardButton();
-      injectWaterButton();
       injectSuggestedCommentsButton();
       injectReportButton();
       injectQuickFilterButton();

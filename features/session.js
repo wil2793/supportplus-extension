@@ -18,7 +18,6 @@
     teamArea: "",
 
     // Permissions
-    canDragDrop: false,
     btnDashboard: true,
     btnComments: true,
     btnReports: true,
@@ -28,7 +27,6 @@
     canReopenTickets: false,
     canCommentClosed: false,
     canRejectTickets: false,
-    canDBAInfo: false,
 
     // Config
     userConfig: {},
@@ -62,25 +60,21 @@
     return SP_Storage.getMultiple(["subgroupPerms", "userConfig", "usersMap", "userEmail", "workSchedule"])
       .then(function (r) {
         if (r.subgroupPerms) {
-          state.canDragDrop = r.subgroupPerms.canDragDrop || false;
           state.btnReassignApp = r.subgroupPerms.canReassignApp || false;
           state.btnAddIAM = r.subgroupPerms.canAddIAM || false;
           state.canShowLabels = r.subgroupPerms.canShowLabels || false;
           state.canReopenTickets = r.subgroupPerms.canReopenTickets || false;
           state.canCommentClosed = r.subgroupPerms.canCommentClosed || false;
           state.canRejectTickets = r.subgroupPerms.canRejectTickets || false;
-          state.canDBAInfo = r.subgroupPerms.canDBAInfo || false;
         } else if (r.usersMap && r.userEmail) {
           const u = r.usersMap[(r.userEmail || "").toLowerCase()];
           if (u) {
-            state.canDragDrop = !!u.canDragDrop;
             state.btnReassignApp = !!u.canReassignApp;
             state.btnAddIAM = !!u.canAddIAM;
             state.canShowLabels = !!u.canShowLabels;
             state.canReopenTickets = !!u.canReopenTickets;
             state.canCommentClosed = !!u.canCommentClosed;
             state.canRejectTickets = !!u.canRejectTickets;
-            state.canDBAInfo = !!u.canDBAInfo;
           }
         }
         if (r.userConfig) state.userConfig = r.userConfig;
@@ -156,7 +150,6 @@
               btnDashboard: false,
               btnComments: false,
               btnReports: false,
-              canDBAInfo: false
             };
           }
         }
@@ -182,8 +175,8 @@
       state.canReopenTickets = !!ctx.userData.canReopenTickets;
       state.canCommentClosed = !!ctx.userData.canCommentClosed;
       state.canRejectTickets = !!ctx.userData.canRejectTickets;
-      state.canDragDrop = !!ctx.userData.canDragDrop;
-      state.canDBAInfo = !!ctx.userData.canDBAInfo;
+      state.canAddParticipant = !!ctx.userData.canAddParticipant;
+      state.canAddProduct = !!ctx.userData.canAddProduct;
 
       if (stored.userConfig) state.userConfig = stored.userConfig;
 
@@ -192,14 +185,12 @@
         userEmail: email,
         myProfileId: state.profileId,
         subgroupPerms: {
-          canDragDrop: state.canDragDrop,
           canReassignApp: state.btnReassignApp,
           canAddIAM: state.btnAddIAM,
           canShowLabels: state.canShowLabels,
           canReopenTickets: state.canReopenTickets,
           canCommentClosed: state.canCommentClosed,
           canRejectTickets: state.canRejectTickets,
-          canDBAInfo: state.canDBAInfo
         }
       });
 
@@ -215,7 +206,6 @@
         btnDashboard: ctx.userData.btnDashboard,
         btnComments: ctx.userData.btnComments,
         btnReports: ctx.userData.btnReports,
-        canDragDrop: ctx.userData.canDragDrop,
         canReassignApp: ctx.userData.canReassignApp,
         canAddIAM: ctx.userData.canAddIAM,
         canShowLabels: ctx.userData.canShowLabels,
