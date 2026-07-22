@@ -7,8 +7,9 @@ Thumbs.db
 # Environment variables (secrets)
 .env
 
-# ZIPs
+# ZIPs & releases
 *.zip
+releases/
 
 # MDs (excepto README)
 *.md
