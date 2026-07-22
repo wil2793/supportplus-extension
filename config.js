@@ -5,7 +5,7 @@
 (function () {
   window.SP_CONFIG = {
     // API Base URL
-    API_URL: "http://localhost:3500/api",
+    API_URL: "http://10.150.12.120:3500/api",
 
     // Monday.com
     MONDAY_TICKET_COL_ID: "text_mm2c9nhc",
