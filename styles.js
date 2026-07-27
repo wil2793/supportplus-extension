@@ -63,6 +63,7 @@
   margin: 2px 0;
   border-radius: 4px;
   background: #fff;
+  border: 1px solid #e0e0e0;
   font-size: 9px;
   line-height: 1.3;
   transition: box-shadow 0.15s ease, transform 0.1s ease;
@@ -110,7 +111,7 @@
 .sp-tag-filter {
   margin-bottom: 8px;
   padding: 6px 8px;
-  border: 1px solid #ddd;
+  border: none;
   border-radius: 6px;
   display: flex;
   flex-wrap: wrap;
@@ -314,7 +315,7 @@
 /* ─── Collapsible Section ─── */
 .sp-section {
   margin-bottom: 8px;
-  border: 1px solid #ddd;
+  border: none;
   border-radius: 8px;
   overflow: hidden;
 }

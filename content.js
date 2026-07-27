@@ -594,6 +594,7 @@
     }
 
     // --- Detail view helpers: delegate to lib/dom-utils.js ---
+    // NOTE: Vista individual disabled — will be rebuilt separately
     const DETAIL_BTN_ID = "sp-monday-detail";
 
     function isDetailView() {
@@ -604,397 +605,7 @@
       return window.SP_DOM.getDetailTicketId();
     }
 
-    let detailLoading = false;
-    async function injectDetailButton() {
-      if (document.querySelectorAll("#" + DETAIL_BTN_ID).length > 0) return;
-      if (detailLoading) return;
-      detailLoading = true;
-      try {
-        const ticketId = getDetailTicketId();
-        if (!ticketId) return;
-
-        // Find the box with uniqueCode and status chip (right sidebar)
-        let container = null;
-        document.querySelectorAll(".MuiChip-label").forEach((chip) => {
-          if (container) return;
-          const box = chip.closest(".MuiBox-root");
-          if (box && box.querySelector("p.MuiTypography-body1"))
-            container = box;
-        });
-        if (!container) return;
-
-        const spToken = getToken();
-        if (!spToken) return;
-
-        let uniqueCode = "";
-        let isClosed = false;
-        let isWaiting = false;
-        let isAssigned = false;
-        let holderName = "";
-        let ticketGroupId = null;
-        try {
-          const res = await fetch(SP_API + "/" + ticketId, {
-            headers: spGetHeaders(),
-          });
-          if (!res.ok) return;
-          const json = await res.json();
-          const ticket = json.data || json;
-          uniqueCode = ticket.uniqueCode || "";
-          isClosed =
-            ticket.ticketStatus?.type?.name === "Cerrado" ||
-            ticket.ticketStatus?.name === "Cerrado";
-          isWaiting = ticket.ticketStatus?.name === "En espera";
-          isAssigned =
-            ticket.ticketStatus?.name === "Asignado" ||
-            ticket.ticketStatus?.name === "En atención";
-          holderName = ticket.ticketHolder?.ticketHolderLog?.fullName || "";
-          ticketGroupId = ticket.resolutionGroup?.id || null;
-          SP_Log.debug(
-            "Detail ticket status:",
-            ticket.ticketStatus?.name,
-            "| closed:",
-            isClosed,
-            "| waiting:",
-            isWaiting,
-            "| assigned:",
-            isAssigned,
-            "| holder:",
-            holderName,
-          );
-        } catch (e) {
-          return;
-        }
-
-        const synced = await ensureSyncStarted();
-
-        // Add copy button in detail view
-        if (!container.querySelector(".sp-copy-btn") && uniqueCode) {
-          var copyBtn = createCopyButton(uniqueCode);
-          copyBtn.style.fontSize = "14px";
-          copyBtn.style.padding = "2px 6px";
-          var chipEl = container.querySelector(".MuiChip-root");
-          if (chipEl) container.insertBefore(copyBtn, chipEl);
-          else container.appendChild(copyBtn);
-        }
-
-        if (uniqueCode && synced[uniqueCode]) {
-          const mondayItemId = synced[uniqueCode];
-          const badge = document.createElement("span");
-          badge.id = DETAIL_BTN_ID;
-          badge.textContent = "✅ Migrado";
-          badge.style.cssText =
-            "padding:6px 14px;font-size:12px;border-radius:6px;background:#E8F5E9;color:#2E7D32;font-weight:600;white-space:nowrap;cursor:pointer;";
-          badge.addEventListener("mouseenter", () => {
-            badge.textContent = "🔗 Monday";
-          });
-          badge.addEventListener("mouseleave", () => {
-            badge.textContent = "✅ Migrado";
-          });
-          badge.addEventListener("click", () => {
-            window.open(
-              window.SP_CONFIG.MONDAY_BASE_URL +
-                "/boards/" +
-                window.SP_CONFIG.MONDAY_BOARD_ID +
-                "/pulses/" +
-                mondayItemId,
-              "_blank",
-            );
-          });
-          const chip = container.querySelector(".MuiChip-root");
-          container.insertBefore(badge, chip);
-        } else if (isAssigned || isWaiting) {
-          // Show buttons only if ticket belongs to my area (or gerente)
-          var myArea3 = getTeamConfig();
-          var ticketBelongsToMe3 =
-            !ticketGroupId ||
-            ticketGroupId === myArea3.resolutionGroupId ||
-            isMultiGroup();
-          if (ticketBelongsToMe3) {
-            const myName = getLoggedUserName();
-            const chip4 = container.querySelector(".MuiChip-root");
-
-            // Show take button if waiting
-            if (isWaiting && !container.querySelector(".sp-detail-take")) {
-              const takeBtn = document.createElement("button");
-              takeBtn.className = "sp-detail-take";
-              takeBtn.textContent = "🤚 Tomar ticket";
-              takeBtn.style.cssText =
-                "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#1976D2;color:#fff;font-weight:600;white-space:nowrap;margin-right:6px;";
-              takeBtn.addEventListener("mouseenter", () => {
-                if (!takeBtn.disabled) takeBtn.textContent = "✊ Tomar ticket";
-              });
-              takeBtn.addEventListener("mouseleave", () => {
-                if (!takeBtn.disabled) takeBtn.textContent = "🤚 Tomar ticket";
-              });
-              takeBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                showTakeModal(ticketId, takeBtn);
-              });
-              container.insertBefore(takeBtn, chip4);
-            }
-
-            // Show steal button if assigned to someone else
-            if (
-              isAssigned &&
-              holderName &&
-              myName &&
-              holderName !== myName &&
-              !container.querySelector(".sp-detail-steal")
-            ) {
-              const stealBtn = document.createElement("button");
-              stealBtn.className = "sp-detail-steal";
-              stealBtn.textContent = "🥷 Robar ticket";
-              stealBtn.title = "Asignado a: " + holderName;
-              stealBtn.style.cssText =
-                "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#E65100;color:#fff;font-weight:600;white-space:nowrap;margin-right:6px;";
-              stealBtn.addEventListener("mouseenter", () => {
-                if (!stealBtn.disabled)
-                  stealBtn.textContent = "💀 Robar ticket";
-              });
-              stealBtn.addEventListener("mouseleave", () => {
-                if (!stealBtn.disabled)
-                  stealBtn.textContent = "🥷 Robar ticket";
-              });
-              stealBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                showTakeModal(ticketId, stealBtn);
-              });
-              container.insertBefore(stealBtn, chip4);
-            }
-          }
-        }
-
-        // Show close button independently for non-closed tickets (even if migrated)
-        if (!isClosed && !container.querySelector(".sp-detail-close-btn")) {
-          var myAreaClose = getTeamConfig();
-          var canClose =
-            !ticketGroupId ||
-            ticketGroupId === myAreaClose.resolutionGroupId ||
-            isMultiGroup();
-          if (canClose) {
-            const closeBtnIndep = document.createElement("button");
-            closeBtnIndep.className = "sp-detail-close-btn";
-            closeBtnIndep.textContent = "🔒 Cerrar ticket";
-            closeBtnIndep.style.cssText =
-              "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#616161;color:#fff;font-weight:600;white-space:nowrap;margin-left:6px;";
-            closeBtnIndep.addEventListener("mouseenter", () => {
-              if (!closeBtnIndep.disabled)
-                closeBtnIndep.textContent = "🔐 Cerrar ticket";
-            });
-            closeBtnIndep.addEventListener("mouseleave", () => {
-              if (!closeBtnIndep.disabled)
-                closeBtnIndep.textContent = "🔒 Cerrar ticket";
-            });
-            closeBtnIndep.addEventListener("click", async (e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              closeBtnIndep.disabled = true;
-              closeBtnIndep.innerHTML = spinnerHTML(12);
-              await showCloseModal(ticketId, closeBtnIndep);
-              closeBtnIndep.textContent = "🔒 Cerrar ticket";
-              closeBtnIndep.disabled = false;
-            });
-            var chipClose = container.querySelector(".MuiChip-root");
-            container.insertBefore(closeBtnIndep, chipClose);
-          }
-        }
-
-        // Show reopen button independently for closed tickets (even if migrated)
-        if (isClosed && !container.querySelector(".sp-reopen-btn")) {
-          var myAreaReopen = getTeamConfig();
-          var canReopen =
-            !ticketGroupId ||
-            ticketGroupId === myAreaReopen.resolutionGroupId ||
-            isMultiGroup();
-          if (canReopen) {
-            const reopenBtn = document.createElement("button");
-            reopenBtn.className = "sp-reopen-btn";
-            reopenBtn.textContent = "🔓 Reabrir";
-            reopenBtn.style.cssText =
-              "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#FF8F00;color:#fff;font-weight:600;white-space:nowrap;margin-left:6px;";
-            reopenBtn.addEventListener("mouseenter", () => {
-              if (!reopenBtn.disabled) reopenBtn.textContent = "🔄 Reabrir";
-            });
-            reopenBtn.addEventListener("mouseleave", () => {
-              if (!reopenBtn.disabled) reopenBtn.textContent = "🔓 Reabrir";
-            });
-            reopenBtn.addEventListener("click", () => {
-              showReopenModal(ticketId, holderName);
-            });
-            var chipReopen = container.querySelector(".MuiChip-root");
-            container.insertBefore(reopenBtn, chipReopen);
-          }
-        }
-      } finally {
-        detailLoading = false;
-      }
-    }
-
-    const IAM_BTN_ID = "sp-iam-btn";
-    const IAM_PROFILES = window.SP_CONFIG.IAM_PROFILES;
-    const IAM_API = window.SP_CONFIG.SP_PARTICIPANTS_API;
-
-    const IAM_NAMES = window.SP_CONFIG.IAM_NAMES;
-
-    function injectIamButton() {
-      if (!_btnAddIAM) return;
-      if (document.getElementById(IAM_BTN_ID)) return;
-      if (!isDetailView()) return;
-      var ticketId = getDetailTicketId();
-      if (!ticketId) return;
-
-      // Find the "Agregar usuarios" card
-      var cards = document.querySelectorAll(
-        ".MuiCardHeader-content .MuiTypography-body1",
-      );
-      var targetCard = null;
-      cards.forEach(function (el) {
-        if (el.textContent.trim() === "Agregar usuarios")
-          targetCard = el.closest(".MuiCard-root");
-      });
-      if (!targetCard) return;
-
-      // Check if all IAMcitos already exist in the list
-      var existingNames = [];
-      targetCard.querySelectorAll("p[aria-label]").forEach(function (p) {
-        existingNames.push(p.getAttribute("aria-label"));
-      });
-      var allExist = IAM_NAMES.every(function (name) {
-        return existingNames.indexOf(name) !== -1;
-      });
-      if (allExist) return;
-
-      var btn = document.createElement("button");
-      btn.id = IAM_BTN_ID;
-      btn.textContent = "👥 Agregar IAMcitos";
-      btn.style.cssText =
-        "width:100%;padding:10px;font-size:13px;cursor:pointer;border:none;border-radius:6px;background:#1976D2;color:#fff;font-weight:600;margin-top:8px;";
-      btn.addEventListener("click", async function () {
-        btn.disabled = true;
-        btn.innerHTML = spinnerHTML(14, "Agregando...");
-
-        // Re-check existing names at click time
-        var currentNames = [];
-        targetCard.querySelectorAll("p[aria-label]").forEach(function (p) {
-          currentNames.push(p.getAttribute("aria-label"));
-        });
-        var missing = [];
-        for (var j = 0; j < IAM_NAMES.length; j++) {
-          if (currentNames.indexOf(IAM_NAMES[j]) === -1)
-            missing.push(IAM_PROFILES[j]);
-        }
-        if (!missing.length) {
-          showSuccessToast("Todos los IAMcitos ya existen");
-          btn.remove();
-          return;
-        }
-
-        showLoadingToast("Agregando " + missing.length + " IAMcito(s)...");
-        var spToken = getToken();
-        var ok = 0,
-          fail = 0;
-        for (var i = 0; i < missing.length; i++) {
-          try {
-            var res = await fetch(IAM_API, {
-              method: "POST",
-              headers: spHeaders(),
-              body: JSON.stringify({
-                profileId: missing[i],
-                ticketId: parseInt(ticketId),
-                isParticipant: false,
-              }),
-            });
-            if (!res.ok) throw new Error("HTTP " + res.status);
-            ok++;
-          } catch (e) {
-            fail++;
-          }
-        }
-
-        if (fail === 0) {
-          showSuccessToast("IAMcitos agregados");
-          setTimeout(function () {
-            window.location.reload();
-          }, 1500);
-        } else {
-          showErrorToast(
-            "Algunos fallaron: " + ok + " ok, " + fail + " errores",
-          );
-          btn.textContent = "👥 Agregar IAMcitos";
-          btn.disabled = false;
-        }
-      });
-
-      targetCard.appendChild(btn);
-    }
-
-    const DETAIL_DETECTIONS_ID = "sp-detail-detections";
-
-    function injectDetailDetections() {
-      if (document.getElementById(DETAIL_DETECTIONS_ID)) return;
-      if (!isDetailView()) return;
-
-      // Find "Evidencias" h2 to insert before it
-      var evidenciasH2 = null;
-      document.querySelectorAll("h2.MuiTypography-h2").forEach(function (h2) {
-        if (h2.textContent.trim() === "Evidencias") evidenciasH2 = h2;
-      });
-      if (!evidenciasH2) return;
-
-      // Read description and subject from the page
-      var descEl = document.querySelector(".MuiBox-root.mui-se5hlr");
-      var subjectEl = document.querySelector(".MuiBox-root.mui-81wn4v");
-      var descText = descEl ? descEl.textContent : "";
-      var subjectText = subjectEl ? subjectEl.textContent : "";
-      var fullText = subjectText + " " + descText;
-
-      // Use centralized detection engine
-      var detections = window.SP_DetailView.detectAll(fullText);
-      var container = window.SP_DetailView.renderDetections(detections, {
-        showLabels: _canShowLabels,
-      });
-      if (!container) return;
-      container.id = DETAIL_DETECTIONS_ID;
-      evidenciasH2.parentElement.insertBefore(container, evidenciasH2);
-    }
-
-    const REASSIGN_APP_BTN_ID = "sp-reassign-app-btn";
-
-    function injectReassignAppButton() {
-      if (!_btnReassignApp) return;
-      if (document.getElementById(REASSIGN_APP_BTN_ID)) return;
-      if (!isDetailView()) return;
-      var ticketId = getDetailTicketId();
-      if (!ticketId) return;
-
-      // Don't show if ticket is closed
-      var chipLabels = document.querySelectorAll(".MuiChip-label");
-      var isClosed = false;
-      chipLabels.forEach(function (el) {
-        if (el.textContent.trim() === "Cerrado") isClosed = true;
-      });
-      if (isClosed) return;
-
-      // Find "Información del ticket" h1
-      var h1 = null;
-      document.querySelectorAll("h1.MuiTypography-h1").forEach(function (el) {
-        if (el.textContent.trim() === "Información del ticket") h1 = el;
-      });
-      if (!h1) return;
-
-      var btn = document.createElement("button");
-      btn.id = REASSIGN_APP_BTN_ID;
-      btn.textContent = "🔀 Reasignar a Aplicaciones";
-      btn.style.cssText =
-        "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#C62828;color:#fff;font-weight:600;white-space:nowrap;margin-left:12px;vertical-align:middle;";
-      btn.addEventListener("click", function () {
-        showReassignAppModal(ticketId);
-      });
-      h1.parentElement.appendChild(btn);
-    }
-
+    // showReassignAppModal: kept for quick detail modal usage
     function showReassignAppModal(ticketId) {
       SP_Modal.confirm({
         id: "sp-reassign-app-modal",
@@ -1006,9 +617,7 @@
         onConfirm: async function (api) {
           api.close();
           showLoadingToast("Tomando ticket para reasignar...");
-
           try {
-            // Step 1: Take the ticket first
             const profileId = await getMyProfileId();
             if (!profileId) throw new Error("No se pudo obtener tu perfil");
             const takeRes = await fetch(SP_API + "/reassign/" + ticketId, {
@@ -1024,22 +633,16 @@
                 },
               }),
             });
-            if (!takeRes.ok)
-              throw new Error("Error al tomar: HTTP " + takeRes.status);
+            if (!takeRes.ok) throw new Error("Error al tomar: HTTP " + takeRes.status);
             const takeJson = await takeRes.json();
-            if (!takeJson.success)
-              throw new Error("No se pudo tomar el ticket");
+            if (!takeJson.success) throw new Error("No se pudo tomar el ticket");
 
-            // Step 2: Reassign to Aplicaciones
             showLoadingToast("Reasignando a Aplicaciones...");
             const res = await fetch(SP_API + "/reassign/" + ticketId, {
               method: "PUT",
               headers: spHeaders(),
               body: JSON.stringify({
-                ticketCommentRequest: {
-                  internal: false,
-                  content: "Se reasigna ticket",
-                },
+                ticketCommentRequest: { internal: false, content: "Se reasigna ticket" },
                 resolutionGroupId: window.SP_CONFIG.APPS_GROUP.id,
                 serviceId: null,
                 responsibleProfileId: null,
@@ -1057,15 +660,7 @@
               id: "sp-reassign-success",
               title: "✅ Ticket reasignado",
               message: "El ticket fue reasignado a Aplicaciones exitosamente.",
-              buttons: [
-                {
-                  text: "Aceptar",
-                  color: "#2E7D32",
-                  onClick: function () {
-                    window.location.href = "/es/dashboard/tickets-mesa";
-                  },
-                },
-              ],
+              buttons: [{ text: "Aceptar", color: "#2E7D32", onClick: function () { window.location.href = "/es/dashboard/tickets-mesa"; } }],
             });
           } catch (err) {
             showErrorToast("Error: " + err.message);
@@ -5496,6 +5091,151 @@
 
     // --- Quick detail button ---
     const DETAIL_QUICK_CLASS = "sp-quick-detail-btn";
+    const HISTORY_BTN_CLASS = "sp-history-btn";
+
+    // ─── Ticket History Modal ────────────────────────────────
+    async function showHistoryModal(ticketId) {
+      var existing = document.getElementById("sp-history-modal");
+      if (existing) existing.remove();
+
+      showLoadingToast("Cargando historial...");
+
+      var spToken = getToken();
+      if (!spToken) { showErrorToast("No hay token"); return; }
+
+      try {
+        var res = await fetch(SP_API + "/logs/" + ticketId, { headers: spGetHeaders() });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var logs = await res.json();
+
+        // Sort by date descending
+        logs.sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+
+        // Map action names to labels and colors
+        var actionMap = {
+          create: { label: "Creado", color: "#1976D2" },
+          add: { label: "Añadido", color: "#2E7D32" },
+          delete: { label: "Eliminado", color: "#C62828" },
+          update: { label: "Actualizado", color: "#F57C00" },
+          reassign: { label: "Reasignado", color: "#7B1FA2" },
+          close: { label: "Cerrado", color: "#616161" },
+          reopen: { label: "Reabierto", color: "#FF8F00" }
+        };
+
+        // Build log cards
+        var cardsHtml = logs.map(function (log) {
+          var actionInfo = actionMap[log.action?.name] || { label: log.action?.name || "Acción", color: "#757575" };
+          var initial = (log.fullName || "?")[0].toUpperCase();
+          var dateStr = formatLogDate(log.createdAt);
+          var detail = buildLogDetail(log);
+
+          return '<div style="background:#1E1E1E;border-radius:10px;padding:14px 16px;margin-bottom:10px;border-left:3px solid ' + actionInfo.color + ';">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+              '<div style="display:flex;align-items:center;gap:10px;">' +
+                '<div style="width:36px;height:36px;border-radius:50%;background:' + actionInfo.color + ';display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:14px;">' + esc(initial) + '</div>' +
+                '<div>' +
+                  '<div style="font-weight:600;font-size:13px;color:#E0E0E0;">' + esc(log.fullName || "Desconocido") + '</div>' +
+                  '<div style="font-size:11px;color:#9E9E9E;">' + esc(getFieldLabel(log.field)) + '</div>' +
+                '</div>' +
+              '</div>' +
+              '<span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;color:#fff;background:' + actionInfo.color + ';">' + esc(actionInfo.label) + '</span>' +
+            '</div>' +
+            (detail ? '<div style="margin-top:8px;font-size:12px;color:#BDBDBD;">' + detail + '</div>' : '') +
+            '<div style="margin-top:6px;font-size:11px;color:#757575;">Fecha y hora: ' + esc(dateStr) + '</div>' +
+          '</div>';
+        }).join("");
+
+        if (!cardsHtml) cardsHtml = '<div style="text-align:center;color:#9E9E9E;padding:20px;">Sin historial</div>';
+
+        // Dismiss loading toast
+        var loadingToast = document.getElementById("sp-loading-toast");
+        if (loadingToast) loadingToast.remove();
+
+        SP_Modal.info({
+          id: "sp-history-modal",
+          title: "📋 Historial del ticket #" + ticketId,
+          maxWidth: "600px",
+          content: '<div style="max-height:500px;overflow-y:auto;padding:4px;">' + cardsHtml + '</div>'
+        });
+      } catch (err) {
+        showErrorToast("Error al cargar historial: " + err.message);
+      }
+    }
+
+    function formatLogDate(dateStr) {
+      if (!dateStr) return "";
+      var d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      var dd = String(d.getDate()).padStart(2, "0");
+      var mm = String(d.getMonth() + 1).padStart(2, "0");
+      var yyyy = d.getFullYear();
+      var hh = String(d.getHours()).padStart(2, "0");
+      var min = String(d.getMinutes()).padStart(2, "0");
+      return dd + "/" + mm + "/" + yyyy + " - " + hh + ":" + min;
+    }
+
+    function getFieldLabel(field) {
+      var map = {
+        ticket: "Creación de ticket",
+        attachments: "Carga de archivos",
+        attachment_delete: "Eliminación",
+        status: "Cambio de estado",
+        responsible_info: "Reasignación",
+        ticket_visitor_participant: "Participante",
+        comment: "Comentario",
+        priority: "Prioridad",
+        resolution_group: "Grupo de resolución"
+      };
+      return map[field] || field || "";
+    }
+
+    function buildLogDetail(log) {
+      var field = log.field;
+      var before = log.before;
+      var after = log.after;
+
+      if (field === "responsible_info" && after && after.content) {
+        var a = after.content;
+        var b = before && before.content && before.content.fullName ? before.content : null;
+        if (b) {
+          return esc(b.fullName) + ' (' + esc(b.email || '') + ') - ' + esc(b.roleName || '') +
+            ' &nbsp;→&nbsp; ' +
+            esc(a.fullName) + ' (' + esc(a.email || '') + ') - ' + esc(a.roleName || '');
+        }
+        return esc(a.fullName) + ' (' + esc(a.email || '') + ') - ' + esc(a.roleName || '');
+      }
+
+      if (field === "status" && after && after.content) {
+        var beforeStatus = before && before.content ? before.content.name : "";
+        var afterStatus = after.content.name || "";
+        if (beforeStatus) return esc(beforeStatus) + ' &nbsp;→&nbsp; ' + esc(afterStatus);
+        return esc(afterStatus);
+      }
+
+      if (field === "attachments" && after && after.content && Array.isArray(after.content)) {
+        var files = after.content.map(function (f) { return f.name || "archivo"; });
+        var visibility = after.content[0] && after.content[0].isInternal ? "Interno" : "Público";
+        return 'Archivo: ' + esc(files.join(", ")) + ' | ' + visibility;
+      }
+
+      if (field === "attachment_delete" && before && before.content) {
+        var f = before.content;
+        var vis = f.isInternal ? "Interno" : "Público";
+        return 'Archivo: ' + esc(f.name || "archivo") + ' | ' + vis;
+      }
+
+      if (field === "ticket_visitor_participant" && after && after.content) {
+        var p = after.content;
+        var role = p.isParticipant ? "Participante" : "Visitante";
+        return esc(p.fullName || "") + ' (' + esc(p.email || "") + ') - ' + role;
+      }
+
+      if (field === "ticket" && after && after.content) {
+        return esc(String(after.content));
+      }
+
+      return "";
+    }
 
     var _qdCommentsInterval = null;
     var _qdLastOpen = 0;
@@ -8781,9 +8521,21 @@
             folioEl.replaceWith(btn);
           }
         }
+        // History button
+        if (!row.querySelector("." + HISTORY_BTN_CLASS)) {
+          var histBtn = document.createElement("button");
+          histBtn.className = HISTORY_BTN_CLASS + " sp-copy-btn";
+          histBtn.textContent = "🕐";
+          histBtn.title = "Historial";
+          histBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            e.preventDefault();
+            showHistoryModal(ticketId);
+          });
+          container.appendChild(histBtn);
+        }
       });
     }
-    // Also run on DOM changes for SPA navigation (independent of session)
     var _folioObserver = new MutationObserver(function () {
       injectFolioButtons();
     });
@@ -8857,76 +8609,8 @@
       injectReportButton();
       injectQuickFilterButton();
 
-      if (isDetailView()) {
-        injectDetailButton();
-        injectIamButton();
-        injectDetailDetections();
-        injectReassignAppButton();
-        // Sync this ticket to Monday (detail view)
-        var detailTicketId = window.location.pathname.match(/\/tickets\/(\d+)/);
-        if (detailTicketId) {
-          (async function () {
-            try {
-              var spToken = getToken();
-              var mondayToken = await getMondayToken();
-              if (!spToken || !mondayToken) return;
-              var res = await fetch(SP_API + "/" + detailTicketId[1], {
-                headers: spGetHeaders(),
-              });
-              if (!res.ok) return;
-              var ticket = (await res.json()).data;
-              if (!ticket || !ticket.uniqueCode) return;
-              var spStatus = (ticket.ticketStatusName || "").toLowerCase();
-              var holderEmail =
-                ticket.ticketHolder?.ticketHolderLog?.email || "";
-              // Find in Monday
-              var ticketBoards = await getMondayTicketBoards(mondayToken);
-              for (var b of ticketBoards) {
-                var itemRes = await mondayQuery(
-                  mondayToken,
-                  "query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }",
-                  {
-                    boardId: b.id,
-                    columnId: "text_mm2c9nhc",
-                    value: ticket.uniqueCode,
-                  },
-                );
-                var items = itemRes.items_page_by_column_values?.items || [];
-                if (items.length) {
-                  var colValues = {};
-                  var mondayStatusIndex = mapStatusToMonday(spStatus);
-                  colValues.status = { index: mondayStatusIndex };
-                  if (holderEmail) {
-                    var users = await getMondayUsers(mondayToken);
-                    var userId = users[holderEmail.toLowerCase()];
-                    if (userId)
-                      colValues.multiple_person_mm25nvfq = {
-                        personsAndTeams: [
-                          { id: parseInt(userId), kind: "person" },
-                        ],
-                      };
-                  }
-                  await mondayQuery(
-                    mondayToken,
-                    "mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }",
-                    {
-                      boardId: b.id,
-                      itemId: items[0].id,
-                      columnValues: JSON.stringify(colValues),
-                    },
-                  );
-                  SP_Log.debug(
-                    "Detail view synced to Monday:",
-                    ticket.uniqueCode,
-                  );
-                  break;
-                }
-              }
-            } catch (e) {}
-          })();
-        }
-        return;
-      }
+      // Vista individual disabled — will be rebuilt separately
+      if (isDetailView()) return;
 
       const rows = document.querySelectorAll(".MuiDataGrid-row");
       rows.forEach((row) => {

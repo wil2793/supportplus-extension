@@ -103,8 +103,10 @@
 
       if (!email) return null;
 
-      // Save email before triggering sync
+      // Save email + portal token for background API auth
+      const portalToken = getSpToken();
       await SP_Storage.set("userEmail", email);
+      await SP_Storage.set("portalToken", portalToken);
 
       // Trigger background sync (API)
       try {

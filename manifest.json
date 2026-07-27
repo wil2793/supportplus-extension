@@ -15,7 +15,7 @@
     "https://github.com/*",
     "https://raw.githubusercontent.com/*",
     "http://localhost:3500/*",
-    "http://10.150.12.120:3500/*"
+    "https://back-extension-sp.macropay.mx/*"
   ],
   "web_accessible_resources": [
     {

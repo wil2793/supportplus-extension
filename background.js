@@ -2,36 +2,107 @@
 // BACKGROUND.JS - Service Worker (SQL Server API sync + Monday proxy)
 // ============================================================
 
-const API_BASE = "http://localhost:3500/api";
-const API_KEY = "c93666bd500472565a7e183365092191bd8fa734720fd20d04bd5c456949864d";
+const API_BASE = "https://back-extension-sp.macropay.mx/api";
+
+// ─── Auth: JWT from portal → login → our own token ──────────
+
+let _apiToken = null;
+let _apiTokenExpiry = 0; // timestamp ms
+
+async function getPortalToken() {
+  // First try storage (saved by content script on session check)
+  const stored = await chrome.storage.local.get("portalToken");
+  if (stored.portalToken) return stored.portalToken;
+
+  // Fallback: fetch fresh token from SP session API via active tab
+  try {
+    const tabs = await chrome.tabs.query({ url: "https://macropay.supportplus.mx/*" });
+    if (!tabs.length) return "";
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tabs[0].id },
+      func: () => {
+        // Try localStorage first, then sessionStorage
+        return localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+      }
+    });
+    const token = results && results[0] && results[0].result;
+    if (token) {
+      await chrome.storage.local.set({ portalToken: token });
+      return token;
+    }
+  } catch (e) { /* ignore */ }
+
+  return "";
+}
+
+async function loginToAPI(portalToken) {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: portalToken })
+  });
+  if (!res.ok) throw new Error("Login API " + res.status);
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || "Login failed");
+  _apiToken = data.data.token;
+  // Tokens expire in 8 hours — refresh 30 min early
+  _apiTokenExpiry = Date.now() + (8 * 60 * 60 * 1000) - (30 * 60 * 1000);
+  await chrome.storage.local.set({ apiToken: _apiToken, apiTokenExpiry: _apiTokenExpiry });
+  return _apiToken;
+}
+
+async function ensureApiToken() {
+  // Load from storage if not in memory
+  if (!_apiToken || !_apiTokenExpiry) {
+    const stored = await chrome.storage.local.get(["apiToken", "apiTokenExpiry"]);
+    _apiToken = stored.apiToken || null;
+    _apiTokenExpiry = stored.apiTokenExpiry || 0;
+  }
+  // Check expiry
+  if (_apiToken && Date.now() < _apiTokenExpiry) return _apiToken;
+  // Token expired or missing — re-login
+  const portalToken = await getPortalToken();
+  if (!portalToken) throw new Error("No portal token available");
+  return loginToAPI(portalToken);
+}
 
 // ─── API Helpers ────────────────────────────────────────────
 
-async function apiGet(endpoint) {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    headers: { "X-API-Key": API_KEY }
-  });
+async function apiRequest(method, endpoint, body) {
+  let headers = { "Content-Type": "application/json" };
+
+  try {
+    const token = await ensureApiToken();
+    headers["Authorization"] = `Bearer ${token}`;
+  } catch (e) {
+    // Fallback a API Key si no hay JWT disponible aún
+    const apiKey = "c93666bd500472565a7e183365092191bd8fa734720fd20d04bd5c456949864d";
+    headers["X-API-Key"] = apiKey;
+  }
+
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(`${API_BASE}${endpoint}`, opts);
+
+  // Token expirado → re-login y retry
+  if (res.status === 401) {
+    try {
+      const portalToken = await getPortalToken();
+      if (portalToken) {
+        await loginToAPI(portalToken);
+        return apiRequest(method, endpoint, body);
+      }
+    } catch (e) { /* ignore */ }
+  }
+
   if (!res.ok) throw new Error("API " + res.status);
   return res.json();
 }
 
-async function apiPost(endpoint, body) {
-  const res = await fetch(`${API_BASE}${endpoint}`, { method: "POST", headers: { "Content-Type": "application/json", "X-API-Key": API_KEY }, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error("API " + res.status);
-  return res.json();
-}
-
-async function apiPut(endpoint, body) {
-  const res = await fetch(`${API_BASE}${endpoint}`, { method: "PUT", headers: { "Content-Type": "application/json", "X-API-Key": API_KEY }, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error("API " + res.status);
-  return res.json();
-}
-
-async function apiDelete(endpoint, body) {
-  const res = await fetch(`${API_BASE}${endpoint}`, { method: "DELETE", headers: { "Content-Type": "application/json", "X-API-Key": API_KEY }, body: JSON.stringify(body || {}) });
-  if (!res.ok) throw new Error("API " + res.status);
-  return res.json();
-}
+async function apiGet(endpoint) { return apiRequest("GET", endpoint); }
+async function apiPost(endpoint, body) { return apiRequest("POST", endpoint, body); }
+async function apiPut(endpoint, body) { return apiRequest("PUT", endpoint, body); }
+async function apiDelete(endpoint, body) { return apiRequest("DELETE", endpoint, body || {}); }
 
 // ─── Sync (1 request) ───────────────────────────────────────
 
@@ -114,6 +185,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case "sync":
         await syncFromAPI();
         return { success: true };
+
+      case "auth-login": {
+        const tok = await loginToAPI(msg.portalToken);
+        return { success: true, token: tok };
+      }
 
       case "api-get":
         return { success: true, data: await apiGet(msg.endpoint) };
