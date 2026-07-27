@@ -68,7 +68,7 @@ async function ensureApiToken() {
 
 // ─── API Helpers ────────────────────────────────────────────
 
-async function apiRequest(method, endpoint, body) {
+async function apiRequest(method, endpoint, body, _isRetry) {
   let headers = { "Content-Type": "application/json" };
 
   try {
@@ -84,13 +84,15 @@ async function apiRequest(method, endpoint, body) {
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(`${API_BASE}${endpoint}`, opts);
 
-  // Token expirado → re-login y retry
-  if (res.status === 401) {
+  // Token expirado → re-login y retry una sola vez
+  if (res.status === 401 && !_isRetry) {
     try {
       const portalToken = await getPortalToken();
       if (portalToken) {
+        _apiToken = null; // forzar re-login
+        _apiTokenExpiry = 0;
         await loginToAPI(portalToken);
-        return apiRequest(method, endpoint, body);
+        return apiRequest(method, endpoint, body, true);
       }
     } catch (e) { /* ignore */ }
   }
