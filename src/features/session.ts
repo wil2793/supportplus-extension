@@ -46,9 +46,15 @@ export const state: SessionState = {
 // ─── Work Schedule Helper ─────────────────────────────────────
 
 const DAY_MAP: Record<string, number> = {
-  Domingo: 0, Lunes: 1, Martes: 2,
-  Miercoles: 3, "Miércoles": 3, Jueves: 4,
-  Viernes: 5, Sabado: 6, "Sábado": 6,
+  Domingo: 0,
+  Lunes: 1,
+  Martes: 2,
+  Miercoles: 3,
+  Miércoles: 3,
+  Jueves: 4,
+  Viernes: 5,
+  Sabado: 6,
+  Sábado: 6,
 };
 
 export function isWithinWorkHours(): boolean {
@@ -73,7 +79,13 @@ export async function loadPersistedState(): Promise<void> {
       usersMap: Record<string, Record<string, unknown>>;
       userEmail: string;
       workSchedule: WorkSchedule;
-    }>(["subgroupPerms", "userConfig", "usersMap", "userEmail", "workSchedule"]);
+    }>([
+      "subgroupPerms",
+      "userConfig",
+      "usersMap",
+      "userEmail",
+      "workSchedule",
+    ]);
 
     if (r.subgroupPerms) {
       state.btnReassignApp = r.subgroupPerms["canReassignApp"] ?? false;
@@ -119,7 +131,9 @@ export async function checkSession(): Promise<void> {
 
     if (!res.ok) return;
 
-    const data = (await res.json()) as { user?: { email: string; name: string } };
+    const data = (await res.json()) as {
+      user?: { email: string; name: string };
+    };
     const email = data?.user?.email?.toLowerCase() ?? "";
     state.userName = data?.user?.name ?? "";
     state.userEmail = email;
@@ -149,7 +163,8 @@ export async function checkSession(): Promise<void> {
     let userData: Record<string, unknown> | null = usersMap[email] ?? null;
 
     if (!userData) {
-      const cachedSession = await Storage.get<Record<string, unknown>>("sp_last_session");
+      const cachedSession =
+        await Storage.get<Record<string, unknown>>("sp_last_session");
       if (
         cachedSession &&
         cachedSession["email"] === email &&
@@ -161,7 +176,9 @@ export async function checkSession(): Promise<void> {
         for (let attempt = 0; attempt < 3; attempt++) {
           await new Promise<void>((r) => setTimeout(r, 1500 * (attempt + 1)));
           const retryMap =
-            (await Storage.get<Record<string, Record<string, unknown>>>("usersMap")) ?? {};
+            (await Storage.get<Record<string, Record<string, unknown>>>(
+              "usersMap",
+            )) ?? {};
           if (retryMap[email]) {
             userData = retryMap[email];
             break;
@@ -188,7 +205,8 @@ export async function checkSession(): Promise<void> {
       return;
     }
 
-    if (userData["profileId"]) state.profileId = userData["profileId"] as number;
+    if (userData["profileId"])
+      state.profileId = userData["profileId"] as number;
 
     const groups = userData["groups"] as number[] | undefined;
     if (groups?.length) {
@@ -263,12 +281,19 @@ export async function resolveProfileId(): Promise<number | null> {
           accept: "application/json",
           authorization: `Bearer ${spToken}`,
         },
-      }
+      },
     );
     if (!res.ok) return null;
 
-    const json = (await res.json()) as { data?: Array<{ profileId: number; profileFullName: string }> };
-    const profiles = json.data ?? (json as unknown as Array<{ profileId: number; profileFullName: string }>);
+    const json = (await res.json()) as {
+      data?: Array<{ profileId: number; profileFullName: string }>;
+    };
+    const profiles =
+      json.data ??
+      (json as unknown as Array<{
+        profileId: number;
+        profileFullName: string;
+      }>);
     if (!Array.isArray(profiles)) return null;
 
     const me = profiles.find((p) => p.profileFullName === name);
@@ -289,6 +314,63 @@ export function getLoggedUserNameFromDOM(): string {
   return el?.textContent?.trim() ?? "";
 }
 
+export function showAccessMessage(text: string): void {
+  const HEADER_SELECTOR = '[class*="warapperNameUserAndLogout"]';
+  const tryInject = () => {
+    const wrapper = document.querySelector<HTMLElement>(HEADER_SELECTOR);
+    if (!wrapper) return false;
+    if (document.getElementById("sp-inactive-msg")) return true;
+    const msg = document.createElement("div");
+    msg.id = "sp-inactive-msg";
+    msg.className = "sp-access-msg";
+    msg.textContent = text;
+    wrapper.parentElement?.insertBefore(msg, wrapper);
+    return true;
+  };
+  if (!tryInject()) {
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts++;
+      if (tryInject() || attempts >= 30) clearInterval(timer);
+    }, 300);
+  }
+}
+
+export function injectRoleLabel(): void {
+  void Storage.getMultiple<{
+    userEmail: string;
+    usersMap: Record<string, { roleName?: string }>;
+  }>(["userEmail", "usersMap"]).then((stored) => {
+    const email = (stored.userEmail ?? "").toLowerCase();
+    if (!email) return;
+    const users = stored.usersMap ?? {};
+    const userData = users[email];
+    if (!userData?.roleName) return;
+    const HEADER_SELECTOR = '[class*="warapperNameUserAndLogout"]';
+    const tryInject = () => {
+      const wrapper = document.querySelector<HTMLElement>(HEADER_SELECTOR);
+      if (!wrapper) return false;
+      if (document.getElementById("sp-role-label")) return true;
+      const nameEl = wrapper.querySelector("p");
+      if (!nameEl) return false;
+      const rl = document.createElement("span");
+      rl.id = "sp-role-label";
+      rl.className = "sp-role-label";
+      rl.textContent = userData.roleName!;
+      nameEl.appendChild(document.createElement("br"));
+      nameEl.appendChild(rl);
+      return true;
+    };
+    if (!tryInject()) {
+      let attempts = 0;
+      const timer = setInterval(() => {
+        attempts++;
+        if (tryInject() || attempts >= 30) clearInterval(timer);
+      }, 300);
+    }
+  });
+}
+
 const SP_Session = {
   state,
   isWithinWorkHours,
@@ -296,5 +378,7 @@ const SP_Session = {
   checkSession,
   resolveProfileId,
   getLoggedUserNameFromDOM,
+  showAccessMessage,
+  injectRoleLabel,
 };
 export default SP_Session;
