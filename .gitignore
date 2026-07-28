@@ -11,6 +11,9 @@ Thumbs.db
 *.zip
 releases/
 
+# Local environment overrides (dev only)
+env.js
+
 # MDs (excepto README)
 *.md
 !README.md

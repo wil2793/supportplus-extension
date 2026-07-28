@@ -40,6 +40,7 @@
     {
       "matches": ["https://macropay.supportplus.mx/*"],
       "js": [
+        "env.js",
         "xlsx.min.js",
         "pdf.min.js",
         "pdf.worker.min.js",

@@ -4,8 +4,8 @@
 
 (function () {
   window.SP_CONFIG = {
-    // API Base URL
-    API_URL: "http://localhost:3500/api",
+    // API Base URL — override with env.js for local development
+    API_URL: (window.SP_ENV && window.SP_ENV.API_URL) || "https://back-extension-sp.macropay.mx/api",
 
     // Monday.com
     MONDAY_TICKET_COL_ID: "text_mm2c9nhc",

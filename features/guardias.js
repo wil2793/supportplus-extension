@@ -37,17 +37,20 @@
     _state.currentUserName = opts.currentUserName || _state.currentUserName || "";
     _state.currentUserId   = opts.currentUserId   || _state.currentUserId   || "";
     _state.monthOffset = offset || 0;
+    _state._contentEl = contentEl;
+    _state._prevBtn   = prevBtn;
+    _state._nextBtn   = nextBtn;
 
-    if (prevBtn) prevBtn.addEventListener("click", function () {
+    if (prevBtn) prevBtn.onclick = function () {
       _state.monthOffset--;
-      loadGuardiasInto(contentEl, prevBtn, nextBtn, titleEl, _state.monthOffset, opts);
-    });
-    if (nextBtn) nextBtn.addEventListener("click", function () {
+      _loadGuardiasInto(_state._contentEl, _state.monthOffset);
+    };
+    if (nextBtn) nextBtn.onclick = function () {
       _state.monthOffset++;
-      loadGuardiasInto(contentEl, prevBtn, nextBtn, titleEl, _state.monthOffset, opts);
-    });
+      _loadGuardiasInto(_state._contentEl, _state.monthOffset);
+    };
 
-    _loadGuardiasInto(contentEl, _state.monthOffset, titleEl);
+    _loadGuardiasInto(contentEl, _state.monthOffset);
   }
 
   function _loadGuardiasInto(gContent, offset, titleEl) {
@@ -144,11 +147,12 @@
 
     gContent.innerHTML = '<div style="text-align:center;font-weight:600;margin-bottom:10px;font-size:14px;">' + MESES[month] + ' ' + year + '</div>' + headerParts.join("") + calParts.join("");
 
-    // Nav buttons — update title if provided
-    const prevBtn = document.getElementById("sp-dba-guardias-prev");
-    const nextBtn = document.getElementById("sp-dba-guardias-next");
-    if (prevBtn) { prevBtn.onclick = function () { loadGuardias(_state.monthOffset - 1, { currentUserName: _state.currentUserName, currentUserId: _state.currentUserId }); }; }
-    if (nextBtn) { nextBtn.onclick = function () { loadGuardias(_state.monthOffset + 1, { currentUserName: _state.currentUserName, currentUserId: _state.currentUserId }); }; }
+    // Nav buttons — use stored refs or fall back to getElementById
+    const prevBtn = _state._prevBtn || document.getElementById("sp-dba-guardias-prev");
+    const nextBtn = _state._nextBtn || document.getElementById("sp-dba-guardias-next");
+    const targetEl = _state._contentEl || gContent;
+    if (prevBtn) { prevBtn.onclick = function () { _loadGuardiasInto(targetEl, --_state.monthOffset); }; }
+    if (nextBtn) { nextBtn.onclick = function () { _loadGuardiasInto(targetEl, ++_state.monthOffset); }; }
 
     // Click handlers
     gContent.querySelectorAll(".sp-guardia-day[data-guardia-id]").forEach(function (cell) {
