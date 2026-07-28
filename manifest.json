@@ -5,7 +5,7 @@
   "description": "SupportPlus → Monday.com: Migra tickets con un click. Desarrollado por el equipo de Base de Datos (DBA).",
   "permissions": ["activeTab", "scripting", "storage", "tabs"],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "dist/background.js"
   },
   "host_permissions": [
     "https://macropay.supportplus.mx/*",
@@ -19,7 +19,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["pdf.worker.min.js"],
+      "resources": ["dist/pdf.worker.min.js"],
       "matches": ["https://macropay.supportplus.mx/*"]
     }
   ],
@@ -29,7 +29,7 @@
     "128": "icon128.png"
   },
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "dist/popup.html",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",
@@ -40,31 +40,10 @@
     {
       "matches": ["https://macropay.supportplus.mx/*"],
       "js": [
-        "env.js",
-        "xlsx.min.js",
-        "pdf.min.js",
-        "pdf.worker.min.js",
-        "config.js",
-        "styles.js",
-        "lib/storage.js",
-        "lib/logger.js",
-        "lib/cache.js",
-        "lib/event-bus.js",
-        "lib/dom-utils.js",
-        "lib/templates.js",
-        "components.js",
-        "lib/modal-builder.js",
-        "lib/api.js",
-        "lib/monday-utils.js",
-        "features/session.js",
-        "features/header-buttons.js",
-        "features/row-colors.js",
-        "features/manager-view.js",
-        "features/detail-view.js",
-        "features/ticket-actions.js",
-        "features/reports.js",
-        "features/guardias.js",
-        "content.js"
+        "dist/xlsx.min.js",
+        "dist/pdf.min.js",
+        "dist/pdf.worker.min.js",
+        "dist/content.js"
       ],
       "run_at": "document_idle"
     }

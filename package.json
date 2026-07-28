@@ -1,0 +1,24 @@
+{
+  "name": "supportplus-extension",
+  "version": "6.3.0",
+  "private": true,
+  "description": "SupportPlus → Monday.com Chrome Extension",
+  "scripts": {
+    "build": "webpack --mode production",
+    "build:dev": "webpack --mode development",
+    "watch": "webpack --mode development --watch",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts\""
+  },
+  "devDependencies": {
+    "@types/chrome": "0.0.270",
+    "@typescript-eslint/eslint-plugin": "7.18.0",
+    "@typescript-eslint/parser": "7.18.0",
+    "copy-webpack-plugin": "12.0.2",
+    "eslint": "8.57.0",
+    "ts-loader": "9.5.1",
+    "typescript": "5.5.4",
+    "webpack": "5.93.0",
+    "webpack-cli": "5.1.4"
+  }
+}
