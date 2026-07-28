@@ -159,6 +159,51 @@ async function syncFromAPI() {
     syncTime: Date.now()
   });
 
+  // ─── Resolve SP portal profileId (once per session) ──────
+  // Use the email to find the profileId in the SP portal, store it so
+  // content script never needs to re-fetch it.
+  if (currentEmail && d.usersMap[currentEmail]) {
+    const prevData = await chrome.storage.local.get(["spProfileId", "spProfileEmail"]);
+    // Clear cached profileId if email changed
+    if (prevData.spProfileEmail && prevData.spProfileEmail !== currentEmail) {
+      await chrome.storage.local.remove(["spProfileId", "spProfileEmail"]);
+      prevData.spProfileId = null;
+    }
+    if (!prevData.spProfileId) {
+      try {
+        const portalToken = await getPortalToken();
+        if (portalToken) {
+          const userData = d.usersMap[currentEmail];
+          const groupIds = userData.groups || [];
+          const groupId = groupIds[0] || "";
+          if (groupId) {
+            const spRes = await fetch(
+              `https://macropayapi.supportplus.mx/tickets/web/active-profiles-by-resolution-group/${groupId}`,
+              { headers: { accept: "application/json", authorization: "Bearer " + portalToken } }
+            );
+            if (spRes.ok) {
+              const spJson = await spRes.json();
+              const profiles = spJson.data || spJson;
+              if (Array.isArray(profiles)) {
+                const me = profiles.find(function (p) {
+                  return p.email && p.email.toLowerCase() === currentEmail;
+                }) || profiles.find(function (p) {
+                  return (p.profileFullName || "").toLowerCase().includes(
+                    (userData.name || "").split(" ")[0].toLowerCase()
+                  );
+                });
+                if (me && me.profileId) {
+                  await chrome.storage.local.set({ spProfileId: me.profileId, spProfileEmail: currentEmail });
+                  console.log("[SP] profileId resolved:", me.profileId);
+                }
+              }
+            }
+          }
+        }
+      } catch (e) { /* non-critical */ }
+    }
+  }
+
   console.log("[SP] Synced:", Object.keys(d.usersMap).length, "users, v:", d.latestVersion);
 }
 

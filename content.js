@@ -1756,6 +1756,16 @@
       // Use cached sessionProfileId if available
       if (sessionProfileId) return sessionProfileId;
       if (myProfileId) return myProfileId;
+
+      // Priority 1: read from storage (resolved once during sync)
+      const stored = await new Promise(function (r) {
+        chrome.storage.local.get("spProfileId", function (d) { r(d); });
+      });
+      if (stored.spProfileId) {
+        myProfileId = stored.spProfileId;
+        sessionProfileId = stored.spProfileId;
+        return myProfileId;
+      }
       const spToken = getToken();
       if (!spToken) return null;
       const myName = getLoggedUserName();
@@ -1801,6 +1811,11 @@
         if (found) {
           myProfileId = found.profileId;
           sessionProfileId = found.profileId; // Also cache globally
+        }
+        // Fallback: use profileId from session state (synced from our DB)
+        if (!myProfileId && SP_Session.state.profileId) {
+          myProfileId = SP_Session.state.profileId;
+          sessionProfileId = SP_Session.state.profileId;
         }
         return myProfileId;
       } catch (e) {
@@ -2266,6 +2281,10 @@
           });
           if (!res.ok) throw new Error("HTTP " + res.status);
           var json = await res.json();
+          if (!json.success) {
+            SP_Log.error("[Take] reassign failed:", JSON.stringify(json));
+            throw new Error(json.message || json.error || "Error al tomar ticket");
+          }
           if (json.success) {
             // If "Ticket realizado" is checked, also close and optionally migrate
             if (doneCheck.checked) {

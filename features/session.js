@@ -230,8 +230,17 @@
   // ─── Resolve Profile ID ───────────────────────────────────
   async function resolveProfileId() {
     if (state.profileId) return state.profileId;
+
+    // Read from storage first (resolved once during sync)
+    const cachedId = await SP_Storage.get("spProfileId");
+    if (cachedId) {
+      state.profileId = cachedId;
+      return cachedId;
+    }
+
     const name = state.userName || getLoggedUserNameFromDOM();
-    if (!name) return null;
+    const email = state.userEmail;
+    if (!name && !email) return null;
     const spToken = getSpToken();
     if (!spToken) return null;
     const groupId = state.teamArea || "19";
@@ -244,7 +253,19 @@
       const json = await res.json();
       const profiles = json.data || json;
       if (!Array.isArray(profiles)) return null;
-      const me = profiles.find(function (p) { return p.profileFullName === name; });
+      // Priority 1: match by email
+      let me = email ? profiles.find(function (p) { return p.email && p.email.toLowerCase() === email.toLowerCase(); }) : null;
+      // Priority 2: exact name
+      if (!me && name) me = profiles.find(function (p) { return p.profileFullName === name; });
+      // Priority 3: partial name
+      if (!me && name) {
+        const nameLower = name.toLowerCase();
+        me = profiles.find(function (p) {
+          const full = (p.profileFullName || "").toLowerCase();
+          const parts = nameLower.split(/\s+/).filter(function (w) { return w.length > 2; });
+          return parts.filter(function (w) { return full.includes(w); }).length >= 2;
+        });
+      }
       if (me) {
         state.profileId = me.profileId;
         SP_Storage.set("sessionProfileId", me.profileId);
