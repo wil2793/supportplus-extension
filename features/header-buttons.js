@@ -245,9 +245,26 @@
     phase: "always",
     hidden: true,
     onClick: function () {
-      SP_Storage.get("latestZipUrl").then(function (url) {
-        if (url) downloadZip(url, "", null);
+      SP_Storage.getMultiple(["latestZipUrl", "latestVersion"]).then(function (stored) {
+        if (stored.latestZipUrl) downloadZip(stored.latestZipUrl, stored.latestVersion || "", null);
       });
+    }
+  });
+
+  registerButton({
+    id: "sp-dba-info-btn",
+    icon: "🏠",
+    label: "DBA Info",
+    color: "#4CAF50",
+    phase: "session",
+    shouldShow: function () {
+      const ss = window.SP_Session.state;
+      return !!(ss.canGuardias || ss.canAddParticipant || ss.canAddProduct || ss.canAdelantar);
+    },
+    onClick: function () {
+      if (window.SP_ManagerView && window.SP_ManagerView.showDBAInfo) {
+        window.SP_ManagerView.showDBAInfo();
+      }
     }
   });
 

@@ -29,6 +29,28 @@
     _state.currentUserId = opts.currentUserId || "";
     const gContent = document.getElementById("sp-dba-guardias-content");
     if (!gContent) return;
+    _loadGuardiasInto(gContent, offset);
+  }
+
+  function loadGuardiasInto(contentEl, prevBtn, nextBtn, titleEl, offset, options) {
+    const opts = options || {};
+    _state.currentUserName = opts.currentUserName || _state.currentUserName || "";
+    _state.currentUserId   = opts.currentUserId   || _state.currentUserId   || "";
+    _state.monthOffset = offset || 0;
+
+    if (prevBtn) prevBtn.addEventListener("click", function () {
+      _state.monthOffset--;
+      loadGuardiasInto(contentEl, prevBtn, nextBtn, titleEl, _state.monthOffset, opts);
+    });
+    if (nextBtn) nextBtn.addEventListener("click", function () {
+      _state.monthOffset++;
+      loadGuardiasInto(contentEl, prevBtn, nextBtn, titleEl, _state.monthOffset, opts);
+    });
+
+    _loadGuardiasInto(contentEl, _state.monthOffset, titleEl);
+  }
+
+  function _loadGuardiasInto(gContent, offset, titleEl) {
     gContent.innerHTML = '<div style="text-align:center;color:#888;padding:20px;">Cargando...</div>';
 
     const today = new Date();
@@ -122,7 +144,7 @@
 
     gContent.innerHTML = '<div style="text-align:center;font-weight:600;margin-bottom:10px;font-size:14px;">' + MESES[month] + ' ' + year + '</div>' + headerParts.join("") + calParts.join("");
 
-    // Nav buttons
+    // Nav buttons — update title if provided
     const prevBtn = document.getElementById("sp-dba-guardias-prev");
     const nextBtn = document.getElementById("sp-dba-guardias-next");
     if (prevBtn) { prevBtn.onclick = function () { loadGuardias(_state.monthOffset - 1, { currentUserName: _state.currentUserName, currentUserId: _state.currentUserId }); }; }
@@ -267,7 +289,8 @@
 
   // Expose
   window.SP_Guardias = {
-    load: loadGuardias
+    load: loadGuardias,
+    loadInto: loadGuardiasInto
   };
 
 })();

@@ -344,6 +344,11 @@
     // Bridge: downloadZip from header-buttons.js
     var downloadZip = window.SP_Header.downloadZip;
 
+    // Inject session-phase buttons (e.g. DBA Info — requires permissions)
+    if (window.SP_Header && window.SP_Header.injectButtons) {
+      window.SP_Header.injectButtons("session");
+    }
+
     // Header buttons: inject local buttons once wrapper is available
     SP_DOM.waitForElement('[class*="warapperNameUserAndLogout"]', {
       maxAttempts: 20,

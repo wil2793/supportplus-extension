@@ -390,63 +390,6 @@
 
     // Guardias calendar is now inside the flex row above
 
-    // Inject productos, guardias, and birthday in a flex row
-    if (!document.getElementById("sp-productos-panel")) {
-      const rowContainer = document.createElement("div");
-      rowContainer.id = "sp-info-row";
-      rowContainer.style.cssText = "display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;";
-
-      const prodPanel = document.createElement("div");
-      prodPanel.id = "sp-productos-panel";
-      prodPanel.style.cssText = "flex:2;min-width:300px;padding:16px;border-radius:8px;border:2px solid #FF8F00;font-family:system-ui;color:inherit;";
-      prodPanel.innerHTML =
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-        '<h4 style="margin:0;font-size:15px;font-weight:600;">🧃 Productos</h4>' +
-        '<div style="display:flex;gap:6px;">' +
-        (SP_Session.state.canAddParticipant ? '<button id="sp-add-user-btn" style="padding:4px 10px;border:1px solid #4CAF50;border-radius:6px;background:transparent;color:#4CAF50;cursor:pointer;font-size:11px;font-weight:600;">+ Participante</button>' : '') +
-        (SP_Session.state.canAddProduct ? '<button id="sp-add-role-btn" style="padding:4px 10px;border:1px solid #1976D2;border-radius:6px;background:transparent;color:#1976D2;cursor:pointer;font-size:11px;font-weight:600;">+ Producto</button>' : '') +
-        '</div></div>' +
-        '<div id="sp-productos-tabs"></div>' +
-        '<div id="sp-productos-content"><div style="text-align:center;padding:20px;opacity:.6;">Cargando...</div></div>';
-
-      const calPanel = document.createElement("div");
-      calPanel.id = "sp-guardias-calendar-panel";
-      calPanel.style.cssText = "flex:2;min-width:300px;padding:16px;border-radius:8px;border:2px solid #1976D2;font-family:system-ui;color:inherit;";
-      calPanel.innerHTML =
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-        '<button id="sp-dba-guardias-prev" style="padding:6px 12px;border:1px solid currentColor;border-radius:6px;background:transparent;color:inherit;cursor:pointer;font-size:14px;">◀</button>' +
-        '<h4 style="margin:0;font-size:15px;font-weight:600;">📅 Guardias</h4>' +
-        '<button id="sp-dba-guardias-next" style="padding:6px 12px;border:1px solid currentColor;border-radius:6px;background:transparent;color:inherit;cursor:pointer;font-size:14px;">▶</button>' +
-        '</div>' +
-        '<div id="sp-dba-guardias-content"><div style="text-align:center;padding:20px;opacity:.6;">Cargando guardias...</div></div>';
-
-      const bdayPanel = document.createElement("div");
-      bdayPanel.id = "sp-birthday-panel";
-      bdayPanel.style.cssText = "flex:1;min-width:250px;padding:16px;border-radius:8px;border:2px solid #E91E63;font-family:system-ui;color:inherit;";
-      bdayPanel.innerHTML =
-        '<h4 style="margin:0 0 12px;font-size:15px;font-weight:600;">🎂 Cumpleaños</h4>' +
-        '<div id="sp-birthday-content"><div style="text-align:center;padding:12px;opacity:.6;">Cargando...</div></div>';
-
-      rowContainer.appendChild(prodPanel);
-      rowContainer.appendChild(calPanel);
-      rowContainer.appendChild(bdayPanel);
-      grid.parentElement.insertBefore(rowContainer, grid);
-      loadProductosPanel();
-      loadBirthdayPanel();
-
-      // Button handlers
-      const addUserBtn = document.getElementById("sp-add-user-btn");
-      const addRoleBtn = document.getElementById("sp-add-role-btn");
-      if (addUserBtn) addUserBtn.addEventListener("click", showAddUserModal);
-      if (addRoleBtn) addRoleBtn.addEventListener("click", showAddRoleModal);
-
-      if (window.SP_Guardias) {
-        const userName = SP_Session.state.userName || "";
-        const userId = String(SP_Session.state.currentUserId || "");
-        window.SP_Guardias.load(0, { currentUserName: userName, currentUserId: userId });
-      }
-    }
-
     const singleGroup = (groups.length === 1);
     const GROUP_INFO = window.SP_Header ? window.SP_Header.getGroupInfo() : window.SP_CONFIG.GROUP_INFO;
 
@@ -740,10 +683,19 @@
       const cells = [];
       for (let i = 0; i < prod.cantidad; i++) {
         const isMarked = userCount > i;
-        if (isMe && !isMarked && i === userCount) {
+        // How many full cycles this slot has been completed
+        const timesThisSlot = isMarked ? Math.floor((userCount - i - 1) / prod.cantidad) + 1 : 0;
+        const badge = timesThisSlot > 1
+          ? ' <span style="font-size:9px;background:#FF8F00;color:#fff;border-radius:8px;padding:1px 5px;font-weight:700;vertical-align:middle;">x' + timesThisSlot + '</span>'
+          : '';
+        // Next slot to mark: position within current cycle
+        const nextSlot = userCount % prod.cantidad;
+        const isNextToMark = isMe && !isMarked && i === nextSlot && userCount >= i;
+
+        if (isNextToMark) {
           cells.push('<td style="padding:6px 10px;text-align:center;"><input type="checkbox" class="sp-prod-check" data-prod-id="' + prod.id + '" data-user-id="' + m.IdUsuario + '" data-slot="' + i + '" style="cursor:pointer;width:16px;height:16px;"></td>');
         } else {
-          const display = isMarked ? "\u2705" : "\u2014";
+          const display = isMarked ? '\u2705' + badge : '\u2014';
           cells.push('<td style="padding:6px 10px;text-align:center;">' + display + '</td>');
         }
       }
@@ -790,6 +742,49 @@
         });
       });
     });
+
+    // ─── Adelantar section (solo rol Adelantar Producto) ─────
+    if (SP_Session.state.canAdelantar) {
+      const adelantarSection = document.createElement("div");
+    adelantarSection.style.cssText = "margin-top:12px;display:flex;align-items:center;gap:8px;padding-top:10px;border-top:1px solid #333;";
+    adelantarSection.innerHTML =
+      '<span style="font-size:11px;opacity:.7;white-space:nowrap;">⏩ Adelantar:</span>' +
+      '<select id="sp-adelantar-select" style="flex:1;padding:5px 8px;border:1px solid #555;border-radius:6px;font-size:12px;background:#1E1E1E;color:inherit;">' +
+      prod.miembros.map(function (m) {
+        const count = logMap[m.IdUsuario + "_" + prod.id] || 0;
+        const adelantos = Math.max(0, count - prod.cantidad);
+        const badge = adelantos > 0 ? " (x" + (adelantos + 1) + ")" : "";
+        return '<option value="' + m.IdUsuario + '">' + m.Nombre + badge + '</option>';
+      }).join("") +
+      '</select>' +
+      '<button id="sp-adelantar-btn" style="padding:5px 12px;border:none;border-radius:6px;background:#FF8F00;color:#fff;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Aceptar</button>';
+    contentEl.appendChild(adelantarSection);
+
+    document.getElementById("sp-adelantar-btn").addEventListener("click", function () {
+      const sel = document.getElementById("sp-adelantar-select");
+      if (!sel) return;
+      const userId = parseInt(sel.value);
+      const btn = document.getElementById("sp-adelantar-btn");
+      btn.disabled = true;
+      btn.textContent = "...";
+      chrome.runtime.sendMessage({
+        type: "api-post",
+        endpoint: "/productos/log",
+        body: { fkIdProducto: prod.id, fkIdUsuario: userId, usuarioAlta: "EXTENSION" }
+      }, function (resp) {
+        if (resp && resp.success) {
+          const k = userId + "_" + prod.id;
+          logMap[k] = (logMap[k] || 0) + 1;
+          window.showSuccessToast("⏩ Adelanto registrado");
+          renderProductTab(idx, productos, logMap, currentUserId, contentEl);
+        } else {
+          window.showErrorToast("Error al registrar adelanto");
+          btn.disabled = false;
+          btn.textContent = "Aceptar";
+        }
+      });
+    });
+    } // end canAdelantar
   }
 
   // ─── Add User Modal (assign products to a user) ────────────
@@ -961,10 +956,184 @@
     });
   }
 
+  // ─── DBA Info Modal (tabbed: Guardias, Productos, Cumpleaños) ──
+  function showDBAInfoModal() {
+    const ss = SP_Session.state;
+    const canGuardias  = !!ss.canGuardias;
+    const canProductos = !!ss.canAddParticipant || !!ss.canAddProduct || !!ss.canAdelantar;
+    // Determine which tabs are visible — at least one product role or guardias qualifies
+    // If user has any of these, they can see cumpleaños too
+    const hasSomething = canGuardias || canProductos;
+    if (!hasSomething) return;
+
+    // Build tab definitions
+    const tabs = [];
+    if (canGuardias)  tabs.push({ id: "guardias",   label: "📅 Guardias"   });
+    if (canProductos) tabs.push({ id: "productos",  label: "🧃 Productos"  });
+    tabs.push({ id: "cumpleanos", label: "🎂 Cumpleaños" }); // always if visible
+
+    const tabBtnsHtml = tabs.map(function (t, i) {
+      const active = i === 0 ? "border-bottom:2px solid #4CAF50;color:#4CAF50;" : "opacity:.6;";
+      return '<button class="sp-dba-tab-btn" data-tab="' + t.id + '" style="padding:8px 16px;border:none;background:transparent;cursor:pointer;font-size:13px;font-weight:600;' + active + '">' + t.label + '</button>';
+    }).join("");
+
+    const contentHtml =
+      '<div style="display:flex;border-bottom:1px solid #333;margin-bottom:12px;">' + tabBtnsHtml + '</div>' +
+      '<div id="sp-dba-modal-content" style="min-height:200px;"></div>';
+
+    const m = SP_Modal.info({
+      id: "sp-dba-info-modal",
+      title: "🏠 DBA Info",
+      content: contentHtml,
+      maxWidth: "700px",
+      modalOptions: { maxHeight: "85vh" }
+    });
+
+    // Tab switching
+    function activateTab(tabId) {
+      m.overlay.querySelectorAll(".sp-dba-tab-btn").forEach(function (btn) {
+        const isActive = btn.dataset.tab === tabId;
+        btn.style.borderBottom = isActive ? "2px solid #4CAF50" : "none";
+        btn.style.opacity = isActive ? "1" : ".6";
+        btn.style.color = isActive ? "#4CAF50" : "inherit";
+      });
+
+      const container = document.getElementById("sp-dba-modal-content");
+      if (!container) return;
+      container.innerHTML = '<div style="text-align:center;padding:20px;opacity:.6;">Cargando...</div>';
+
+      if (tabId === "guardias") {
+        container.innerHTML =
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+          '<button id="sp-dba-g-prev" style="padding:5px 10px;border:1px solid currentColor;border-radius:6px;background:transparent;color:inherit;cursor:pointer;">◀</button>' +
+          '<span id="sp-dba-g-title" style="font-weight:600;"></span>' +
+          '<button id="sp-dba-g-next" style="padding:5px 10px;border:1px solid currentColor;border-radius:6px;background:transparent;color:inherit;cursor:pointer;">▶</button>' +
+          '</div>' +
+          '<div id="sp-dba-g-content"></div>';
+
+        const userName = ss.userName || "";
+        const userId   = String(ss.profileId || "");
+        if (window.SP_Guardias) {
+          window.SP_Guardias.loadInto(
+            document.getElementById("sp-dba-g-content"),
+            document.getElementById("sp-dba-g-prev"),
+            document.getElementById("sp-dba-g-next"),
+            null,
+            0, { currentUserName: userName, currentUserId: userId }
+          );
+        }
+      }
+
+      if (tabId === "productos") {
+        container.innerHTML =
+          '<div id="sp-dba-prod-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+          '<h4 style="margin:0;font-size:14px;font-weight:600;">🧃 Productos</h4>' +
+          '<div style="display:flex;gap:6px;">' +
+          (ss.canAddParticipant ? '<button id="sp-dba-add-user-btn" style="padding:4px 10px;border:1px solid #4CAF50;border-radius:6px;background:transparent;color:#4CAF50;cursor:pointer;font-size:11px;font-weight:600;">+ Participante</button>' : '') +
+          (ss.canAddProduct     ? '<button id="sp-dba-add-prod-btn" style="padding:4px 10px;border:1px solid #1976D2;border-radius:6px;background:transparent;color:#1976D2;cursor:pointer;font-size:11px;font-weight:600;">+ Producto</button>' : '') +
+          '</div></div>' +
+          '<div id="sp-dba-prod-tabs" style="display:flex;margin-bottom:4px;"></div>' +
+          '<div id="sp-dba-prod-content"></div>';
+
+        // Wire add buttons to existing modal functions
+        const addUserBtn = document.getElementById("sp-dba-add-user-btn");
+        const addProdBtn = document.getElementById("sp-dba-add-prod-btn");
+        if (addUserBtn) addUserBtn.addEventListener("click", showAddUserModal);
+        if (addProdBtn) addProdBtn.addEventListener("click", showAddRoleModal);
+
+        // Reuse loadProductosPanel logic but targeting dba-modal elements
+        _loadProductosPanelInto(
+          document.getElementById("sp-dba-prod-tabs"),
+          document.getElementById("sp-dba-prod-content")
+        );
+      }
+
+      if (tabId === "cumpleanos") {
+        container.innerHTML = '<div id="sp-dba-bday-content"></div>';
+        _loadBirthdayInto(document.getElementById("sp-dba-bday-content"));
+      }
+    }
+
+    // Activate first tab
+    activateTab(tabs[0].id);
+
+    // Tab click handlers
+    m.overlay.querySelectorAll(".sp-dba-tab-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () { activateTab(btn.dataset.tab); });
+    });
+  }
+
+  // Helper: load productos into arbitrary containers
+  function _loadProductosPanelInto(tabsEl, contentEl) {
+    if (!tabsEl || !contentEl) return;
+    const currentUserId = SP_Session.state.profileId;
+    if (!currentUserId) { contentEl.innerHTML = '<div style="padding:12px;opacity:.6;">Sin usuario</div>'; return; }
+
+    chrome.runtime.sendMessage({ type: "api-get", endpoint: "/productos/mis-productos/" + currentUserId }, function (resp) {
+      const productos = (resp && resp.success && resp.data && resp.data.data) ? resp.data.data : [];
+      if (!productos.length) { contentEl.innerHTML = '<div style="padding:12px;opacity:.6;">Sin productos asignados</div>'; return; }
+
+      chrome.runtime.sendMessage({ type: "api-get", endpoint: "/productos/log" }, function (logResp) {
+        const logs = (logResp && logResp.success && logResp.data && logResp.data.data) ? logResp.data.data : [];
+        const logMap = {};
+        logs.forEach(function (l) { const k = l.FK_IdUsuario + "_" + l.FK_IdcatProducto; logMap[k] = (logMap[k] || 0) + 1; });
+
+        let currentTabIdx = 0;
+        tabsEl.innerHTML = productos.map(function (p, idx) {
+          const active = idx === 0 ? "border-bottom:2px solid #FF8F00;color:#FF8F00;" : "color:inherit;opacity:.6;";
+          return '<button class="sp-dba-prod-tab" data-prod-idx="' + idx + '" style="padding:8px 16px;border:none;background:transparent;cursor:pointer;font-size:13px;font-weight:600;' + active + '">' + p.nombre + '</button>';
+        }).join("");
+
+        renderProductTab(0, productos, logMap, currentUserId, contentEl);
+
+        tabsEl.querySelectorAll(".sp-dba-prod-tab").forEach(function (tab) {
+          tab.addEventListener("click", function () {
+            tabsEl.querySelectorAll(".sp-dba-prod-tab").forEach(function (t) { t.style.borderBottom = "none"; t.style.opacity = ".6"; t.style.color = "inherit"; });
+            tab.style.borderBottom = "2px solid #FF8F00"; tab.style.opacity = "1"; tab.style.color = "#FF8F00";
+            currentTabIdx = parseInt(tab.dataset.prodIdx);
+            renderProductTab(currentTabIdx, productos, logMap, currentUserId, contentEl);
+          });
+        });
+      });
+    });
+  }
+
+  // Helper: load birthday into arbitrary container
+  function _loadBirthdayInto(contentEl) {
+    if (!contentEl) return;
+    chrome.storage.local.get(["usersMap"], function (stored) {
+      const usersMap = stored.usersMap || {};
+      const now = new Date();
+      const birthdays = [];
+      Object.keys(usersMap).forEach(function (email) {
+        const u = usersMap[email];
+        if (!u || !u.cumpleanos) return;
+        const parts = u.cumpleanos.split("-");
+        const month = parseInt(parts[1]);
+        const day   = parseInt(parts[2]);
+        const mmdd  = month * 100 + day;
+        const meses = ["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+        const thisYearBday = new Date(now.getFullYear(), month - 1, day);
+        const diff = Math.floor((thisYearBday - now) / (1000 * 60 * 60 * 24));
+        const color = diff < 0 ? "#D32F2F" : diff <= 30 ? "#F9A825" : "#2E7D32";
+        birthdays.push({ name: u.name, date: day + " " + meses[month], mmdd: mmdd, color: color });
+      });
+      if (!birthdays.length) { contentEl.innerHTML = '<div style="padding:12px;opacity:.6;">Sin cumpleaños registrados</div>'; return; }
+      birthdays.sort(function (a, b) { return a.mmdd - b.mmdd; });
+      contentEl.innerHTML = birthdays.map(function (b) {
+        return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(128,128,128,.2);">' +
+          '<span>' + b.name + '</span>' +
+          '<span style="font-size:12px;color:' + b.color + ';font-weight:600;">' + b.date + '</span>' +
+          '</div>';
+      }).join("");
+    });
+  }
+
   // Expose
   window.SP_ManagerView = {
     init: initManagerView,
-    _fetchPendingClose: null // Set by content.js (fetchPendingCloseTickets)
+    showDBAInfo: showDBAInfoModal,
+    _fetchPendingClose: null
   };
 
 })();

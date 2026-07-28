@@ -179,6 +179,8 @@
       state.canRejectTickets = !!ctx.userData.canRejectTickets;
       state.canAddParticipant = !!ctx.userData.canAddParticipant;
       state.canAddProduct = !!ctx.userData.canAddProduct;
+      state.canAdelantar = !!ctx.userData.canAdelantar;
+      state.canGuardias = !!ctx.userData.canGuardias;
 
       if (stored.userConfig) state.userConfig = stored.userConfig;
 
