@@ -247,14 +247,80 @@ const CSS = `
 
 /* ─── Col headers ─── */
 .sp-col-header {
+  color: #fff;
   padding: 4px 8px;
   font-size: 10px;
   font-weight: 700;
   text-align: center;
-  color: #fff;
 }
 .sp-col-header-unassigned { background: #FF8F00; }
-.sp-col-header-member { background: #1976D2; }
+.sp-col-header-member { background: #2196F3; }
+.sp-col-header-closed { background: #2E7D32; }
+.sp-col-header-pending { background: #FF8F00; }
+
+/* ─── Manager Panel Layout ─── */
+.sp-mgr-panel {
+  margin-bottom: 12px;
+  padding: 16px;
+  border-radius: 8px;
+  border: 2px solid #4CAF50;
+  font-family: system-ui;
+}
+.sp-mgr-columns-wrap {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+.sp-mgr-summary-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+/* ─── Summary Count Card ─── */
+.sp-summary-card {
+  min-width: 160px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  text-align: center;
+}
+.sp-summary-card-header {
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.sp-summary-card-count {
+  padding: 12px;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+/* ─── Collapsible Section ─── */
+.sp-section {
+  margin-bottom: 8px;
+  border: none;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.sp-section-header {
+  padding: 8px 12px;
+  background: #f5f5f5;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sp-section-body {
+  padding: 8px;
+  overflow-x: auto;
+}
 `;
 
 /** Inject all extension CSS into the page. Called once at startup. */
