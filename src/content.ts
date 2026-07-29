@@ -2977,7 +2977,7 @@ function initExtension() {
       );
       const containerDiv = document.createElement("div");
       containerDiv.style.cssText =
-        "display:flex;gap:8px;justify-content:center;flex-wrap:wrap;";
+        "display:flex;gap:8px;flex-wrap:nowrap;min-width:max-content;";
       panel.innerHTML = "";
       panel.appendChild(containerDiv);
       areas.forEach((area, areaIdx) => {
