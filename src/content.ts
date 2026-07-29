@@ -5024,7 +5024,7 @@ function initExtension() {
     injectBulkButton();
     injectNewTicketButton();
     void checkPendingCloseAlert();
-    void loadTeamPanel();
+    // NOTE: team panel is managed by SP_ManagerView.initManagerView() — do not call loadTeamPanel() here
   }
 
   // ─── Main MutationObserver + init ────────────────────────────
