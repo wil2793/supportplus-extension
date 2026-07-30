@@ -18,7 +18,9 @@ const QUICK_SEARCH_ID = "sp-quick-search";
 const QUICK_FILTER_ID = "sp-quick-filter";
 
 let _activeModalRefresh: (() => void | Promise<void>) | null = null;
-export function setActiveModalRefresh(fn: (() => void | Promise<void>) | null): void {
+export function setActiveModalRefresh(
+  fn: (() => void | Promise<void>) | null,
+): void {
   _activeModalRefresh = fn;
 }
 export function triggerActiveModalRefresh(): void {
@@ -30,19 +32,38 @@ export function triggerActiveModalRefresh(): void {
 export function injectSearchButton(
   getLoggedUserName: () => string,
   openTicketCallback: (id: number) => void,
-  createTakeBtn: (id: string | number, onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>) => HTMLButtonElement,
-  createCloseBtn: (id: string | number, onClose: (id: string | number, btn: HTMLButtonElement) => Promise<void>) => HTMLButtonElement,
-  createStealBtn: (id: string | number, name: string, onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>) => HTMLButtonElement,
+  createTakeBtn: (
+    id: string | number,
+    onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
+  ) => HTMLButtonElement,
+  createCloseBtn: (
+    id: string | number,
+    onClose: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
+  ) => HTMLButtonElement,
+  createStealBtn: (
+    id: string | number,
+    name: string,
+    onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
+  ) => HTMLButtonElement,
 ): void {
   if (document.getElementById(SEARCH_BTN_ID)) return;
-  const userWrapper = document.querySelector<HTMLElement>('[class*="warapperNameUserAndLogout"]');
+  const userWrapper = document.querySelector<HTMLElement>(
+    '[class*="warapperNameUserAndLogout"]',
+  );
   if (!userWrapper) return;
   const btn = createHeaderButton({
     id: SEARCH_BTN_ID,
     icon: "🔍",
     label: "Buscar",
     color: "#7B1FA2",
-    onClick: () => showSearchModal(getLoggedUserName, openTicketCallback, createTakeBtn, createCloseBtn, createStealBtn),
+    onClick: () =>
+      showSearchModal(
+        getLoggedUserName,
+        openTicketCallback,
+        createTakeBtn,
+        createCloseBtn,
+        createStealBtn,
+      ),
   });
   btn.style.marginRight = "12px";
   userWrapper.parentElement?.insertBefore(btn, userWrapper);
@@ -54,25 +75,32 @@ export function injectQuickSearch(
   openTicketCallback: (id: number) => void,
 ): void {
   if (document.getElementById(QUICK_SEARCH_ID)) return;
-  const userWrapper = document.querySelector<HTMLElement>('[class*="warapperNameUserAndLogout"]');
+  const userWrapper = document.querySelector<HTMLElement>(
+    '[class*="warapperNameUserAndLogout"]',
+  );
   if (!userWrapper) return;
 
   const wrapper = document.createElement("div");
   wrapper.id = QUICK_SEARCH_ID;
-  wrapper.style.cssText = "display:inline-flex;align-items:center;gap:4px;margin-right:12px;";
+  wrapper.style.cssText =
+    "display:inline-flex;align-items:center;gap:4px;margin-right:12px;";
 
   const input = document.createElement("input");
-  input.type = "text"; input.placeholder = "Folio o ID...";
-  input.style.cssText = "padding:5px 10px;font-size:12px;border:1px solid #ccc;border-radius:6px;width:130px;outline:none;";
+  input.type = "text";
+  input.placeholder = "Folio o ID...";
+  input.style.cssText =
+    "padding:5px 10px;font-size:12px;border:1px solid #ccc;border-radius:6px;width:130px;outline:none;";
 
   const goBtn = document.createElement("button");
   goBtn.textContent = "→";
-  goBtn.style.cssText = "padding:5px 10px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#4CAF50;color:#fff;font-weight:600;";
+  goBtn.style.cssText =
+    "padding:5px 10px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#4CAF50;color:#fff;font-weight:600;";
 
   const doSearch = async () => {
     const val = input.value.trim();
     if (!val) return;
-    goBtn.disabled = true; goBtn.textContent = "...";
+    goBtn.disabled = true;
+    goBtn.textContent = "...";
     try {
       const res = await fetch(
         `${SP_CONFIG.SP_SEARCH_API}?uniqueCode=${encodeURIComponent(val)}&page=0&size=1`,
@@ -83,13 +111,20 @@ export function injectQuickSearch(
       const tickets: AnyObj[] = (json["data"] ?? json)["content"] ?? [];
       if (tickets.length > 0) openTicketCallback(tickets[0].id as number);
       else showErrorToast(`Ticket no encontrado: ${val}`);
-    } catch (err) { showErrorToast(`Error: ${(err as Error).message}`); }
-    goBtn.textContent = "→"; goBtn.disabled = false; input.value = "";
+    } catch (err) {
+      showErrorToast(`Error: ${(err as Error).message}`);
+    }
+    goBtn.textContent = "→";
+    goBtn.disabled = false;
+    input.value = "";
   };
 
   goBtn.addEventListener("click", () => void doSearch());
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter") void doSearch(); });
-  wrapper.appendChild(input); wrapper.appendChild(goBtn);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") void doSearch();
+  });
+  wrapper.appendChild(input);
+  wrapper.appendChild(goBtn);
   userWrapper.parentElement?.insertBefore(wrapper, userWrapper);
 }
 
@@ -99,17 +134,45 @@ export function injectQuickFilterButton(
   getResolutionGroupId: () => number,
   getLoggedUserName: () => string,
   openTicketCallback: (id: number) => void,
-  createTakeBtn: (id: string | number, onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>) => HTMLButtonElement,
-  createCloseBtn: (id: string | number, onClose: (id: string | number, btn: HTMLButtonElement) => Promise<void>) => HTMLButtonElement,
-  createStealBtn: (id: string | number, name: string, onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>) => HTMLButtonElement,
+  createTakeBtn: (
+    id: string | number,
+    onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
+  ) => HTMLButtonElement,
+  createCloseBtn: (
+    id: string | number,
+    onClose: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
+  ) => HTMLButtonElement,
+  createStealBtn: (
+    id: string | number,
+    name: string,
+    onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
+  ) => HTMLButtonElement,
 ): void {
   if (document.getElementById(QUICK_FILTER_ID)) return;
-  const userWrapper = document.querySelector<HTMLElement>('[class*="warapperNameUserAndLogout"]');
+  const userWrapper = document.querySelector<HTMLElement>(
+    '[class*="warapperNameUserAndLogout"]',
+  );
   if (!userWrapper) return;
   const btn = document.createElement("button");
-  btn.id = QUICK_FILTER_ID; btn.textContent = "⏳ En espera";
-  btn.style.cssText = "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#FF8F00;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
-  btn.addEventListener("click", () => void showQuickFilterModal("En espera", getResolutionGroupId, undefined, undefined, getLoggedUserName, openTicketCallback, createTakeBtn, createCloseBtn, createStealBtn));
+  btn.id = QUICK_FILTER_ID;
+  btn.textContent = "⏳ En espera";
+  btn.style.cssText =
+    "padding:6px 14px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#FF8F00;color:#fff;font-weight:600;white-space:nowrap;margin-right:8px;";
+  btn.addEventListener(
+    "click",
+    () =>
+      void showQuickFilterModal(
+        "En espera",
+        getResolutionGroupId,
+        undefined,
+        undefined,
+        getLoggedUserName,
+        openTicketCallback,
+        createTakeBtn,
+        createCloseBtn,
+        createStealBtn,
+      ),
+  );
   userWrapper.parentElement?.insertBefore(btn, userWrapper);
 }
 
@@ -117,7 +180,11 @@ export function injectQuickFilterButton(
 
 async function fetchTickets(
   url: string,
-): Promise<{ tickets: TicketRow[]; totalPages: number; totalElements: number }> {
+): Promise<{
+  tickets: TicketRow[];
+  totalPages: number;
+  totalElements: number;
+}> {
   const res = await fetch(url, { headers: spGetHeaders() });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const json = (await res.json()) as AnyObj;
@@ -131,22 +198,49 @@ async function fetchTickets(
 
 // ─── Stubs for button factories (injected at call time) ───────
 
-type TakeFactory = (id: string | number, onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>) => HTMLButtonElement;
-type CloseFactory = (id: string | number, onClose: (id: string | number, btn: HTMLButtonElement) => Promise<void>) => HTMLButtonElement;
-type StealFactory = (id: string | number, name: string, onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>) => HTMLButtonElement;
+type TakeFactory = (
+  id: string | number,
+  onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
+) => HTMLButtonElement;
+type CloseFactory = (
+  id: string | number,
+  onClose: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
+) => HTMLButtonElement;
+type StealFactory = (
+  id: string | number,
+  name: string,
+  onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
+) => HTMLButtonElement;
 
-function noop() { return Promise.resolve(); }
+function noop(_id: string | number, _btn: HTMLButtonElement): Promise<void> {
+  return Promise.resolve();
+}
 
 function buildActionFactories(
-  openTicketCallback: (id: number) => void,
+  _openTicketCallback: (id: number) => void,
   createTakeBtn: TakeFactory,
   createCloseBtn: CloseFactory,
   createStealBtn: StealFactory,
 ) {
+  // The factories already receive the onTake/onClose callback in their constructor.
+  // We provide a stub that opens the detail modal (same as clicking the folio).
+  // The full modal logic is injected from content.ts via the factory closures.
   return {
-    take: (id: string | number) => createTakeBtn(id, noop),
-    close: (id: string | number) => createCloseBtn(id, noop),
-    steal: (id: string | number, name: string) => createStealBtn(id, name, noop),
+    take: (id: string | number) =>
+      createTakeBtn(id, (_id2, _btn2) => {
+        _openTicketCallback(parseInt(String(_id2)));
+        return Promise.resolve();
+      }),
+    close: (id: string | number) =>
+      createCloseBtn(id, (_id2, _btn2) => {
+        _openTicketCallback(parseInt(String(_id2)));
+        return Promise.resolve();
+      }),
+    steal: (id: string | number, name: string) =>
+      createStealBtn(id, name, (_id2, _btn2) => {
+        _openTicketCallback(parseInt(String(_id2)));
+        return Promise.resolve();
+      }),
     badge: (itemId: string) => createSyncedBadge(itemId),
   };
 }
@@ -175,12 +269,20 @@ export async function showQuickFilterModal(
       '<div id="sp-qf-paging" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:#888;"></div>',
     maxWidth: "900px",
     modalOptions: {
-      width: "95%", maxHeight: "90vh",
-      headerActions: '<button id="sp-qf-refresh" style="padding:6px 14px;border:1px solid #2196F3;border-radius:6px;background:#fff;color:#2196F3;cursor:pointer;font-size:13px;">🔄 Actualizar</button>',
+      width: "95%",
+      maxHeight: "90vh",
+      headerActions:
+        '<button id="sp-qf-refresh" style="padding:6px 14px;border:1px solid #2196F3;border-radius:6px;background:#fff;color:#2196F3;cursor:pointer;font-size:13px;">🔄 Actualizar</button>',
     },
-    onClose: () => { _activeModalRefresh = null; },
+    onClose: () => {
+      _activeModalRefresh = null;
+    },
   });
-  (document.getElementById("sp-qf-refresh") as HTMLButtonElement).addEventListener("click", () => { if (_activeModalRefresh) void _activeModalRefresh(); });
+  (
+    document.getElementById("sp-qf-refresh") as HTMLButtonElement
+  ).addEventListener("click", () => {
+    if (_activeModalRefresh) void _activeModalRefresh();
+  });
 
   let currentPage = 1;
   _activeModalRefresh = doSearch;
@@ -189,22 +291,41 @@ export async function showQuickFilterModal(
   async function doSearch() {
     const results = document.getElementById("sp-qf-results") as HTMLElement;
     const paging = document.getElementById("sp-qf-paging") as HTMLElement;
-    results.innerHTML = '<div style="text-align:center;padding:20px;color:#888;">Buscando...</div>';
+    results.innerHTML =
+      '<div style="text-align:center;padding:20px;color:#888;">Buscando...</div>';
     paging.innerHTML = "";
     try {
       const baseUrl = customApiUrl ?? SP_CONFIG.SP_SEARCH_API;
       let url = `${baseUrl}?page=${currentPage - 1}&size=25`;
       if (!customApiUrl) url += `&resolutionGroupId=${getResolutionGroupId()}`;
-      if (statusName) url += `&ticketStatusName=${encodeURIComponent(statusName)}`;
+      if (statusName)
+        url += `&ticketStatusName=${encodeURIComponent(statusName)}`;
       if (extraParams) url += `&${extraParams}`;
       const { tickets, totalPages, totalElements } = await fetchTickets(url);
       if (!tickets.length) {
         results.innerHTML = `<div style="text-align:center;padding:20px;color:#888;">Sin tickets con estado: ${statusName || "todos"}</div>`;
         return;
       }
-      const fac = buildActionFactories(_openTicketCallback, createTakeBtn, createCloseBtn, createStealBtn);
-      renderTicketCards(results, tickets, getLoggedUserName(), getCache() ?? {}, fac.take, fac.close, fac.steal, fac.badge);
-      renderPaging(paging, totalElements, totalPages, currentPage, (n) => { currentPage = n; void doSearch(); });
+      const fac = buildActionFactories(
+        _openTicketCallback,
+        createTakeBtn,
+        createCloseBtn,
+        createStealBtn,
+      );
+      renderTicketCards(
+        results,
+        tickets,
+        getLoggedUserName(),
+        getCache() ?? {},
+        fac.take,
+        fac.close,
+        fac.steal,
+        fac.badge,
+      );
+      renderPaging(paging, totalElements, totalPages, currentPage, (n) => {
+        currentPage = n;
+        void doSearch();
+      });
     } catch (err) {
       results.innerHTML = `<div style="color:#D94040;padding:12px;">Error: ${(err as Error).message}</div>`;
     }
@@ -221,8 +342,25 @@ export function showSearchModal(
   createStealBtn: StealFactory,
 ): void {
   document.getElementById("sp-search-modal")?.remove();
-  const inputStyle = "width:100%;padding:6px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;";
-  const statusOpts = ["","Asignado","En espera","En atención","En validación","Por confirmar","Por ejecutar","Por revisar","En aplicaciones","Cerrado","Rechazado","Cancelado","Reabierto"].map((s) => `<option value="${s}">${s || "Todos"}</option>`).join("");
+  const inputStyle =
+    "width:100%;padding:6px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;";
+  const statusOpts = [
+    "",
+    "Asignado",
+    "En espera",
+    "En atención",
+    "En validación",
+    "Por confirmar",
+    "Por ejecutar",
+    "Por revisar",
+    "En aplicaciones",
+    "Cerrado",
+    "Rechazado",
+    "Cancelado",
+    "Reabierto",
+  ]
+    .map((s) => `<option value="${s}">${s || "Todos"}</option>`)
+    .join("");
 
   const m = SP_Modal.info({
     id: "sp-search-modal",
@@ -245,25 +383,43 @@ export function showSearchModal(
       `<div id="sp-sf-paging" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:#888;"></div>`,
     maxWidth: "900px",
     modalOptions: { width: "95%", maxHeight: "90vh" },
-    onClose: () => { _activeModalRefresh = null; },
+    onClose: () => {
+      _activeModalRefresh = null;
+    },
   });
 
-  (document.getElementById("sp-sf-refresh") as HTMLButtonElement).addEventListener("click", () => { if (_activeModalRefresh) void _activeModalRefresh(); });
+  (
+    document.getElementById("sp-sf-refresh") as HTMLButtonElement
+  ).addEventListener("click", () => {
+    if (_activeModalRefresh) void _activeModalRefresh();
+  });
   let currentPage = 1;
-  (document.getElementById("sp-sf-search") as HTMLButtonElement).addEventListener("click", () => { currentPage = 1; _activeModalRefresh = doSearch; void doSearch(); });
+  (
+    document.getElementById("sp-sf-search") as HTMLButtonElement
+  ).addEventListener("click", () => {
+    currentPage = 1;
+    _activeModalRefresh = doSearch;
+    void doSearch();
+  });
 
   async function doSearch() {
     const results = document.getElementById("sp-sf-results") as HTMLElement;
     const paging = document.getElementById("sp-sf-paging") as HTMLElement;
-    results.innerHTML = '<div style="text-align:center;padding:20px;color:#888;">Buscando...</div>';
+    results.innerHTML =
+      '<div style="text-align:center;padding:20px;color:#888;">Buscando...</div>';
     paging.innerHTML = "";
 
     // Gather search params
-    const g = (id: string) => (document.getElementById(id) as HTMLInputElement | HTMLSelectElement)?.value ?? "";
+    const g = (id: string) =>
+      (document.getElementById(id) as HTMLInputElement | HTMLSelectElement)
+        ?.value ?? "";
     let url = `${SP_CONFIG.SP_SEARCH_API}?page=${currentPage - 1}&size=25`;
-    if (g("sp-sf-code")) url += `&uniqueCode=${encodeURIComponent(g("sp-sf-code"))}`;
-    if (g("sp-sf-requester")) url += `&requesterName=${encodeURIComponent(g("sp-sf-requester"))}`;
-    if (g("sp-sf-status")) url += `&ticketStatusName=${encodeURIComponent(g("sp-sf-status"))}`;
+    if (g("sp-sf-code"))
+      url += `&uniqueCode=${encodeURIComponent(g("sp-sf-code"))}`;
+    if (g("sp-sf-requester"))
+      url += `&requesterName=${encodeURIComponent(g("sp-sf-requester"))}`;
+    if (g("sp-sf-status"))
+      url += `&ticketStatusName=${encodeURIComponent(g("sp-sf-status"))}`;
     if (g("sp-sf-type")) url += `&reportTypeId=${g("sp-sf-type")}`;
     if (g("sp-sf-priority")) url += `&priorityId=${g("sp-sf-priority")}`;
     if (g("sp-sf-from")) url += `&initDate=${g("sp-sf-from")}`;
@@ -271,15 +427,35 @@ export function showSearchModal(
 
     try {
       const { tickets, totalPages, totalElements } = await fetchTickets(url);
-      if (!tickets.length) { results.innerHTML = '<div style="text-align:center;padding:20px;color:#888;">Sin resultados</div>'; return; }
-      const fac = buildActionFactories(_openTicketCallback, createTakeBtn, createCloseBtn, createStealBtn);
-      renderTicketCards(results, tickets, getLoggedUserName(), getCache() ?? {}, fac.take, fac.close, fac.steal, fac.badge);
-      renderPaging(paging, totalElements, totalPages, currentPage, (n) => { currentPage = n; void doSearch(); });
+      if (!tickets.length) {
+        results.innerHTML =
+          '<div style="text-align:center;padding:20px;color:#888;">Sin resultados</div>';
+        return;
+      }
+      const fac = buildActionFactories(
+        _openTicketCallback,
+        createTakeBtn,
+        createCloseBtn,
+        createStealBtn,
+      );
+      renderTicketCards(
+        results,
+        tickets,
+        getLoggedUserName(),
+        getCache() ?? {},
+        fac.take,
+        fac.close,
+        fac.steal,
+        fac.badge,
+      );
+      renderPaging(paging, totalElements, totalPages, currentPage, (n) => {
+        currentPage = n;
+        void doSearch();
+      });
     } catch (err) {
       results.innerHTML = `<div style="color:#D94040;padding:12px;">Error: ${(err as Error).message}</div>`;
     }
   }
-
 }
 
 // ─── Pagination helper ────────────────────────────────────────
@@ -297,6 +473,10 @@ function renderPaging(
     `<button id="sp-pg-prev" ${current <= 1 ? "disabled" : ""} style="padding:4px 10px;font-size:11px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;">&lt;</button>` +
     `<button id="sp-pg-next" ${current >= totalPages ? "disabled" : ""} style="padding:4px 10px;font-size:11px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;">&gt;</button>` +
     `</div>`;
-  document.getElementById("sp-pg-prev")?.addEventListener("click", () => { if (current > 1) onPage(current - 1); });
-  document.getElementById("sp-pg-next")?.addEventListener("click", () => { if (current < totalPages) onPage(current + 1); });
+  document.getElementById("sp-pg-prev")?.addEventListener("click", () => {
+    if (current > 1) onPage(current - 1);
+  });
+  document.getElementById("sp-pg-next")?.addEventListener("click", () => {
+    if (current < totalPages) onPage(current + 1);
+  });
 }
