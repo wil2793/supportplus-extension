@@ -9,7 +9,6 @@ import SP_Log from "./lib/logger";
 import SP_API_Lib from "./lib/api";
 import SP_DOM from "./lib/dom-utils";
 import {
-  getCache,
   ensureSyncStarted,
   resetSyncPromise,
   invalidateCache,
@@ -27,11 +26,10 @@ import SP_RowColors from "./features/row-colors";
 import SP_Reports from "./features/reports";
 import SP_DetailView from "./features/detail-view";
 
+import { showSuccessToast, showErrorToast, spinnerHTML } from "./components";
+import SP_Modal from "./lib/modal-builder";
+import { injectDashboardButton } from "./features/dashboard";
 import { showConfigModal, injectConfigButton } from "./features/config-modal";
-import {
-  injectDashboardButton,
-  handleDashboardClick,
-} from "./features/dashboard";
 import {
   injectSearchButton,
   injectQuickSearch,
@@ -72,7 +70,6 @@ SP_Log.info("Extension loading...");
 const _ss = SP_Session.state;
 let currentUserGroups = _ss.groups;
 let _btnDashboard = _ss.btnDashboard;
-let _btnComments = _ss.btnComments;
 let _btnReassignApp = _ss.btnReassignApp;
 let _canShowLabels = _ss.canShowLabels;
 let _canReopenTickets = _ss.canReopenTickets;
@@ -109,9 +106,6 @@ function _getTeamConfig() {
       profiles: [],
     }
   );
-}
-function _getActiveAreas() {
-  return currentUserGroups.map((gId) => TEAM_AREAS[gId]).filter(Boolean);
 }
 
 function _getLoggedUserName() {
@@ -196,10 +190,8 @@ async function _handleMondayClick(ticketId: number | string): Promise<void> {
       groupId: groups[0].id,
       ticket: ticket as import("./types").SpTicket,
     });
-    const { showSuccessToast } = await import("./components");
     showSuccessToast("Ticket migrado a Monday");
   } catch (err) {
-    const { showErrorToast } = await import("./components");
     showErrorToast(`Error: ${(err as Error).message}`);
   }
 }
@@ -298,7 +290,6 @@ void SP_Session.checkSession().then((result: unknown) => {
   const ss = SP_Session.state;
   currentUserGroups = ss.groups;
   _btnDashboard = ss.btnDashboard;
-  _btnComments = ss.btnComments;
   _btnReassignApp = ss.btnReassignApp;
   _canShowLabels = ss.canShowLabels;
   _canReopenTickets = ss.canReopenTickets;
@@ -326,7 +317,6 @@ void SP_Session.checkSession().then((result: unknown) => {
 const DETAIL_QUICK_CLASS = "sp-quick-detail-btn";
 const HISTORY_BTN_CLASS = "sp-history-btn";
 const HIGHLIGHT_CLASS = "sp-my-row";
-const DASHBOARD_BTN_ID = "sp-dashboard-btn";
 const SEARCH_BTN_ID = "sp-search-btn";
 const BULK_CLOSE_BTN_ID = "sp-close-bulk";
 const BULK_BTN_ID = "sp-monday-bulk";
@@ -456,21 +446,36 @@ async function injectButtons(): Promise<void> {
     () => _getTeamConfig().resolutionGroupId,
     SEARCH_BTN_ID,
   );
+  const _onClose = async (id: string | number, btn: HTMLButtonElement) =>
+    showCloseModal(id, btn, {
+      canShowLabels: _canShowLabels,
+      getMyProfileId: _getMyProfileId,
+      getTeamResolutionGroupId: () => _getTeamConfig().resolutionGroupId,
+      getTeamResolutionGroupLabel: () => _getTeamConfig().resolutionGroupLabel,
+      createMigrateBtn: (id2) => createMigrateButton(id2, _handleMondayClick),
+    });
+  const _onTake = async (id: string | number, btn: HTMLButtonElement) =>
+    showTakeModal(id, btn, {
+      canShowLabels: _canShowLabels,
+      getMyProfileId: _getMyProfileId,
+      getTeamResolutionGroupId: () => _getTeamConfig().resolutionGroupId,
+      getTeamResolutionGroupLabel: () => _getTeamConfig().resolutionGroupLabel,
+      createCloseBtn: (id2, onClose2) => createCloseButton(id2, onClose2),
+    });
+
   injectSearchButton(
     _getLoggedUserName,
-    (id) => showQuickDetailModal(id, _buildDetailCtx()),
-    (id, onTake) => createTakeButton(id, onTake),
-    (id, onClose) => createCloseButton(id, onClose),
-    (id, name, onTake) => createStealButton(id, name, onTake),
+    (id) => createTakeButton(id, _onTake),
+    (id) => createCloseButton(id, _onClose),
+    (id, name) => createStealButton(id, name, _onTake),
   );
   injectQuickSearch((id) => showQuickDetailModal(id, _buildDetailCtx()));
   injectQuickFilterButton(
     () => _getTeamConfig().resolutionGroupId,
     _getLoggedUserName,
-    (id) => showQuickDetailModal(id, _buildDetailCtx()),
-    (id, onTake) => createTakeButton(id, onTake),
-    (id, onClose) => createCloseButton(id, onClose),
-    (id, name, onTake) => createStealButton(id, name, onTake),
+    (id) => createTakeButton(id, _onTake),
+    (id) => createCloseButton(id, _onClose),
+    (id, name) => createStealButton(id, name, _onTake),
   );
   SP_Reports.injectReportButton();
 
@@ -552,9 +557,6 @@ function _makeDraggable(): void {
 
 // ─── Bulk close ────────────────────────────────────────────────
 async function _handleBulkClose(): Promise<void> {
-  const { showErrorToast, showSuccessToast, spinnerHTML } =
-    await import("./components");
-  const { default: SP_Modal } = await import("./lib/modal-builder");
   const assigned = Array.from(
     document.querySelectorAll<HTMLElement>(".MuiDataGrid-row"),
   )

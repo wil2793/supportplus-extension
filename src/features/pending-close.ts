@@ -29,10 +29,14 @@ export async function checkPendingCloseAlert(
 
   try {
     const resp = await new Promise<AnyObj>((resolve) => {
-      chrome.runtime.sendMessage({ type: "api-get", endpoint: "/tickets-por-cerrar" }, (r: AnyObj) => resolve(r));
+      chrome.runtime.sendMessage(
+        { type: "api-get", endpoint: "/tickets-por-cerrar" },
+        (r: AnyObj) => resolve(r),
+      );
     });
 
-    const raw: AnyObj[] = resp?.success && resp.data?.data ? (resp.data.data as AnyObj[]) : [];
+    const raw: AnyObj[] =
+      resp?.success && resp.data?.data ? (resp.data.data as AnyObj[]) : [];
     if (!raw.length) return;
 
     _shown = true;
@@ -48,7 +52,9 @@ export async function checkPendingCloseAlert(
       `<span style="flex:1;font-size:13px;color:#E65100;font-weight:600;">Hay ${raw.length} ticket(s) pendientes por cerrar</span>` +
       `<span style="padding:4px 12px;background:#FF8F00;color:#fff;border-radius:6px;font-size:12px;font-weight:600;">Cerrar ahora</span>`;
 
-    const panelEl = document.getElementById("sp-manager-panel") ?? document.getElementById("sp-team-panel");
+    const panelEl =
+      document.getElementById("sp-manager-panel") ??
+      document.getElementById("sp-team-panel");
     const insertRef = panelEl ?? grid;
     insertRef.parentElement?.insertBefore(alertDiv, insertRef);
 
@@ -67,14 +73,16 @@ export async function checkPendingCloseAlert(
       }
       showCloseAllModal(raw, workSchedule, alertDiv, onOpenTicket);
     });
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 // ─── Close-all modal ──────────────────────────────────────────
 
 function showCloseAllModal(
   raw: AnyObj[],
-  workSchedule: WorkSchedule,
+  _workSchedule: WorkSchedule,
   alertDiv: HTMLElement,
   _onOpenTicket: (id: number) => void,
 ): void {
@@ -87,7 +95,10 @@ function showCloseAllModal(
     .filter((t) => t.ticketId);
 
   const listHTML = ticketList
-    .map((t) => `<div style="padding:4px 8px;font-size:12px;border-bottom:1px solid #eee;">${t.ticket}</div>`)
+    .map(
+      (t) =>
+        `<div style="padding:4px 8px;font-size:12px;border-bottom:1px solid #eee;">${t.ticket}</div>`,
+    )
     .join("");
 
   const m = SP_Modal.info({
@@ -104,23 +115,35 @@ function showCloseAllModal(
     maxWidth: "450px",
   });
 
-  (document.getElementById("sp-pending-close-cancel") as HTMLButtonElement).addEventListener("click", m.close);
+  (
+    document.getElementById("sp-pending-close-cancel") as HTMLButtonElement
+  ).addEventListener("click", m.close);
 
-  (document.getElementById("sp-pending-close-confirm") as HTMLButtonElement).addEventListener("click", async () => {
-    const confirmBtn = document.getElementById("sp-pending-close-confirm") as HTMLButtonElement;
-    const progress = document.getElementById("sp-pending-close-progress") as HTMLElement;
+  (
+    document.getElementById("sp-pending-close-confirm") as HTMLButtonElement
+  ).addEventListener("click", async () => {
+    const confirmBtn = document.getElementById(
+      "sp-pending-close-confirm",
+    ) as HTMLButtonElement;
+    const progress = document.getElementById(
+      "sp-pending-close-progress",
+    ) as HTMLElement;
     confirmBtn.disabled = true;
     confirmBtn.innerHTML = spinnerHTML(14, "Cerrando...");
     progress.style.display = "block";
 
-    let closed = 0, errors = 0, skipped = 0;
+    let closed = 0,
+      errors = 0,
+      skipped = 0;
 
     for (let i = 0; i < ticketList.length; i++) {
       progress.textContent = `Procesando ${i + 1} de ${ticketList.length}...`;
       const t = ticketList[i];
       try {
         // Check if already closed
-        const ticketRes = await fetch(`${SP_CONFIG.SP_API}/${t.ticketId}`, { headers: spGetHeaders() });
+        const ticketRes = await fetch(`${SP_CONFIG.SP_API}/${t.ticketId}`, {
+          headers: spGetHeaders(),
+        });
         const ticketJson = (await ticketRes.json()) as AnyObj;
         const ticketData: AnyObj = ticketJson["data"] ?? ticketJson;
         const alreadyClosed = ticketData.ticketStatus?.name === "Cerrado";
@@ -138,7 +161,10 @@ function showCloseAllModal(
             {
               method: "PATCH",
               headers: spHeaders(),
-              body: JSON.stringify({ nextTicketStatusId: SP_CONFIG.SP_STATUSES["CERRADO"], ticketCommentRequest: null }),
+              body: JSON.stringify({
+                nextTicketStatusId: SP_CONFIG.SP_STATUSES["CERRADO"],
+                ticketCommentRequest: null,
+              }),
             },
           );
           if (!closeRes.ok) throw new Error(`HTTP ${closeRes.status}`);
@@ -159,7 +185,9 @@ function showCloseAllModal(
     _shown = false;
 
     if (errors === 0) {
-      showSuccessToast(`✅ ${closed} cerrados${skipped ? `, ${skipped} ya estaban cerrados` : ""}`);
+      showSuccessToast(
+        `✅ ${closed} cerrados${skipped ? `, ${skipped} ya estaban cerrados` : ""}`,
+      );
     } else {
       showErrorToast(`${closed} cerrados, ${errors} errores`);
     }

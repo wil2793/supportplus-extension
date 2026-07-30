@@ -2,7 +2,7 @@
 // SRC/FEATURES/DASHBOARD.TS - Closed-tickets dashboard
 // ============================================================
 
-import { SP_CONFIG, GROUP_INFO } from "../config";
+import { GROUP_INFO } from "../config";
 import SP_Modal from "../lib/modal-builder";
 import {
   createHeaderButton,

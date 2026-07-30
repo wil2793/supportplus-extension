@@ -661,8 +661,8 @@ function _wireActionButtons(
   holderName: string,
   department: string,
   groupName: string,
-  myName: string,
-  myEmail: string,
+  _myName: string,
+  _myEmail: string,
 ): void {
   // Move action buttons to header
   const actionsEl = document.getElementById("sp-qd-actions");
@@ -1018,12 +1018,12 @@ function _wireActionButtons(
 }
 
 function _wireCommentSection(
-  overlay: HTMLElement,
+  _overlay: HTMLElement,
   ticketId: number | string,
   SP_API: string,
   ctx: DetailModalContext,
   closeModal: () => void,
-  myName: string,
+  _myName: string,
   _myEmail: string,
 ): void {
   const commentSend = document.getElementById(

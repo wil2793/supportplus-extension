@@ -31,20 +31,9 @@ export function triggerActiveModalRefresh(): void {
 
 export function injectSearchButton(
   getLoggedUserName: () => string,
-  openTicketCallback: (id: number) => void,
-  createTakeBtn: (
-    id: string | number,
-    onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
-  ) => HTMLButtonElement,
-  createCloseBtn: (
-    id: string | number,
-    onClose: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
-  ) => HTMLButtonElement,
-  createStealBtn: (
-    id: string | number,
-    name: string,
-    onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
-  ) => HTMLButtonElement,
+  createTakeBtn: TakeFactory,
+  createCloseBtn: CloseFactory,
+  createStealBtn: StealFactory,
 ): void {
   if (document.getElementById(SEARCH_BTN_ID)) return;
   const userWrapper = document.querySelector<HTMLElement>(
@@ -59,7 +48,6 @@ export function injectSearchButton(
     onClick: () =>
       showSearchModal(
         getLoggedUserName,
-        openTicketCallback,
         createTakeBtn,
         createCloseBtn,
         createStealBtn,
@@ -133,20 +121,9 @@ export function injectQuickSearch(
 export function injectQuickFilterButton(
   getResolutionGroupId: () => number,
   getLoggedUserName: () => string,
-  openTicketCallback: (id: number) => void,
-  createTakeBtn: (
-    id: string | number,
-    onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
-  ) => HTMLButtonElement,
-  createCloseBtn: (
-    id: string | number,
-    onClose: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
-  ) => HTMLButtonElement,
-  createStealBtn: (
-    id: string | number,
-    name: string,
-    onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
-  ) => HTMLButtonElement,
+  createTakeBtn: TakeFactory,
+  createCloseBtn: CloseFactory,
+  createStealBtn: StealFactory,
 ): void {
   if (document.getElementById(QUICK_FILTER_ID)) return;
   const userWrapper = document.querySelector<HTMLElement>(
@@ -167,7 +144,6 @@ export function injectQuickFilterButton(
         undefined,
         undefined,
         getLoggedUserName,
-        openTicketCallback,
         createTakeBtn,
         createCloseBtn,
         createStealBtn,
@@ -178,9 +154,7 @@ export function injectQuickFilterButton(
 
 // ─── Shared ticket fetcher for modals ─────────────────────────
 
-async function fetchTickets(
-  url: string,
-): Promise<{
+async function fetchTickets(url: string): Promise<{
   tickets: TicketRow[];
   totalPages: number;
   totalElements: number;
@@ -196,51 +170,21 @@ async function fetchTickets(
   };
 }
 
-// ─── Stubs for button factories (injected at call time) ───────
+// ─── Button factory types (all callbacks pre-baked at injection time) ─────
 
-type TakeFactory = (
-  id: string | number,
-  onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
-) => HTMLButtonElement;
-type CloseFactory = (
-  id: string | number,
-  onClose: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
-) => HTMLButtonElement;
-type StealFactory = (
-  id: string | number,
-  name: string,
-  onTake: (id: string | number, btn: HTMLButtonElement) => Promise<void>,
-) => HTMLButtonElement;
-
-function noop(_id: string | number, _btn: HTMLButtonElement): Promise<void> {
-  return Promise.resolve();
-}
+type TakeFactory = (id: string | number) => HTMLButtonElement;
+type CloseFactory = (id: string | number) => HTMLButtonElement;
+type StealFactory = (id: string | number, name: string) => HTMLButtonElement;
 
 function buildActionFactories(
-  _openTicketCallback: (id: number) => void,
   createTakeBtn: TakeFactory,
   createCloseBtn: CloseFactory,
   createStealBtn: StealFactory,
 ) {
-  // The factories already receive the onTake/onClose callback in their constructor.
-  // We provide a stub that opens the detail modal (same as clicking the folio).
-  // The full modal logic is injected from content.ts via the factory closures.
   return {
-    take: (id: string | number) =>
-      createTakeBtn(id, (_id2, _btn2) => {
-        _openTicketCallback(parseInt(String(_id2)));
-        return Promise.resolve();
-      }),
-    close: (id: string | number) =>
-      createCloseBtn(id, (_id2, _btn2) => {
-        _openTicketCallback(parseInt(String(_id2)));
-        return Promise.resolve();
-      }),
-    steal: (id: string | number, name: string) =>
-      createStealBtn(id, name, (_id2, _btn2) => {
-        _openTicketCallback(parseInt(String(_id2)));
-        return Promise.resolve();
-      }),
+    take: (id: string | number) => createTakeBtn(id),
+    close: (id: string | number) => createCloseBtn(id),
+    steal: (id: string | number, name: string) => createStealBtn(id, name),
     badge: (itemId: string) => createSyncedBadge(itemId),
   };
 }
@@ -253,7 +197,6 @@ export async function showQuickFilterModal(
   extraParams: string | undefined,
   title: string | undefined,
   getLoggedUserName: () => string,
-  _openTicketCallback: (id: number) => void,
   createTakeBtn: TakeFactory,
   createCloseBtn: CloseFactory,
   createStealBtn: StealFactory,
@@ -261,7 +204,7 @@ export async function showQuickFilterModal(
 ): Promise<void> {
   document.getElementById("sp-search-modal")?.remove();
   const modalTitle = title ?? `Tickets: ${statusName}`;
-  const m = SP_Modal.info({
+  void SP_Modal.info({
     id: "sp-search-modal",
     title: modalTitle,
     content:
@@ -307,7 +250,6 @@ export async function showQuickFilterModal(
         return;
       }
       const fac = buildActionFactories(
-        _openTicketCallback,
         createTakeBtn,
         createCloseBtn,
         createStealBtn,
@@ -336,7 +278,6 @@ export async function showQuickFilterModal(
 
 export function showSearchModal(
   getLoggedUserName: () => string,
-  _openTicketCallback: (id: number) => void,
   createTakeBtn: TakeFactory,
   createCloseBtn: CloseFactory,
   createStealBtn: StealFactory,
@@ -362,7 +303,7 @@ export function showSearchModal(
     .map((s) => `<option value="${s}">${s || "Todos"}</option>`)
     .join("");
 
-  const m = SP_Modal.info({
+  void SP_Modal.info({
     id: "sp-search-modal",
     title: "🔍 Buscar tickets",
     content:
@@ -433,7 +374,6 @@ export function showSearchModal(
         return;
       }
       const fac = buildActionFactories(
-        _openTicketCallback,
         createTakeBtn,
         createCloseBtn,
         createStealBtn,
