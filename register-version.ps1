@@ -2,9 +2,9 @@
 # Registra la version 6.3.2 en la BD del backend
 # Ejecutar desde la red interna (o con VPN activa)
 
-$Version  = "6.3.3"
-$Cambios  = "Fix modal DBA Info: tabla completa con productos, checkboxes, cumpleanos y botones reiniciar, igual que version anterior. Fix boton Actualizar comparacion semver correcta. Fix boton DBA Info ahora aparece en header."
-$ZipUrl   = "https://raw.githubusercontent.com/wil2793/supportplus-extension/feat/typescript-migration/releases/v6.3.3.zip"
+$Version  = "6.3.4"
+$Cambios  = "Fix modal DBA Info: restaurados tabs Cumpleanos, Productos y Guardias."
+$ZipUrl   = "https://raw.githubusercontent.com/wil2793/supportplus-extension/feat/typescript-migration/releases/v6.3.4.zip"
 $ApiBase  = "https://back-extension-sp.macropay.mx/api"
 $ApiKey   = "c93666bd500472565a7e183365092191bd8fa734720fd20d04bd5c456949864d"
 
