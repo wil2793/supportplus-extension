@@ -9,8 +9,6 @@ import SP_Log from "./lib/logger";
 import SP_API_Lib from "./lib/api";
 import SP_DOM from "./lib/dom-utils";
 import {
-
-
   ensureSyncStarted,
   resetSyncPromise,
   invalidateCache,
@@ -31,7 +29,7 @@ import SP_DetailView from "./features/detail-view";
 import { showSuccessToast, showErrorToast, spinnerHTML } from "./components";
 import SP_Modal from "./lib/modal-builder";
 import { injectDashboardButton } from "./features/dashboard";
-import { showConfigModal, injectConfigButton } from "./features/config-modal";
+import { showConfigModal } from "./features/config-modal";
 import {
   injectSearchButton,
   injectQuickSearch,
@@ -65,10 +63,12 @@ import type { SpProfile } from "./types";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type JsonObject = Record<string, any>;
 
-
 // ─── Boot ─────────────────────────────────────────────────────
 injectStyles();
 SP_Log.info("Extension loading...");
+
+// Initialize header button registry (registers sp-config-btn, sp-update-btn, sp-dba-info-btn)
+SP_Header.initHeaderButtons(() => SP_ManagerView.showDBAInfo());
 
 // ─── Session state ────────────────────────────────────────────
 const _ss = SP_Session.state;
@@ -307,7 +307,6 @@ void SP_Session.checkSession().then((result: unknown) => {
     if (r["teamArea"]) _currentTeamArea = r["teamArea"] as string;
     SP_Header.injectButtons("session");
     SP_Header.injectButtons("authenticated");
-    injectConfigButton();
     SP_Reports.injectReportButton();
     if (currentUserGroups.length > 0) SP_ManagerView.initManagerView();
     SP_Session.injectRoleLabel?.();

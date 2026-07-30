@@ -1135,8 +1135,96 @@ export function initManagerView(): void {
 }
 
 export function showDBAInfo(): void {
-  // Placeholder — full DBA Info modal is in content.ts
-  document.dispatchEvent(new CustomEvent("sp-show-dba-info"));
+  document.getElementById("sp-dba-info-modal")?.remove();
+
+  const hasBirthdays = true;
+  const hasProducts = sessionState.canAddProduct || sessionState.canAdelantar;
+
+  const tabs: Array<{ id: string; label: string }> = [
+    { id: "birthday", label: "🎂 Cumpleaños" },
+    ...(hasProducts ? [{ id: "products", label: "📦 Productos" }] : []),
+    ...(sessionState.canGuardias
+      ? [{ id: "guardias", label: "🛡 Guardias" }]
+      : []),
+  ];
+
+  const tabBar = tabs
+    .map(
+      (t, i) =>
+        `<button class="sp-dba-tab" data-tab="${t.id}" style="flex:1;padding:8px 4px;font-size:12px;font-weight:600;border:none;background:transparent;cursor:pointer;${i === 0 ? "border-bottom:2px solid #4CAF50;color:#4CAF50;" : "color:#888;border-bottom:2px solid transparent;"}">${t.label}</button>`,
+    )
+    .join("");
+
+  const panelBirthday =
+    `<div id="sp-dba-panel-birthday" data-dba-panel="birthday">` +
+    `<div id="sp-birthday-content" style="max-height:300px;overflow-y:auto;font-size:13px;">` +
+    `<div style="padding:12px;opacity:.6;">Cargando...</div></div></div>`;
+
+  const panelProducts = hasProducts
+    ? `<div id="sp-dba-panel-products" data-dba-panel="products" style="display:none;">` +
+      `<div id="sp-productos-tabs" style="display:flex;border-bottom:1px solid #eee;margin-bottom:8px;overflow-x:auto;"></div>` +
+      `<div id="sp-productos-content" style="max-height:300px;overflow-y:auto;font-size:12px;"></div>` +
+      `</div>`
+    : "";
+
+  const panelGuardias = sessionState.canGuardias
+    ? `<div id="sp-dba-panel-guardias" data-dba-panel="guardias" style="display:none;">` +
+      `<div id="sp-guardias-dba-content" style="max-height:300px;overflow-y:auto;font-size:13px;padding:8px 0;">` +
+      `<div style="opacity:.6;">Cargando guardias...</div></div></div>`
+    : "";
+
+  const m = formModal({
+    id: "sp-dba-info-modal",
+    title: "🏠 DBA Info",
+    content:
+      `<div style="display:flex;gap:0;border-bottom:2px solid #eee;margin-bottom:12px;">${tabBar}</div>` +
+      panelBirthday +
+      panelProducts +
+      panelGuardias,
+    submitText: "Cerrar",
+    submitColor: "#4CAF50",
+    maxWidth: "520px",
+    onSubmit: (api) => api.close(),
+    onReady: () => {
+      // Wire tab switching
+      document
+        .querySelectorAll<HTMLButtonElement>(".sp-dba-tab")
+        .forEach((btn) => {
+          btn.addEventListener("click", () => {
+            document
+              .querySelectorAll<HTMLButtonElement>(".sp-dba-tab")
+              .forEach((b) => {
+                b.style.borderBottom = "2px solid transparent";
+                b.style.color = "#888";
+              });
+            btn.style.borderBottom = "2px solid #4CAF50";
+            btn.style.color = "#4CAF50";
+            const tabId = btn.dataset["tab"] ?? "";
+            document
+              .querySelectorAll<HTMLElement>("[data-dba-panel]")
+              .forEach((p) => {
+                p.style.display =
+                  p.dataset["dbaPanel"] === tabId ? "block" : "none";
+              });
+            if (tabId === "products") loadProductosPanel();
+            if (tabId === "guardias") {
+              const el = document.getElementById("sp-guardias-dba-content");
+              if (el)
+                el.innerHTML =
+                  '<div style="opacity:.6;">Módulo de guardias disponible en el panel principal.</div>';
+            }
+          });
+        });
+
+      // Load first tab
+      loadBirthdayPanel();
+      if (hasBirthdays && document.getElementById("sp-birthday-content")) {
+        loadBirthdayPanel();
+      }
+    },
+  });
+
+  void m;
 }
 
 const SP_ManagerView = {
