@@ -7,7 +7,13 @@
 import { SP_CONFIG } from "../config";
 import SP_API_Lib from "./api";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type JsonObject = Record<string, any>;
+
+
 // ─── Auth headers ─────────────────────────────────────────────
+
+
 
 export function spHeaders(token?: string): Record<string, string> {
   return {
@@ -89,8 +95,7 @@ export async function fetchTicketInfo(
       headers: spGetHeaders(spToken),
     });
     if (!res.ok) return null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json = (await res.json()) as Record<string, any>;
+    const json = (await res.json()) as JsonObject;
     const t = json["data"] ?? json;
     return {
       uniqueCode: t.uniqueCode ?? "N/A",
@@ -124,8 +129,7 @@ export async function reassignTicket(
   ticketId: number | string,
   opts: ReassignOptions,
 ): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const body: Record<string, any> = {
+  const body: JsonObject = {
     resolutionGroupId: opts.resolutionGroupId,
     serviceId: null,
     responsibleProfileId: opts.profileId,
@@ -143,8 +147,7 @@ export async function reassignTicket(
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const json = (await res.json()) as Record<string, any>;
+  const json = (await res.json()) as JsonObject;
   if (!json["success"]) throw new Error("Reassign failed");
 }
 
@@ -174,9 +177,8 @@ export async function addComment(
     body: JSON.stringify({ content: `<p>${content}</p>`, internal }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const json = (await res.json()) as Record<string, any>;
-  return (json["data"]?.id ?? json["id"] ?? null) as string | null;
+  const json = (await res.json()) as JsonObject;
+  return ((json["data"] as JsonObject)?.id ?? json["id"] ?? null) as string | null;
 }
 
 export async function uploadFiles(
@@ -191,9 +193,7 @@ export async function uploadFiles(
     body: formData,
   });
   if (!res.ok) throw new Error(`Error subiendo archivos: HTTP ${res.status}`);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const json = (await res.json()) as Record<string, any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const json = (await res.json()) as JsonObject;
   return (json["data"] ?? json) as Array<{ id: string; name: string }>;
 }
 

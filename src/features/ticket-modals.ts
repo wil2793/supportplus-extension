@@ -13,15 +13,19 @@ import { spHeaders, spGetHeaders, fetchTicketInfo } from "../lib/sp-fetch";
 import { ticketSummaryHTML, injectSLCopyButtons } from "./ticket-summary";
 import { addToCache } from "../lib/monday-cache";
 import {
+
+
   showLoadingToast,
   showSuccessToast,
   showErrorToast,
   spinnerHTML,
 } from "../components";
-import type { SpTicket } from "../types";
+import type { } from "../types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyObj = Record<string, any>;
+type JsonObject = Record<string, any>;
+
+
 
 // ─── CSS class constants ──────────────────────────────────────
 
@@ -137,8 +141,8 @@ export function createCloseButton(
 async function fetchMondayGroups(
   mondayToken: string | null,
   boardId: string | null,
-): Promise<AnyObj[]> {
-  if (!mondayToken || !boardId) return [];
+): Promise<import("../types").MondayGroup[]> {
+  if (!mondayToken || !boardId) return [] as import("../types").MondayGroup[];
   try {
     const data = await SP_MondayUtils.findMondayItem(mondayToken, "", { boards: [{ id: boardId, name: "" }] });
     void data; // only used for side-effect; get groups separately
@@ -148,11 +152,11 @@ async function fetchMondayGroups(
       "query ($boardId: [ID!]!) { boards(ids: $boardId) { groups { id title } } }",
       { boardId },
     );
-    return gData.boards?.[0]?.groups ?? [];
+    return (gData.boards?.[0]?.groups ?? []) as import("../types").MondayGroup[];
   } catch { return []; }
 }
 
-async function getMondayGroupOptions(canShowMigrate: boolean): Promise<{ token: string | null; boardId: string | null; groups: AnyObj[] }> {
+async function getMondayGroupOptions(canShowMigrate: boolean): Promise<{ token: string | null; boardId: string | null; groups: import("../types").MondayGroup[] }> {
   if (!canShowMigrate) return { token: null, boardId: null, groups: [] };
   const { default: SP_API_Lib } = await import("../lib/api");
   const token = await SP_API_Lib.getMondayToken();
@@ -161,11 +165,11 @@ async function getMondayGroupOptions(canShowMigrate: boolean): Promise<{ token: 
   return { token, boardId, groups };
 }
 
-function buildGroupSelect(id: string, groups: AnyObj[], placeholder: string): string {
+function buildGroupSelect(id: string, groups: import("../types").MondayGroup[], placeholder: string): string {
   return (
     `<select id="${id}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:12px;">` +
     `<option value="">${placeholder}</option>` +
-    groups.map((g: AnyObj) => `<option value="${g.id}">${g.title}</option>`).join("") +
+    groups.map((g) => `<option value="${g.id}">${g.title}</option>`).join("") +
     `</select>`
   );
 }
@@ -258,16 +262,16 @@ export async function showTakeModal(
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as AnyObj;
+      const json = (await res.json()) as JsonObject;
       if (!json["success"]) throw new Error("No success");
 
       if (doneCheck.checked) {
         if (!SP_Session.isWithinWorkHours()) {
-          const stored = await new Promise<AnyObj>((r) =>
-            chrome.storage.local.get(["usersMap", "userEmail"], (d) => r(d as AnyObj)),
+          const stored = await new Promise<JsonObject>((r) =>
+            chrome.storage.local.get(["usersMap", "userEmail"], (d) => r(d as JsonObject)),
           );
           const pEmail = ((stored["userEmail"] as string) ?? "").toLowerCase();
-          const pUser = ((stored["usersMap"] as AnyObj) ?? {})[pEmail];
+          const pUser = ((stored["usersMap"] as JsonObject) ?? {})[pEmail];
           if (pUser?.idUsuario)
             await SP_TicketActions.saveTicketPendingClose(
               info?.uniqueCode ?? `T${ticketId}`,
@@ -294,10 +298,10 @@ export async function showTakeModal(
         const selGroup = groupSel.value;
         if (selGroup && mondayToken && boardId) {
           const tRes = await fetch(`${SP_CONFIG.SP_API}/${ticketId}`, { headers: spGetHeaders() });
-          const tJson = (await tRes.json()) as AnyObj;
+          const tJson = (await tRes.json()) as JsonObject;
           await SP_MondayUtils.createMondayItem(mondayToken, {
             boardId, groupId: selGroup,
-            ticket: (tJson["data"] ?? tJson) as unknown as SpTicket,
+            ticket: (tJson["data"] ?? tJson) as unknown as import("../types").SpTicket,
           });
         }
         showSuccessToast(selGroup ? "Ticket tomado, cerrado y migrado" : "Ticket tomado y cerrado");
@@ -386,10 +390,10 @@ export async function showCloseModal(
 
       if (selectedGroup && mondayToken && boardId && info) {
         const tRes = await fetch(`${SP_CONFIG.SP_API}/${ticketId}`, { headers: spGetHeaders() });
-        const tJson = (await tRes.json()) as AnyObj;
+        const tJson = (await tRes.json()) as JsonObject;
         const newItemId = await SP_MondayUtils.createMondayItem(mondayToken, {
           boardId, groupId: selectedGroup,
-          ticket: (tJson["data"] ?? tJson) as unknown as SpTicket,
+          ticket: (tJson["data"] ?? tJson) as unknown as import("../types").SpTicket,
         });
         if (newItemId) addToCache(info.uniqueCode, newItemId);
       }
@@ -418,11 +422,11 @@ export async function showReopenModal(
   currentHolder: string | undefined,
   getTeamResolutionGroupId: () => number,
   getTeamResolutionGroupLabel: () => string,
-  teamProfiles: AnyObj[],
+  teamProfiles: import("../types").SpProfile[],
 ): Promise<void> {
   document.getElementById("sp-reopen-modal")?.remove();
   const opts = teamProfiles
-    .map((p: AnyObj) => `<option value="${p.profileId}">${p.profileFullName}</option>`)
+    .map((p: JsonObject) => `<option value="${p.profileId}">${p.profileFullName}</option>`)
     .join("");
   const holderInfo =
     currentHolder && currentHolder !== "Sin asignar"
@@ -451,7 +455,7 @@ export async function showReopenModal(
           body: JSON.stringify({ resolutionGroupId: getTeamResolutionGroupId(), serviceId: null, responsibleProfileId: parseInt(personId), resolutionGroup: { label: getTeamResolutionGroupLabel(), value: getTeamResolutionGroupId() } }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = (await res.json()) as AnyObj;
+        const json = (await res.json()) as JsonObject;
         if (json["success"]) { showSuccessToast("Ticket reabierto"); setTimeout(() => window.location.reload(), 1500); }
         else throw new Error("No se pudo reabrir");
       } catch (err) { showErrorToast(`Error: ${(err as Error).message}`); }
@@ -484,14 +488,14 @@ export function showReassignAppModal(
           method: "PUT", headers: spHeaders(),
           body: JSON.stringify({ resolutionGroupId: getTeamResolutionGroupId(), serviceId: null, responsibleProfileId: profileId, resolutionGroup: { label: getTeamResolutionGroupLabel(), value: getTeamResolutionGroupId() } }),
         });
-        if (!takeRes.ok || !(await takeRes.json() as AnyObj)["success"])
+        if (!takeRes.ok || !(await takeRes.json() as JsonObject)["success"])
           throw new Error("No se pudo tomar el ticket");
         showLoadingToast("Reasignando a Aplicaciones...");
         const res = await fetch(`${SP_CONFIG.SP_API}/reassign/${ticketId}`, {
           method: "PUT", headers: spHeaders(),
           body: JSON.stringify({ ticketCommentRequest: { internal: false, content: "Se reasigna ticket" }, resolutionGroupId: SP_CONFIG.APPS_GROUP.id, serviceId: null, responsibleProfileId: null, resolutionGroup: { label: SP_CONFIG.APPS_GROUP.label, value: SP_CONFIG.APPS_GROUP.id } }),
         });
-        if (!res.ok || !(await res.json() as AnyObj)["success"]) throw new Error("No success");
+        if (!res.ok || !(await res.json() as JsonObject)["success"]) throw new Error("No success");
         SP_Modal.success({ id: "sp-reassign-success", title: "✅ Ticket reasignado", message: "El ticket fue reasignado a Aplicaciones.", buttons: [{ text: "Aceptar", color: "#2E7D32", onClick: () => { window.location.href = "/es/dashboard/tickets-mesa"; } }] });
       } catch (err) { showErrorToast(`Error: ${(err as Error).message}`); }
     },

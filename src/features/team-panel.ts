@@ -12,14 +12,14 @@ import { spGetHeaders, spHeaders, getTodayRange } from "../lib/sp-fetch";
 import { showErrorToast, showSuccessToast } from "../components";
 import type { UserConfig } from "../types";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyObj = Record<string, any>;
 
 // ─── Team area registry ───────────────────────────────────────
 
+
+
 export const TEAM_AREAS: Record<
   number,
-  { resolutionGroupId: number; resolutionGroupLabel: string; profiles: AnyObj[] }
+  { resolutionGroupId: number; resolutionGroupLabel: string; profiles: JsonObject[] }
 > = {};
 GROUP_INFO.forEach((g) => {
   TEAM_AREAS[g.id] = {
@@ -36,7 +36,7 @@ export function setCurrentTeamArea(area: string): void {
 
 export function getTeamConfig(
   currentUserGroups: number[],
-): { resolutionGroupId: number; resolutionGroupLabel: string; profiles: AnyObj[] } {
+): { resolutionGroupId: number; resolutionGroupLabel: string; profiles: JsonObject[] } {
   return (
     TEAM_AREAS[parseInt(currentTeamArea)] ??
     TEAM_AREAS[currentUserGroups[0]] ?? {
@@ -49,14 +49,14 @@ export function getTeamConfig(
 
 export function getActiveAreas(
   currentUserGroups: number[],
-): Array<{ resolutionGroupId: number; resolutionGroupLabel: string; profiles: AnyObj[] }> {
+): Array<{ resolutionGroupId: number; resolutionGroupLabel: string; profiles: JsonObject[] }> {
   return currentUserGroups.map((gId) => TEAM_AREAS[gId]).filter(Boolean);
 }
 
 // ─── Profile cache ────────────────────────────────────────────
 
-const _profilesCache: Record<number, AnyObj[]> = {};
-const _pendingProfileRequests: Record<number, Promise<AnyObj[]>> = {};
+const _profilesCache: Record<number, JsonObject[]> = {};
+const _pendingProfileRequests: Record<number, Promise<JsonObject[]>> = {};
 
 export function clearProfilesCache(): void {
   Object.keys(_profilesCache).forEach((k) => delete _profilesCache[parseInt(k)]);
@@ -65,7 +65,7 @@ export function clearProfilesCache(): void {
 export function loadProfilesForGroup(
   groupId: number,
   userConfig: UserConfig,
-): Promise<AnyObj[]> {
+): Promise<JsonObject[]> {
   if (_profilesCache[groupId]) return Promise.resolve(_profilesCache[groupId]);
   if (Object.prototype.hasOwnProperty.call(_pendingProfileRequests, groupId))
     return _pendingProfileRequests[groupId];
@@ -78,28 +78,28 @@ export function loadProfilesForGroup(
     { headers: spGetHeaders(spToken) },
   )
     .then((r) => r.json())
-    .then((json: AnyObj) => {
-      let profiles: AnyObj[] = json.data || json;
+    .then((json: JsonObject) => {
+      let profiles: JsonObject[] = json.data || json;
       if (!Array.isArray(profiles)) profiles = [];
       const blacklist: number[] = (userConfig.blacklist as unknown as number[]) ?? [];
       const applyBlacklist = (bl: number[]) => {
         if (bl.length > 0)
-          profiles = profiles.filter((p) => !bl.includes(p.profileId || p.id));
+          profiles = profiles.filter((p) => !bl.includes(p.profileId));
         _profilesCache[groupId] = profiles;
         if (TEAM_AREAS[groupId]) TEAM_AREAS[groupId].profiles = profiles;
         return profiles;
       };
       if (blacklist.length > 0) return applyBlacklist(blacklist);
-      return new Promise<AnyObj[]>((resolve) => {
-        chrome.storage.local.get("userConfig", (stored: AnyObj) => {
+      return new Promise<JsonObject[]>((resolve) => {
+        chrome.storage.local.get("userConfig", (stored: JsonObject) => {
           resolve(applyBlacklist(
             ((stored["userConfig"] || {}).blacklist as unknown as number[]) ?? [],
           ));
         });
       });
     })
-    .catch(() => { delete _pendingProfileRequests[groupId]; return [] as AnyObj[]; })
-    .then((r: AnyObj[]) => { delete _pendingProfileRequests[groupId]; return r; });
+    .catch(() => { delete _pendingProfileRequests[groupId]; return []; })
+    .then((r: JsonObject[]) => { delete _pendingProfileRequests[groupId]; return r; });
 
   _pendingProfileRequests[groupId] = p;
   return p;
@@ -108,7 +108,7 @@ export function loadProfilesForGroup(
 export function loadTeamArea(): Promise<void> {
   return new Promise((resolve) => {
     try {
-      chrome.storage.local.get("teamArea", (result: AnyObj) => {
+      chrome.storage.local.get("teamArea", (result: JsonObject) => {
         const val: string = result["teamArea"] ?? "";
         if (val) currentTeamArea = val;
         void SP_Session.resolveProfileId();
@@ -156,7 +156,7 @@ export function refreshTeamColumn(profileId: string): void {
     { headers: spGetHeaders() },
   )
     .then((r) => r.json())
-    .then((json: AnyObj) => {
+    .then((json: JsonObject) => {
       const tickets = (json.data ?? json).content ?? [];
       const col = document.getElementById(`sp-team-col-${profileId}`);
       if (!col) return;
@@ -179,7 +179,7 @@ export function refreshUnassignedColumn(currentUserGroups: number[]): void {
       { headers: spGetHeaders() },
     )
       .then((r) => r.json())
-      .then((json: AnyObj) => {
+      .then((json: JsonObject) => {
         const tickets = (json.data ?? json).content ?? [];
         const col = document.getElementById(`sp-team-col-unassigned-${area.resolutionGroupId}`);
         if (!col) return;
@@ -196,7 +196,7 @@ export function refreshUnassignedColumn(currentUserGroups: number[]): void {
   });
 }
 
-export function renderClosedColumn(tickets: AnyObj[]): void {
+export function renderClosedColumn(tickets: import("../types").SpTicket[]): void {
   const col = document.getElementById("sp-team-col-closed");
   if (!col) return;
   const countEl = col.querySelector(".sp-team-count");
@@ -210,7 +210,7 @@ export function renderClosedColumn(tickets: AnyObj[]): void {
   }
   listEl.innerHTML = tickets
     .map(
-      (t: AnyObj) =>
+      (t) =>
         `<div class="sp-team-ticket" style="display:block;padding:4px 6px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #2E7D32;font-size:10px;line-height:1.3;">` +
         `<div style="font-weight:600;color:#2E7D32;">${t.uniqueCode ?? ""}</div>` +
         `<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">${(t.subject ?? "").substring(0, 30)}</div>` +
@@ -225,7 +225,7 @@ export function renderClosedColumn(tickets: AnyObj[]): void {
 export function refreshClosedColumn(currentUserGroups: number[]): void {
   const { start, end } = getTodayRange();
   const areas = getActiveAreas(currentUserGroups);
-  const allClosed: AnyObj[] = [];
+  const allClosed: import("../types").SpTicket[] = [];
   let pending = areas.length;
 
   areas.forEach((area) => {
@@ -234,7 +234,7 @@ export function refreshClosedColumn(currentUserGroups: number[]): void {
       { headers: spGetHeaders() },
     )
       .then((r) => r.json())
-      .then((json: AnyObj) => { allClosed.push(...((json.data ?? json).content ?? [])); })
+      .then((json: JsonObject) => { allClosed.push(...((json["data"] ?? json as JsonObject)["content"] ?? []) as import("../types").SpTicket[]); })
       .catch(() => {})
       .finally(() => { pending--; if (pending <= 0) renderClosedColumn(allClosed); });
   });
@@ -255,16 +255,16 @@ export function refreshTeamPanel(currentUserGroups: number[]): void {
   }
 
   const areas = getActiveAreas(currentUserGroups);
-  const allProfiles: AnyObj[] = areas.flatMap((a) => a.profiles);
+  const allProfiles: JsonObject[] = areas.flatMap((a) => a.profiles as JsonObject[]);
   let remaining = allProfiles.length;
 
-  allProfiles.forEach((p: AnyObj) => {
+  allProfiles.forEach((p) => {
     void fetch(
       `${SP_CONFIG.SP_SEARCH_API}?responsibleProfileId=${p.profileId}&ticketStatusName=Asignado`,
       { headers: spGetHeaders() },
     )
       .then((r) => r.json())
-      .then((json: AnyObj) => {
+      .then((json: JsonObject) => {
         const tickets = (json.data ?? json).content ?? [];
         const col = document.getElementById(`sp-team-col-${p.profileId}`);
         if (!col) return;
@@ -344,7 +344,7 @@ export async function loadTeamPanel(
         `<div class="sp-team-tickets" data-profile-id="unassigned" data-area-group="${area.resolutionGroupId}" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>`;
       container.appendChild(unCol);
 
-      area.profiles.forEach((p: AnyObj) => {
+      area.profiles.forEach((p) => {
         const isMe = myName && p.profileFullName === myName;
         const col = document.createElement("div");
         col.id = `sp-team-col-${p.profileId}`;
@@ -467,10 +467,10 @@ export async function loadTeamPanel(
 
     // Fetch tickets
     areas.forEach((area) => {
-      area.profiles.forEach((p: AnyObj) => {
+      area.profiles.forEach((p) => {
         void fetch(`${SP_CONFIG.SP_SEARCH_API}?responsibleProfileId=${p.profileId}&ticketStatusName=Asignado`, { headers: spGetHeaders() })
           .then((r) => r.json())
-          .then((json: AnyObj) => {
+          .then((json: JsonObject) => {
             const tickets = (json.data ?? json).content ?? [];
             const col = document.getElementById(`sp-team-col-${p.profileId}`);
             if (!col) return;
@@ -485,7 +485,7 @@ export async function loadTeamPanel(
       });
       void fetch(`${SP_CONFIG.SP_SEARCH_API}?page=0&size=50&resolutionGroupId=${area.resolutionGroupId}&ticketStatusName=En%20espera`, { headers: spGetHeaders() })
         .then((r) => r.json())
-        .then((json: AnyObj) => {
+        .then((json: JsonObject) => {
           const tickets = (json.data ?? json).content ?? [];
           const col = document.getElementById(`sp-team-col-unassigned-${area.resolutionGroupId}`);
           if (!col) return;
@@ -510,3 +510,7 @@ export async function loadTeamPanel(
 import SP_DOM from "../lib/dom-utils";
 import SP_API_Lib from "../lib/api";
 import { showLoadingToast } from "../components";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type JsonObject = Record<string, any>;
+

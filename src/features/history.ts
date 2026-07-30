@@ -8,9 +8,13 @@ import { showErrorToast, showLoadingToast } from "../components";
 import { SP_CONFIG } from "../config";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyObj = Record<string, any>;
+type JsonObject = Record<string, any>;
+
+
 
 // ─── Field label map ──────────────────────────────────────────
+
+
 
 const FIELD_LABELS: Record<string, string> = {
   ticket: "Creación de ticket",
@@ -42,13 +46,13 @@ const ACTION_MAP: Record<string, { label: string; color: string }> = {
 
 // ─── Log detail builder ───────────────────────────────────────
 
-export function buildLogDetail(log: AnyObj): string {
+export function buildLogDetail(log: JsonObject): string {
   const { field, before, after } = log;
 
   if (field === "responsible_info" && after?.content) {
-    const a: AnyObj = after.content;
-    const b: AnyObj | null = before?.content?.fullName ? before.content : null;
-    const fmt = (x: AnyObj) => `${x.fullName} (${x.email ?? ""}) - ${x.roleName ?? ""}`;
+    const a: JsonObject = after.content;
+    const b: JsonObject | null = before?.content?.fullName ? before.content : null;
+    const fmt = (x: JsonObject) => `${x.fullName} (${x.email ?? ""}) - ${x.roleName ?? ""}`;
     return b ? `${fmt(b)} &nbsp;→&nbsp; ${fmt(a)}` : fmt(a);
   }
   if (field === "status" && after?.content) {
@@ -57,16 +61,16 @@ export function buildLogDetail(log: AnyObj): string {
     return bs ? `${bs} &nbsp;→&nbsp; ${as_}` : as_;
   }
   if (field === "attachments" && Array.isArray(after?.content)) {
-    const files = (after.content as AnyObj[]).map((f) => f.name ?? "archivo");
+    const files = (after.content as JsonObject[]).map((f) => f.name ?? "archivo");
     const vis = after.content[0]?.isInternal ? "Interno" : "Público";
     return `Archivo: ${files.join(", ")} | ${vis}`;
   }
   if (field === "attachment_delete" && before?.content) {
-    const f: AnyObj = before.content;
+    const f: JsonObject = before.content;
     return `Archivo: ${f.name ?? "archivo"} | ${f.isInternal ? "Interno" : "Público"}`;
   }
   if (field === "ticket_visitor_participant" && after?.content) {
-    const p: AnyObj = after.content;
+    const p: JsonObject = after.content;
     return `${p.fullName ?? ""} (${p.email ?? ""}) - ${p.isParticipant ? "Participante" : "Visitante"}`;
   }
   if (field === "ticket" && after?.content) return String(after.content);
@@ -82,7 +86,7 @@ export async function showHistoryModal(ticketId: number | string): Promise<void>
   try {
     const res = await fetch(`${SP_CONFIG.SP_API}/logs/${ticketId}`, { headers: spGetHeaders() });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const logs = ((await res.json()) as AnyObj[]).sort(
+    const logs = ((await res.json()) as JsonObject[]).sort(
       (a, b) => new Date(b.createdAt as string).getTime() - new Date(a.createdAt as string).getTime(),
     );
 

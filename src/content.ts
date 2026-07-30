@@ -9,6 +9,8 @@ import SP_Log from "./lib/logger";
 import SP_API_Lib from "./lib/api";
 import SP_DOM from "./lib/dom-utils";
 import {
+
+
   ensureSyncStarted,
   resetSyncPromise,
   invalidateCache,
@@ -58,9 +60,11 @@ import {
 } from "./features/ticket-modals";
 
 import type { DetailModalContext } from "./features/ticket-detail";
+import type { SpProfile } from "./types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyObj = Record<string, any>;
+type JsonObject = Record<string, any>;
+
 
 // ─── Boot ─────────────────────────────────────────────────────
 injectStyles();
@@ -85,14 +89,14 @@ const TEAM_AREAS: Record<
   {
     resolutionGroupId: number;
     resolutionGroupLabel: string;
-    profiles: AnyObj[];
+    profiles: SpProfile[];
   }
 > = {};
 GROUP_INFO.forEach((g) => {
   TEAM_AREAS[g.id] = {
     resolutionGroupId: g.id,
     resolutionGroupLabel: g.name,
-    profiles: [],
+    profiles: [] as SpProfile[],
   };
 });
 let _currentTeamArea = "";
@@ -103,7 +107,7 @@ function _getTeamConfig() {
     TEAM_AREAS[currentUserGroups[0]] ?? {
       resolutionGroupId: currentUserGroups[0] ?? 0,
       resolutionGroupLabel: "",
-      profiles: [],
+      profiles: [] as SpProfile[],
     }
   );
 }
@@ -130,8 +134,8 @@ async function _getMyProfileId(): Promise<number | null> {
       { headers: spGetHeaders() },
     );
     if (!res.ok) return null;
-    const json = (await res.json()) as AnyObj;
-    const profiles: AnyObj[] = json["data"] ?? json;
+    const json = (await res.json()) as JsonObject;
+    const profiles = (json["data"] ?? json) as SpProfile[];
     const found = profiles.find(
       (p) =>
         (email && p.email?.toLowerCase() === email.toLowerCase()) ||
@@ -147,8 +151,8 @@ async function _getMyProfileId(): Promise<number | null> {
             ).length >= 2),
     );
     if (found) {
-      _myProfileId = found.profileId;
-      _sessionProfileId = found.profileId;
+      _myProfileId = (found as SpProfile).profileId;
+      _sessionProfileId = (found as SpProfile).profileId;
     }
     return _myProfileId;
   } catch {
@@ -174,7 +178,7 @@ async function _handleMondayClick(ticketId: number | string): Promise<void> {
       "query ($boardId: [ID!]!) { boards(ids: $boardId) { groups { id title } } }",
       { boardId },
     );
-    const groups: AnyObj[] = gData.boards?.[0]?.groups ?? [];
+    const groups = gData.boards?.[0]?.groups ?? [];
     if (!groups.length) {
       alert("No hay grupos en el tablero");
       return;
@@ -182,7 +186,7 @@ async function _handleMondayClick(ticketId: number | string): Promise<void> {
     const tRes = await fetch(`${SP_CONFIG.SP_API}/${ticketId}`, {
       headers: spGetHeaders(),
     });
-    const tJson = (await tRes.json()) as AnyObj;
+    const tJson = (await tRes.json()) as JsonObject;
     const ticket = tJson["data"] ?? tJson;
     const { default: SP_MondayUtils } = await import("./lib/monday-utils");
     await SP_MondayUtils.createMondayItem(tok, {
@@ -299,7 +303,7 @@ void SP_Session.checkSession().then((result: unknown) => {
   _workSchedule = ss.workSchedule;
   _sessionProfileId = ss.profileId;
   // Load team area then start extension
-  chrome.storage.local.get("teamArea", (r: AnyObj) => {
+  chrome.storage.local.get("teamArea", (r: JsonObject) => {
     if (r["teamArea"]) _currentTeamArea = r["teamArea"] as string;
     SP_Header.injectButtons("session");
     SP_Header.injectButtons("authenticated");
@@ -675,7 +679,7 @@ window.addEventListener("focus", () => {
   void ensureSyncStarted().then(() => void injectButtons());
   triggerActiveModalRefresh();
   resetPendingAlert();
-  chrome.storage.local.get("workSchedule", (r: AnyObj) => {
+  chrome.storage.local.get("workSchedule", (r: JsonObject) => {
     if (r["workSchedule"]) _workSchedule = r["workSchedule"];
   });
 });
@@ -683,7 +687,7 @@ window.addEventListener("focus", () => {
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
     void chrome.runtime.sendMessage({ type: "sync" }, () => {
-      chrome.storage.local.get("workSchedule", (ws: AnyObj) => {
+      chrome.storage.local.get("workSchedule", (ws: JsonObject) => {
         if (ws["workSchedule"]) _workSchedule = ws["workSchedule"];
       });
     });

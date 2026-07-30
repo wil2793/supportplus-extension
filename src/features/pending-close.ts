@@ -11,7 +11,11 @@ import { showSuccessToast, showErrorToast, spinnerHTML } from "../components";
 import type { WorkSchedule } from "../types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyObj = Record<string, any>;
+type JsonObject = Record<string, any>;
+
+
+
+
 
 let _shown = false;
 
@@ -28,15 +32,15 @@ export async function checkPendingCloseAlert(
   if (!grid) return;
 
   try {
-    const resp = await new Promise<AnyObj>((resolve) => {
+    const resp = await new Promise<JsonObject>((resolve) => {
       chrome.runtime.sendMessage(
         { type: "api-get", endpoint: "/tickets-por-cerrar" },
-        (r: AnyObj) => resolve(r),
+        (r: JsonObject) => resolve(r),
       );
     });
 
-    const raw: AnyObj[] =
-      resp?.success && resp.data?.data ? (resp.data.data as AnyObj[]) : [];
+    const raw: JsonObject[] =
+      resp?.success && resp.data?.data ? (resp.data.data as JsonObject[]) : [];
     if (!raw.length) return;
 
     _shown = true;
@@ -81,7 +85,7 @@ export async function checkPendingCloseAlert(
 // ─── Close-all modal ──────────────────────────────────────────
 
 function showCloseAllModal(
-  raw: AnyObj[],
+  raw: JsonObject[],
   _workSchedule: WorkSchedule,
   alertDiv: HTMLElement,
   _onOpenTicket: (id: number) => void,
@@ -144,8 +148,8 @@ function showCloseAllModal(
         const ticketRes = await fetch(`${SP_CONFIG.SP_API}/${t.ticketId}`, {
           headers: spGetHeaders(),
         });
-        const ticketJson = (await ticketRes.json()) as AnyObj;
-        const ticketData: AnyObj = ticketJson["data"] ?? ticketJson;
+        const ticketJson = (await ticketRes.json()) as JsonObject;
+        const ticketData: JsonObject = ticketJson["data"] ?? ticketJson;
         const alreadyClosed = ticketData.ticketStatus?.name === "Cerrado";
 
         if (alreadyClosed) {

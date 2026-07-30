@@ -5,6 +5,8 @@
 import { GROUP_INFO } from "../config";
 import SP_Modal from "../lib/modal-builder";
 import {
+
+
   createHeaderButton,
   showSuccessToast,
   showErrorToast,
@@ -12,23 +14,25 @@ import {
 import { spGetHeaders } from "../lib/sp-fetch";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyObj = Record<string, any>;
+type JsonObject = Record<string, any>;
+
+
 
 const DASHBOARD_BTN_ID = "sp-dashboard-btn";
 const DASHBOARD_CACHE_KEY = "sp_dashboard_cache";
 
 // ─── localStorage cache ───────────────────────────────────────
 
-function loadCache(): AnyObj | null {
+function loadCache(): JsonObject | null {
   try {
     const raw = localStorage.getItem(DASHBOARD_CACHE_KEY);
-    return raw ? (JSON.parse(raw) as AnyObj) : null;
+    return raw ? (JSON.parse(raw) as JsonObject) : null;
   } catch {
     return null;
   }
 }
 function saveCache(
-  data: AnyObj[],
+  data: JsonObject[],
   from: string,
   to: string,
   groupId?: number | string,
@@ -44,7 +48,7 @@ export function clearDashboardCache(): void {
 
 // ─── State ────────────────────────────────────────────────────
 
-let _data: AnyObj[] | null = null;
+let _data: JsonObject[] | null = null;
 let _from = "";
 let _to = "";
 
@@ -59,7 +63,7 @@ function initState(): void {
     return;
   }
   if (cached?.data?.length) {
-    _data = cached.data as AnyObj[];
+    _data = cached.data as JsonObject[];
     _from = cached.from ?? "";
     _to = cached.to ?? "";
   }
@@ -75,7 +79,7 @@ function ensureDateRange(): void {
 
 // ─── Chart builder ────────────────────────────────────────────
 
-export function buildDashboardChart(tickets: AnyObj[]): string {
+export function buildDashboardChart(tickets: JsonObject[]): string {
   if (!tickets.length)
     return '<div style="text-align:center;padding:40px;color:#888;">Sin tickets cerrados en este periodo</div>';
   const counts: Record<string, number> = {};
@@ -128,7 +132,7 @@ export async function generateDashboard(
     btn.disabled = false;
   };
 
-  const allTickets: AnyObj[] = [];
+  const allTickets: import("../types").SpTicket[] = [];
   let page = 0;
   try {
     while (true) {
@@ -137,11 +141,11 @@ export async function generateDashboard(
       if (_to) url += `&endDate=${_to}`;
       const res = await fetch(url, { headers: spGetHeaders() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as AnyObj;
-      const data: AnyObj = json["data"] ?? json;
-      const tickets: AnyObj[] = data["content"] ?? [];
+      const json = (await res.json()) as JsonObject;
+      const data = (json["data"] ?? json) as JsonObject;
+      const tickets = (data["content"] ?? []) as import("../types").SpTicket[];
       tickets.forEach((t) => {
-        if (t.ticketStatusName === "Cerrado") allTickets.push(t);
+        if ((t as import("../types").SpTicket).ticketStatusName === "Cerrado") allTickets.push(t as import("../types").SpTicket);
       });
       btn.innerHTML = `<span class="sp-btn-icon">⏳</span><span class="sp-btn-label"> ${allTickets.length} tickets...</span>`;
       if (page >= ((data["totalPages"] as number) || 1) - 1) break;
@@ -209,7 +213,7 @@ export function showDashboardModal(
         cached?.data?.length &&
         String(cached["groupId"]) === String(newGId)
       ) {
-        _data = cached["data"] as AnyObj[];
+        _data = cached["data"] as JsonObject[];
         _from = cached["from"] ?? "";
         _to = cached["to"] ?? "";
         (document.getElementById("sp-dash-from") as HTMLInputElement).value =

@@ -5,6 +5,8 @@
 // ============================================================
 
 import {
+
+
   escHtml as esc,
   stringToColor,
   showLoadingToast,
@@ -22,9 +24,10 @@ import SP_Session from "./session";
 import SP_TicketActions from "./ticket-actions";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyObj = Record<string, any>;
+type JsonObject = Record<string, any>;
 
-declare const pdfjsLib: AnyObj;
+
+declare const pdfjsLib: JsonObject;
 
 // ─── Public context interface ─────────────────────────────────
 
@@ -39,7 +42,7 @@ export interface DetailModalContext {
   getMyProfileId: () => Promise<number | null>;
   getTeamResolutionGroupId: () => number;
   getTeamResolutionGroupLabel: () => string;
-  getTeamProfiles: () => AnyObj[];
+  getTeamProfiles: () => JsonObject[];
   showTakeModalFn: (
     id: number | string,
     btn: HTMLButtonElement,
@@ -76,17 +79,21 @@ export function showQuickDetailModal(
 
 // ─── Comment HTML builder (reused by send & auto-refresh) ────
 
-function buildCommentHTML(c: AnyObj, myName: string, myEmail: string): string {
+function buildCommentHTML(
+  c: JsonObject,
+  myName: string,
+  myEmail: string,
+): string {
   const cDate = utcToLocal(c.createdAt);
   const cContent = (c.content || "").replace(
     /<script[^>]*>[\s\S]*?<\/script>/gi,
     "",
   );
-  const cAttachments: AnyObj[] = c.attachments ?? [];
+  const cAttachments: JsonObject[] = c.attachments ?? [];
   const cAttachHTML = cAttachments.length
     ? `<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;">` +
       cAttachments
-        .map((a: AnyObj) => {
+        .map((a: JsonObject) => {
           const fId: string = a.fileId ?? a.file?.id ?? a.id;
           const fName: string = a.file?.name ?? a.name ?? "archivo";
           return `<button class="sp-qd-download" data-file-id="${fId}" data-file-name="${fName.replace(/"/g, "&quot;")}" style="padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:3px;font-size:0.8rem;cursor:pointer;color:#1976D2;">📎 ${esc(fName)}</button>`;
@@ -171,10 +178,14 @@ function buildFileContentHTML(
     };
   if (ext === "xlsx" || ext === "xls") {
     try {
-      const wb = (window as AnyObj).XLSX?.read(byteArray, { type: "array" });
+      const wb = (window as JsonObject).XLSX?.read(byteArray, {
+        type: "array",
+      });
       if (wb) {
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const html = (window as AnyObj).XLSX?.utils.sheet_to_html(ws, {
+        const html = (
+          window as JsonObject
+        ).XLSX?.utils.sheet_to_html(ws, {
           header: "",
           footer: "",
         });
@@ -219,11 +230,15 @@ async function renderPdfViewer(
   const pdfContainer = fileModal.querySelector<HTMLElement>("#sp-pdf-viewer");
   if (!pdfContainer) return;
   let scale = 1.3;
-  void (pdfjsLib.getDocument({ data: byteArray }).promise as Promise<AnyObj>)
-    .then((pdf: AnyObj) => {
+  void (
+    pdfjsLib.getDocument({ data: byteArray }).promise as Promise<
+      JsonObject
+    >
+  )
+    .then((pdf: JsonObject) => {
       const total: number = pdf.numPages;
       for (let i = 1; i <= total; i++) {
-        void pdf.getPage(i).then((page: AnyObj) => {
+        void pdf.getPage(i).then((page: JsonObject) => {
           const vp = page.getViewport({ scale });
           const canvas = document.createElement("canvas");
           canvas.width = vp.width;
@@ -388,8 +403,8 @@ async function _loadAndRender(
       headers: spGetHeaders(),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = (await res.json()) as AnyObj;
-    const t: AnyObj = json.data || json;
+    const json = (await res.json()) as JsonObject;
+    const t: JsonObject = json.data || json;
     document.getElementById("sp-loading-toast")?.remove();
 
     // Resolve permissions from storage if not loaded yet
@@ -397,9 +412,10 @@ async function _loadAndRender(
     let canReopenTickets = ctx.canReopenTickets;
     if (!canReopenTickets || !canCommentClosed) {
       try {
-        const perms = await new Promise<AnyObj>((r) =>
-          chrome.storage.local.get("subgroupPerms", (d: AnyObj) =>
-            r(d["subgroupPerms"] || {}),
+        const perms = await new Promise<JsonObject>((r) =>
+          chrome.storage.local.get(
+            "subgroupPerms",
+            (d: JsonObject) => r(d["subgroupPerms"] || {}),
           ),
         );
         if (!canReopenTickets) canReopenTickets = !!perms["canReopenTickets"];
@@ -431,10 +447,13 @@ async function _loadAndRender(
             "query ($boardId: ID!, $columnId: String!, $value: String!) { items_page_by_column_values(board_id: $boardId, columns: [{column_id: $columnId, column_values: [$value]}], limit: 1) { items { id } } }",
             { boardId: b.id, columnId: "text_mm2c9nhc", value: t.uniqueCode },
           );
-          const items: AnyObj[] =
-            (itemData.items_page_by_column_values as AnyObj)?.items ?? [];
+          const items: JsonObject[] =
+            (itemData.items_page_by_column_values as JsonObject)
+              ?.items ?? [];
           if (items.length) {
-            const cv: AnyObj = { status: { index: mondayIdx } };
+            const cv: JsonObject = {
+              status: { index: mondayIdx },
+            };
             if (hEmail) {
               const um = await SP_API_Lib.getMondayUsers(mondayToken);
               const uId = um[hEmail.toLowerCase()];
@@ -484,19 +503,20 @@ async function _loadAndRender(
     const channel: string = t.attentionChannel?.name ?? "";
     const department: string = t.ticketInfo?.departmentName ?? "";
     const location: string = t.ticketInfo?.location ?? "";
-    const attachments: AnyObj[] = t.ticketAttachments?.attachments ?? [];
-    const comments: AnyObj[] = t.ticketComments ?? [];
-    const participants: AnyObj[] = t.participants ?? [];
+    const attachments: JsonObject[] =
+      t.ticketAttachments?.attachments ?? [];
+    const comments: JsonObject[] = t.ticketComments ?? [];
+    const participants: JsonObject[] = t.participants ?? [];
     const isUnassigned = statusName === "En espera";
     const myName = ctx.getLoggedUserName();
     const myEmail = ctx.getLoggedUserEmail();
 
     // ─── Build HTML sections ───────────────────────────────
     const attachHTML = attachments.length
-      ? `<div style="margin-top:12px;"><b style="font-size:12px;">📎 Adjuntos (${attachments.length}):</b><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px;">${attachments.map((a: AnyObj) => `<button class="sp-qd-download" data-file-id="${a.file?.id ?? ""}" data-file-name="${(a.file?.name ?? "archivo").replace(/"/g, "&quot;")}" style="padding:4px 8px;background:#e3f2fd;border:1px solid #1976D2;border-radius:4px;font-size:11px;cursor:pointer;color:#1976D2;">📎 ${esc(a.file?.name ?? "archivo")}</button>`).join("")}</div></div>`
+      ? `<div style="margin-top:12px;"><b style="font-size:12px;">📎 Adjuntos (${attachments.length}):</b><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px;">${attachments.map((a: JsonObject) => `<button class="sp-qd-download" data-file-id="${a.file?.id ?? ""}" data-file-name="${(a.file?.name ?? "archivo").replace(/"/g, "&quot;")}" style="padding:4px 8px;background:#e3f2fd;border:1px solid #1976D2;border-radius:4px;font-size:11px;cursor:pointer;color:#1976D2;">📎 ${esc(a.file?.name ?? "archivo")}</button>`).join("")}</div></div>`
       : "";
     const participantsHTML = participants.length
-      ? `<div style="margin-top:12px;"><b style="font-size:12px;">👥 Participantes (${participants.length}):</b><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;">${participants.map((p: AnyObj) => `<span style="padding:2px 6px;background:#e8f5e9;border:1px solid #2E7D32;border-radius:4px;font-size:10px;">${p.profileFullName ?? p.email ?? ""}</span>`).join("")}</div></div>`
+      ? `<div style="margin-top:12px;"><b style="font-size:12px;">👥 Participantes (${participants.length}):</b><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;">${participants.map((p: JsonObject) => `<span style="padding:2px 6px;background:#e8f5e9;border:1px solid #2E7D32;border-radius:4px;font-size:10px;">${p.profileFullName ?? p.email ?? ""}</span>`).join("")}</div></div>`
       : "";
     const commentsHTML = comments.length
       ? comments.map((c) => buildCommentHTML(c, myName, myEmail)).join("")
@@ -596,8 +616,8 @@ async function _loadAndRender(
       }
       void fetch(`${SP_CONFIG.SP_API}/${ticketId}`, { headers: spGetHeaders() })
         .then((r) => r.json())
-        .then((json: AnyObj) => {
-          const newComments: AnyObj[] =
+        .then((json: JsonObject) => {
+          const newComments: JsonObject[] =
             (json.data || json).ticketComments || [];
           const list = document.getElementById("sp-qd-comments-list");
           if (!list) return;
@@ -654,7 +674,7 @@ async function _loadAndRender(
 function _wireActionButtons(
   overlay: HTMLElement,
   ticketId: number | string,
-  t: AnyObj,
+  t: JsonObject,
   ctx: DetailModalContext,
   closeModal: () => void,
   statusName: string,
@@ -804,10 +824,10 @@ function _wireActionButtons(
       { headers: spGetHeaders() },
     )
       .then((r) => r.json())
-      .then((json: AnyObj) => {
-        const profiles: AnyObj[] = json.data || json;
+      .then((json: JsonObject) => {
+        const profiles: JsonObject[] = json.data || json;
         if (Array.isArray(profiles) && assignSel)
-          profiles.forEach((p: AnyObj) => {
+          profiles.forEach((p: JsonObject) => {
             const opt = document.createElement("option");
             opt.value = p.profileId;
             opt.textContent = p.profileFullName;
@@ -887,19 +907,19 @@ function _wireActionButtons(
             }),
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const json = (await res.json()) as AnyObj;
+          const json = (await res.json()) as JsonObject;
           if (json["success"]) {
             if (doneChk?.checked) {
               if (!SP_Session.isWithinWorkHours()) {
-                const stored = await new Promise<AnyObj>((r) =>
+                const stored = await new Promise<JsonObject>((r) =>
                   chrome.storage.local.get(["usersMap", "userEmail"], (d) =>
-                    r(d as AnyObj),
+                    r(d as JsonObject),
                   ),
                 );
                 const pEmail = (
                   (stored["userEmail"] as string) ?? ""
                 ).toLowerCase();
-                const pUser = ((stored["usersMap"] as AnyObj) ?? {})[pEmail];
+                const pUser = (((stored["usersMap"] ?? {}) as Record<string, JsonObject>)[pEmail]) as JsonObject | undefined;
                 if (pUser?.idUsuario)
                   await SP_TicketActions.saveTicketPendingClose(
                     t.uniqueCode ?? `T${ticketId}`,
@@ -1073,9 +1093,12 @@ function _wireCommentSection(
     if (e.key === "Enter") commentSend.click();
   });
   commentInput?.addEventListener("paste", (e: ClipboardEvent) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const items = (e.clipboardData || (e as any).originalEvent?.clipboardData)
-      ?.items;
+    // Clipboard paste — originalEvent is a non-standard browser extension
+    const items = (
+      e.clipboardData ||
+      (e as ClipboardEvent & { originalEvent?: ClipboardEvent }).originalEvent
+        ?.clipboardData
+    )?.items;
     if (!items) return;
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.indexOf("image") !== -1) {
@@ -1128,7 +1151,7 @@ function _wireCommentSection(
         }),
       });
       if (!commentRes.ok) throw new Error(`HTTP ${commentRes.status}`);
-      const commentJson = (await commentRes.json()) as AnyObj;
+      const commentJson = (await commentRes.json()) as JsonObject;
       const commentId: string = commentJson["data"]?.id ?? commentJson["id"];
 
       // Upload pending files
@@ -1142,8 +1165,8 @@ function _wireCommentSection(
         });
         if (!fRes.ok)
           throw new Error(`Error subiendo archivos: HTTP ${fRes.status}`);
-        const fJson = (await fRes.json()) as AnyObj;
-        const uploaded: AnyObj[] = fJson["data"] ?? fJson;
+        const fJson = (await fRes.json()) as JsonObject;
+        const uploaded: JsonObject[] = fJson["data"] ?? fJson;
         if (Array.isArray(uploaded) && uploaded.length)
           await fetch(
             "https://macropayapi.supportplus.mx/tickets/web/comment/attachments",
@@ -1151,7 +1174,9 @@ function _wireCommentSection(
               method: "POST",
               headers: spHeaders(),
               body: JSON.stringify({
-                attachments: uploaded.map((f: AnyObj) => ({ fileId: f.id })),
+                attachments: uploaded.map((f: JsonObject) => ({
+                  fileId: f.id,
+                })),
                 commentId,
                 isInternal: false,
               }),
@@ -1171,8 +1196,8 @@ function _wireCommentSection(
           body: fmData,
         });
         if (iRes.ok) {
-          const iJson = (await iRes.json()) as AnyObj;
-          const imgs: AnyObj[] = iJson["data"] ?? iJson;
+          const iJson = (await iRes.json()) as JsonObject;
+          const imgs: JsonObject[] = iJson["data"] ?? iJson;
           if (Array.isArray(imgs) && imgs.length)
             await fetch(
               "https://macropayapi.supportplus.mx/tickets/web/comment/attachments",
@@ -1180,7 +1205,9 @@ function _wireCommentSection(
                 method: "POST",
                 headers: spHeaders(),
                 body: JSON.stringify({
-                  attachments: imgs.map((f: AnyObj) => ({ fileId: f.id })),
+                  attachments: imgs.map((f: JsonObject) => ({
+                    fileId: f.id,
+                  })),
                   commentId,
                   isInternal: false,
                 }),
@@ -1216,7 +1243,7 @@ function _wireFileCarousel(overlay: HTMLElement): void {
 
 function _loadStatusOptions(
   ticketId: number | string,
-  t: AnyObj,
+  t: JsonObject,
   ctx: DetailModalContext,
 ): void {
   const statusSelect = document.getElementById(
@@ -1228,13 +1255,13 @@ function _loadStatusOptions(
     { headers: spGetHeaders() },
   )
     .then((r) => r.json())
-    .then((json: AnyObj) => {
-      const opts: AnyObj[] = json["data"] ?? [];
+    .then((json: JsonObject) => {
+      const opts: JsonObject[] = json["data"] ?? [];
       const current =
         statusSelect.options[0]?.textContent?.replace(" (actual)", "") ?? "";
       statusSelect.innerHTML = `<option value="" data-id="">${current} (actual)</option>`;
-      opts.forEach((opt: AnyObj) => {
-        const ns: AnyObj = opt["nextStatus"] ?? {};
+      opts.forEach((opt: JsonObject) => {
+        const ns: JsonObject = opt["nextStatus"] ?? {};
         statusSelect.innerHTML += `<option value="${ns.id}" data-name="${ns.name ?? opt.name}">${ns.name ?? opt.name}</option>`;
       });
     })
@@ -1274,24 +1301,27 @@ function _loadSuggestedComments(
 ): void {
   const suggestedDiv = targetDiv;
   if (!suggestedDiv) return;
-  chrome.storage.local.get("suggestedComments", (r: AnyObj) => {
-    const all: AnyObj = r["suggestedComments"] ?? {};
-    const items: AnyObj[] = all[groupId] ?? [];
-    items.forEach((c: AnyObj) => {
-      const chip = document.createElement("button");
-      chip.textContent =
-        String(c.text).substring(0, 40) +
-        (String(c.text).length > 40 ? "..." : "");
-      chip.title = c.text;
-      const { bg, border: borderColor, text } = stringToColor(c.text);
-      chip.style.cssText = `padding:3px 8px;font-size:0.8rem;border:1px solid ${borderColor};border-radius:12px;background:${bg};color:${text};cursor:pointer;`;
-      chip.addEventListener("click", () => {
-        const inp = document.getElementById(
-          "sp-qd-comment-input",
-        ) as HTMLTextAreaElement | null;
-        if (inp) inp.value = c.text;
+  chrome.storage.local.get(
+    "suggestedComments",
+    (r: JsonObject) => {
+      const all: JsonObject = r["suggestedComments"] ?? {};
+      const items: JsonObject[] = all[groupId] ?? [];
+      items.forEach((c: JsonObject) => {
+        const chip = document.createElement("button");
+        chip.textContent =
+          String(c.text).substring(0, 40) +
+          (String(c.text).length > 40 ? "..." : "");
+        chip.title = c.text;
+        const { bg, border: borderColor, text } = stringToColor(c.text);
+        chip.style.cssText = `padding:3px 8px;font-size:0.8rem;border:1px solid ${borderColor};border-radius:12px;background:${bg};color:${text};cursor:pointer;`;
+        chip.addEventListener("click", () => {
+          const inp = document.getElementById(
+            "sp-qd-comment-input",
+          ) as HTMLTextAreaElement | null;
+          if (inp) inp.value = c.text;
+        });
+        suggestedDiv.appendChild(chip);
       });
-      suggestedDiv.appendChild(chip);
-    });
-  });
+    },
+  );
 }

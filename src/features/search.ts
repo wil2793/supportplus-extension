@@ -11,7 +11,11 @@ import { getCache, createSyncedBadge } from "../lib/monday-cache";
 import type { TicketRow } from "./ticket-summary";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyObj = Record<string, any>;
+type JsonObject = Record<string, any>;
+
+
+
+
 
 export const SEARCH_BTN_ID = "sp-search-btn";
 const QUICK_SEARCH_ID = "sp-quick-search";
@@ -95,8 +99,8 @@ export function injectQuickSearch(
         { headers: spGetHeaders() },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as AnyObj;
-      const tickets: AnyObj[] = (json["data"] ?? json)["content"] ?? [];
+      const json = (await res.json()) as JsonObject;
+      const tickets = ((json["data"] ?? json) as JsonObject)["content"] as import("../types").SpTicket[] ?? [];
       if (tickets.length > 0) openTicketCallback(tickets[0].id as number);
       else showErrorToast(`Ticket no encontrado: ${val}`);
     } catch (err) {
@@ -161,8 +165,8 @@ async function fetchTickets(url: string): Promise<{
 }> {
   const res = await fetch(url, { headers: spGetHeaders() });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const json = (await res.json()) as AnyObj;
-  const data: AnyObj = json["data"] ?? json;
+  const json = (await res.json()) as JsonObject;
+  const data = (json["data"] ?? json) as JsonObject;
   return {
     tickets: (data["content"] ?? []) as TicketRow[],
     totalPages: (data["totalPages"] as number) ?? 1,
