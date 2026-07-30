@@ -1134,97 +1134,343 @@ export function initManagerView(): void {
   mgrObserver.observe(document.body, { childList: true, subtree: true });
 }
 
+// ─── DBA Info types ───────────────────────────────────────────
+
+interface DbaProduct {
+  id: number;
+  name: string;
+  producto: string;
+  cantidad: number;
+}
+
+interface DbaLogEntry {
+  productId: number;
+  userId: number;
+}
+
+interface DbaUser {
+  id: number;
+  nombre: string;
+  correo: string;
+  cumple: string;
+  cumpleColor: string;
+}
+
+interface DbaColumn {
+  productId: number;
+  productName: string;
+  colName: string;
+  colIndex: number;
+}
+
+// ─── DBA Info modal ───────────────────────────────────────────
+
 export function showDBAInfo(): void {
-  document.getElementById("sp-dba-info-modal")?.remove();
+  // Toggle: close if already open
+  const existing = document.getElementById("sp-water-modal");
+  if (existing) {
+    existing.remove();
+    return;
+  }
 
-  const hasBirthdays = true;
-  const hasProducts = sessionState.canAddProduct || sessionState.canAdelantar;
+  showSuccessToast("Cargando DBA Info...");
 
-  const tabs: Array<{ id: string; label: string }> = [
-    { id: "birthday", label: "🎂 Cumpleaños" },
-    ...(hasProducts ? [{ id: "products", label: "📦 Productos" }] : []),
-    ...(sessionState.canGuardias
-      ? [{ id: "guardias", label: "🛡 Guardias" }]
-      : []),
-  ];
-
-  const tabBar = tabs
-    .map(
-      (t, i) =>
-        `<button class="sp-dba-tab" data-tab="${t.id}" style="flex:1;padding:8px 4px;font-size:12px;font-weight:600;border:none;background:transparent;cursor:pointer;${i === 0 ? "border-bottom:2px solid #4CAF50;color:#4CAF50;" : "color:#888;border-bottom:2px solid transparent;"}">${t.label}</button>`,
-    )
-    .join("");
-
-  const panelBirthday =
-    `<div id="sp-dba-panel-birthday" data-dba-panel="birthday">` +
-    `<div id="sp-birthday-content" style="max-height:300px;overflow-y:auto;font-size:13px;">` +
-    `<div style="padding:12px;opacity:.6;">Cargando...</div></div></div>`;
-
-  const panelProducts = hasProducts
-    ? `<div id="sp-dba-panel-products" data-dba-panel="products" style="display:none;">` +
-      `<div id="sp-productos-tabs" style="display:flex;border-bottom:1px solid #eee;margin-bottom:8px;overflow-x:auto;"></div>` +
-      `<div id="sp-productos-content" style="max-height:300px;overflow-y:auto;font-size:12px;"></div>` +
-      `</div>`
-    : "";
-
-  const panelGuardias = sessionState.canGuardias
-    ? `<div id="sp-dba-panel-guardias" data-dba-panel="guardias" style="display:none;">` +
-      `<div id="sp-guardias-dba-content" style="max-height:300px;overflow-y:auto;font-size:13px;padding:8px 0;">` +
-      `<div style="opacity:.6;">Cargando guardias...</div></div></div>`
-    : "";
-
-  const m = formModal({
-    id: "sp-dba-info-modal",
-    title: "🏠 DBA Info",
-    content:
-      `<div style="display:flex;gap:0;border-bottom:2px solid #eee;margin-bottom:12px;">${tabBar}</div>` +
-      panelBirthday +
-      panelProducts +
-      panelGuardias,
-    submitText: "Cerrar",
-    submitColor: "#4CAF50",
-    maxWidth: "520px",
-    onSubmit: (api) => api.close(),
-    onReady: () => {
-      // Wire tab switching
-      document
-        .querySelectorAll<HTMLButtonElement>(".sp-dba-tab")
-        .forEach((btn) => {
-          btn.addEventListener("click", () => {
-            document
-              .querySelectorAll<HTMLButtonElement>(".sp-dba-tab")
-              .forEach((b) => {
-                b.style.borderBottom = "2px solid transparent";
-                b.style.color = "#888";
-              });
-            btn.style.borderBottom = "2px solid #4CAF50";
-            btn.style.color = "#4CAF50";
-            const tabId = btn.dataset["tab"] ?? "";
-            document
-              .querySelectorAll<HTMLElement>("[data-dba-panel]")
-              .forEach((p) => {
-                p.style.display =
-                  p.dataset["dbaPanel"] === tabId ? "block" : "none";
-              });
-            if (tabId === "products") loadProductosPanel();
-            if (tabId === "guardias") {
-              const el = document.getElementById("sp-guardias-dba-content");
-              if (el)
-                el.innerHTML =
-                  '<div style="opacity:.6;">Módulo de guardias disponible en el panel principal.</div>';
+  // Load products and log in parallel
+  const productsP = new Promise<DbaProduct[]>((resolve) => {
+    chrome.runtime.sendMessage(
+      { type: "api-get", endpoint: "/productos" },
+      (
+        resp:
+          | {
+              success: boolean;
+              data?: { data?: Array<Record<string, unknown>> };
             }
+          | undefined,
+      ) => {
+        const raw = resp?.success && resp.data?.data ? resp.data.data : [];
+        resolve(
+          raw.map((p) => ({
+            id: p["IdcatProducto"] as number,
+            name: p["Nombre"] as string,
+            producto: (p["Descripcion"] as string) || (p["Nombre"] as string),
+            cantidad: (p["Cantidad"] as number) || 1,
+          })),
+        );
+      },
+    );
+  });
+
+  const logP = new Promise<DbaLogEntry[]>((resolve) => {
+    chrome.runtime.sendMessage(
+      { type: "api-get", endpoint: "/productos/log" },
+      (
+        resp:
+          | {
+              success: boolean;
+              data?: { data?: Array<Record<string, unknown>> };
+            }
+          | undefined,
+      ) => {
+        const raw = resp?.success && resp.data?.data ? resp.data.data : [];
+        resolve(
+          raw.map((l) => ({
+            productId: l["FK_IdcatProducto"] as number,
+            userId: l["FK_IdUsuario"] as number,
+          })),
+        );
+      },
+    );
+  });
+
+  void Promise.all([productsP, logP]).then(([products, todayLog]) => {
+    // Remove loading toast
+    document.getElementById("sp-loading-toast")?.remove();
+
+    chrome.storage.local.get(["usersMap", "userEmail"], (stored) => {
+      const currentEmail = (
+        (stored["userEmail"] as string) ?? ""
+      ).toLowerCase();
+      const usersMap =
+        (stored["usersMap"] as Record<string, Record<string, unknown>>) ?? {};
+      const currentUser = usersMap[currentEmail];
+      const currentUserId = currentUser
+        ? (currentUser["idUsuario"] as number)
+        : null;
+
+      // Build user list with birthday info
+      const MESES = [
+        "enero",
+        "febrero",
+        "marzo",
+        "abril",
+        "mayo",
+        "junio",
+        "julio",
+        "agosto",
+        "septiembre",
+        "octubre",
+        "noviembre",
+        "diciembre",
+      ];
+      const users: DbaUser[] = [];
+
+      Object.keys(usersMap).forEach((email) => {
+        const u = usersMap[email];
+        if (!u) return;
+        let cumpleDisplay = "";
+        let cumpleColor = "";
+        if (u["cumpleanos"]) {
+          const parts = (u["cumpleanos"] as string).split("-");
+          const day = parseInt(parts[2] ?? "0");
+          const month = parseInt(parts[1] ?? "1") - 1;
+          cumpleDisplay = `${day} de ${MESES[month] ?? ""}`;
+          const now = new Date();
+          const thisYearBday = new Date(now.getFullYear(), month, day);
+          const diffDays = Math.floor(
+            (thisYearBday.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+          );
+          cumpleColor =
+            diffDays < 0 ? "#D32F2F" : diffDays <= 30 ? "#F9A825" : "#2E7D32";
+        }
+        users.push({
+          id: u["idUsuario"] as number,
+          nombre: (u["name"] as string) ?? email,
+          correo: email,
+          cumple: cumpleDisplay,
+          cumpleColor,
+        });
+      });
+
+      if (!users.length) {
+        showErrorToast("No hay usuarios con acceso a DBA Info");
+        return;
+      }
+
+      // Build log count map: userId_productId → count
+      const logCountMap: Record<string, number> = {};
+      todayLog.forEach((l) => {
+        const key = `${l.userId}_${l.productId}`;
+        logCountMap[key] = (logCountMap[key] ?? 0) + 1;
+      });
+
+      // Sort products alphabetically
+      products.sort((a, b) => a.name.localeCompare(b.name));
+
+      // Generate columns (N per product based on cantidad)
+      const columns: DbaColumn[] = [];
+      products.forEach((p) => {
+        for (let i = 0; i < p.cantidad; i++) {
+          columns.push({
+            productId: p.id,
+            productName: p.name,
+            colName: p.cantidad > 1 ? `${p.name} ${i + 1}` : p.producto,
+            colIndex: i,
+          });
+        }
+      });
+
+      // Product headers
+      const productHeaders = columns
+        .map(
+          (col) =>
+            `<th style="padding:6px 10px;text-align:center;">${escHtml(col.colName)}</th>`,
+        )
+        .join("");
+
+      // Check which products are fully completed by all users
+      const productCompletionMap: Record<number, boolean> = {};
+      products.forEach((p) => {
+        productCompletionMap[p.id] = users.every(
+          (u) => (logCountMap[`${u.id}_${p.id}`] ?? 0) >= p.cantidad,
+        );
+      });
+
+      // Build table rows
+      const tableRows = users
+        .map((u, idx) => {
+          const cells = columns
+            .map((col) => {
+              const userCount = logCountMap[`${u.id}_${col.productId}`] ?? 0;
+              const producto = products.find((p) => p.id === col.productId);
+              const cantidad = producto ? producto.cantidad : 1;
+              const isMarked = userCount > col.colIndex;
+              const isMe = u.id === currentUserId;
+
+              // Show checkbox only for current user's next unchecked slot
+              if (isMe && !isMarked && col.colIndex === userCount) {
+                return `<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;"><input type="checkbox" class="sp-dba-check" data-product-id="${col.productId}" data-product-name="${escHtml(col.colName)}" data-user-id="${u.id}" style="cursor:pointer;width:16px;height:16px;"></td>`;
+              }
+
+              const timesMarked = isMarked
+                ? Math.floor((userCount - col.colIndex - 1) / cantidad) + 1
+                : 0;
+              const display = isMarked
+                ? `✅${timesMarked > 1 ? ` <span style="font-size:9px;color:#888;">(x${timesMarked})</span>` : ""}`
+                : "—";
+
+              return `<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">${display}</td>`;
+            })
+            .join("");
+
+          const cumpleCell = `<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;color:${u.cumpleColor || "#333"};font-weight:600;">${u.cumple || "-"}</td>`;
+
+          return `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;">${idx + 1}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:600;">${escHtml(u.nombre)}</td>${cells}${cumpleCell}</tr>`;
+        })
+        .join("");
+
+      // Reset buttons (only for fully completed products)
+      const resetBtnsHTML = products
+        .filter((p) => productCompletionMap[p.id])
+        .map(
+          (p) =>
+            `<button class="sp-dba-reset-btn" data-product-id="${p.id}" data-product-name="${escHtml(p.name)}" style="padding:6px 14px;border:none;border-radius:6px;background:#1565C0;color:#fff;cursor:pointer;font-size:12px;font-weight:600;margin-right:8px;margin-bottom:4px;">🔄 Reiniciar ${escHtml(p.name)}</button>`,
+        )
+        .join("");
+
+      // Build modal
+      const overlay = document.createElement("div");
+      overlay.id = "sp-water-modal";
+      overlay.style.cssText =
+        "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;";
+      overlay.innerHTML =
+        `<div style="background:#fff;padding:20px;border-radius:12px;max-width:900px;width:95%;max-height:90vh;overflow:auto;font-family:system-ui;">` +
+        `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">` +
+        `<h3 style="margin:0;font-size:16px;">🏠 DBA Info</h3>` +
+        `<button id="sp-water-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;">✕</button>` +
+        `</div>` +
+        `<table style="width:100%;border-collapse:collapse;font-size:12px;">` +
+        `<thead><tr style="background:#f5f5f5;">` +
+        `<th style="padding:6px 10px;text-align:left;">#</th>` +
+        `<th style="padding:6px 10px;text-align:left;">Nombre</th>` +
+        productHeaders +
+        `<th style="padding:6px 10px;text-align:center;">🎂</th>` +
+        `</tr></thead>` +
+        `<tbody>${tableRows}</tbody>` +
+        `</table>` +
+        (resetBtnsHTML
+          ? `<div style="margin-top:12px;text-align:center;">${resetBtnsHTML}</div>`
+          : "") +
+        `</div>`;
+
+      document.body.appendChild(overlay);
+
+      // Close handlers
+      document
+        .getElementById("sp-water-close")
+        ?.addEventListener("click", () => overlay.remove());
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) overlay.remove();
+      });
+
+      // Checkbox: register product consumption
+      overlay
+        .querySelectorAll<HTMLInputElement>(".sp-dba-check")
+        .forEach((cb) => {
+          cb.addEventListener("change", () => {
+            if (!cb.checked) return;
+            cb.disabled = true;
+            const productId = parseInt(cb.dataset["productId"] ?? "0");
+            const userId = parseInt(cb.dataset["userId"] ?? "0");
+            const productName = cb.dataset["productName"] ?? "";
+            chrome.runtime.sendMessage(
+              {
+                type: "api-post",
+                endpoint: "/productos/log",
+                body: {
+                  fkIdProducto: productId,
+                  fkIdUsuario: userId,
+                  usuarioAlta: currentEmail,
+                },
+              },
+              (resp: { success: boolean } | undefined) => {
+                if (resp?.success) {
+                  if (cb.parentElement) cb.parentElement.innerHTML = "✅";
+                  showSuccessToast(`✅ ${productName} registrado`);
+                } else {
+                  showErrorToast("Error al registrar");
+                  cb.checked = false;
+                  cb.disabled = false;
+                }
+              },
+            );
           });
         });
 
-      // Load first tab
-      loadBirthdayPanel();
-      if (hasBirthdays && document.getElementById("sp-birthday-content")) {
-        loadBirthdayPanel();
-      }
-    },
+      // Reset buttons
+      overlay
+        .querySelectorAll<HTMLButtonElement>(".sp-dba-reset-btn")
+        .forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const productId = parseInt(btn.dataset["productId"] ?? "0");
+            const productName = btn.dataset["productName"] ?? "";
+            if (!confirm(`¿Reiniciar el conteo de ${productName}?`)) return;
+            btn.disabled = true;
+            btn.textContent = "⏳ Reiniciando...";
+            chrome.runtime.sendMessage(
+              {
+                type: "api-put",
+                endpoint: "/productos/log/reiniciar",
+                body: {
+                  fkIdProducto: productId,
+                  usuarioModificacion: currentEmail,
+                },
+              },
+              (resp: { success: boolean } | undefined) => {
+                if (resp?.success) {
+                  showSuccessToast(`✅ Conteo de ${productName} reiniciado`);
+                  overlay.remove();
+                  showDBAInfo();
+                } else {
+                  showErrorToast("Error al reiniciar");
+                  btn.disabled = false;
+                  btn.textContent = `🔄 Reiniciar ${productName}`;
+                }
+              },
+            );
+          });
+        });
+    });
   });
-
-  void m;
 }
 
 const SP_ManagerView = {
