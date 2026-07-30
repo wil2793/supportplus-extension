@@ -111,10 +111,26 @@ export function checkVersion(): void {
     const cur = _currentVersion.split(".").map(Number);
     const lat = latest.split(".").map(Number);
 
+    // Compare semver: [major, minor, patch]
+    const isNewer =
+      (lat[0] ?? 0) > (cur[0] ?? 0) ||
+      ((lat[0] ?? 0) === (cur[0] ?? 0) && (lat[1] ?? 0) > (cur[1] ?? 0)) ||
+      ((lat[0] ?? 0) === (cur[0] ?? 0) &&
+        (lat[1] ?? 0) === (cur[1] ?? 0) &&
+        (lat[2] ?? 0) > (cur[2] ?? 0));
+
+    if (!isNewer) {
+      const btn = document.getElementById("sp-update-btn");
+      if (btn) btn.style.display = "none";
+      return;
+    }
+
+    // Major version bump → block usage and show prominent alert
     if ((lat[0] ?? 0) > (cur[0] ?? 0)) {
       sessionState.versionBlocked = true;
       showVersionAlert(latest, zipUrl);
     } else {
+      // Minor/patch → just show the update button
       const btn = document.getElementById("sp-update-btn");
       if (btn) btn.style.display = "inline-flex";
     }

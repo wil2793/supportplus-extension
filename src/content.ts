@@ -310,6 +310,8 @@ void SP_Session.checkSession().then((result: unknown) => {
     SP_Reports.injectReportButton();
     if (currentUserGroups.length > 0) SP_ManagerView.initManagerView();
     SP_Session.injectRoleLabel?.();
+    // Re-check version after sync completes (sync may have updated latestVersion)
+    SP_Header.checkVersion();
     void ensureSyncStarted().then(() => void injectButtons());
     void injectButtons();
   });
