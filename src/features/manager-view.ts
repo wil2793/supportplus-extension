@@ -12,6 +12,7 @@ import {
   emptyState,
   pendingTicketCard,
 } from "../lib/templates";
+import SP_Guardias from "./guardias";
 import { state as sessionState, isWithinWorkHours } from "./session";
 import { fetchPendingCloseTickets } from "./ticket-actions";
 import type { SpTicket, SpProfile } from "../types";
@@ -1170,8 +1171,13 @@ export function showDBAInfo(): void {
 
   const panelGuardias = sessionState.canGuardias
     ? `<div id="sp-dba-panel-guardias" data-dba-panel="guardias" style="display:none;">` +
-      `<div id="sp-guardias-dba-content" style="max-height:300px;overflow-y:auto;font-size:13px;padding:8px 0;">` +
-      `<div style="opacity:.6;">Cargando guardias...</div></div></div>`
+      `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">` +
+      `<button id="sp-dba-g-prev" style="padding:6px 12px;border:1px solid currentColor;border-radius:6px;background:transparent;cursor:pointer;font-size:14px;">◀</button>` +
+      `<span style="font-size:13px;font-weight:600;">📅 Guardias</span>` +
+      `<button id="sp-dba-g-next" style="padding:6px 12px;border:1px solid currentColor;border-radius:6px;background:transparent;cursor:pointer;font-size:14px;">▶</button>` +
+      `</div>` +
+      `<div id="sp-guardias-dba-content" style="max-height:320px;overflow-y:auto;font-size:13px;">` +
+      `<div style="text-align:center;padding:20px;opacity:.6;">Cargando guardias...</div></div></div>`
     : "";
 
   const m = formModal({
@@ -1211,8 +1217,17 @@ export function showDBAInfo(): void {
             if (tabId === "guardias") {
               const el = document.getElementById("sp-guardias-dba-content");
               if (el)
-                el.innerHTML =
-                  '<div style="opacity:.6;">Módulo de guardias disponible en el panel principal.</div>';
+                SP_Guardias.loadInto(
+                  el,
+                  document.getElementById("sp-dba-g-prev"),
+                  document.getElementById("sp-dba-g-next"),
+                  null,
+                  0,
+                  {
+                    currentUserName: sessionState.userName,
+                    currentUserId: String(sessionState.profileId ?? ""),
+                  },
+                );
             }
           });
         });
