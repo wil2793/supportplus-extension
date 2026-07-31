@@ -197,8 +197,231 @@ function buildFileContentHTML(
   if (textExts.includes(ext)) {
     try {
       const text = new TextDecoder().decode(byteArray);
+      const escaped = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+      const needsHighlight = [
+        "sql",
+        "js",
+        "ts",
+        "py",
+        "json",
+        "xml",
+        "html",
+        "css",
+      ].includes(ext);
+
+      if (!needsHighlight) {
+        return {
+          html: `<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:75vh;overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">${escaped}</pre></div>`,
+          isText: true,
+          textContent: text,
+          isPdf: false,
+        };
+      }
+
+      let highlighted = escaped;
+      let errorPanelHTML = "";
+
+      if (ext === "sql") {
+        const sqlErrors: Array<{ line: number; msg: string }> = [];
+        const rawLines = text.split("\n");
+        const cleanedSQL = text
+          .replace(/--[^\n]*/g, "")
+          .replace(/\/\*[\s\S]*?\*\//g, "");
+
+        // 1. Unbalanced parentheses
+        let parenCount = 0;
+        rawLines.forEach((line, idx) => {
+          const lineClean = line.replace(/--.*$/, "").replace(/'[^']*'/g, "");
+          for (let c = 0; c < lineClean.length; c++) {
+            if (lineClean[c] === "(") parenCount++;
+            if (lineClean[c] === ")") parenCount--;
+            if (parenCount < 0) {
+              sqlErrors.push({
+                line: idx + 1,
+                msg: "Paréntesis ')' sin abrir",
+              });
+              parenCount = 0;
+            }
+          }
+        });
+        if (parenCount > 0)
+          sqlErrors.push({
+            line: rawLines.length,
+            msg: `Faltan ${parenCount} paréntesis de cierre ')'`,
+          });
+
+        // 2. Unclosed strings
+        let inString = false;
+        rawLines.forEach((line, idx) => {
+          const lineNoComment = line.replace(/--.*$/, "");
+          for (let c = 0; c < lineNoComment.length; c++) {
+            if (lineNoComment[c] === "'") {
+              if (inString && lineNoComment[c + 1] === "'") {
+                c++;
+                continue;
+              }
+              inString = !inString;
+            }
+          }
+          if (inString) {
+            sqlErrors.push({
+              line: idx + 1,
+              msg: "String sin cerrar (comilla simple)",
+            });
+            inString = false;
+          }
+        });
+
+        // 3. BEGIN/END balance
+        const beginCount = (cleanedSQL.match(/\bBEGIN\b/gi) ?? []).length;
+        const endCount = (cleanedSQL.match(/\bEND\b/gi) ?? []).length;
+        if (beginCount > endCount)
+          sqlErrors.push({
+            line: rawLines.length,
+            msg: `Faltan ${beginCount - endCount} END para cerrar BEGIN`,
+          });
+        if (endCount > beginCount)
+          sqlErrors.push({
+            line: rawLines.length,
+            msg: `${endCount - beginCount} END sin BEGIN correspondiente`,
+          });
+
+        // 4. Trailing comma before FROM/closing paren
+        rawLines.forEach((line, idx) => {
+          const lineClean = line.replace(/--.*$/, "").trim();
+          if (/,\s*$/.test(lineClean)) {
+            const nextLine = (rawLines[idx + 1] ?? "")
+              .replace(/--.*$/, "")
+              .trim()
+              .toUpperCase();
+            if (/^(FROM|WHERE|\))/.test(nextLine))
+              sqlErrors.push({
+                line: idx + 1,
+                msg: `Coma al final antes de ${nextLine.split(/\s/)[0] ?? ""}`,
+              });
+          }
+        });
+
+        const errorLineSet: Record<number, string> = {};
+        sqlErrors.forEach((e) => {
+          errorLineSet[e.line] = e.msg;
+        });
+
+        // SQL syntax highlighting + line numbers
+        const lines = escaped.split("\n");
+        const lineNumWidth = String(lines.length).length * 8 + 8;
+        highlighted = lines
+          .map((line, idx) => {
+            const lineNum = idx + 1;
+            let hl = line;
+            hl = hl.replace(
+              /\b(SELECT|FROM|WHERE|INSERT|INTO|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TABLE|INDEX|VIEW|PROCEDURE|FUNCTION|TRIGGER|BEGIN|END|IF|ELSE|THEN|CASE|WHEN|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|IS|NULL|AS|ON|JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|UNION|ALL|DISTINCT|ORDER|BY|GROUP|HAVING|LIMIT|OFFSET|TOP|VALUES|EXEC|EXECUTE|DECLARE|VARCHAR|INT|BIGINT|NVARCHAR|DATETIME|BIT|FLOAT|DECIMAL|PRIMARY|KEY|FOREIGN|REFERENCES|CONSTRAINT|DEFAULT|IDENTITY|GO|USE|DATABASE|SCHEMA|GRANT|REVOKE|COMMIT|ROLLBACK|TRANSACTION|WITH|NOLOCK|COUNT|SUM|AVG|MAX|MIN|COALESCE|ISNULL|CAST|CONVERT|GETDATE|DATEADD|DATEDIFF|LEN|SUBSTRING|REPLACE|TRIM|UPPER|LOWER|ROW_NUMBER|OVER|PARTITION|RANK|DENSE_RANK|LAG|LEAD|MERGE|OUTPUT|INSERTED|DELETED|CURSOR|FETCH|NEXT|OPEN|CLOSE|DEALLOCATE|PRINT|RAISERROR|TRY|CATCH|THROW|RETURN|WHILE|BREAK|CONTINUE|TRUNCATE|ASC|DESC|EXCEPT|INTERSECT)\b/gi,
+              '<span style="color:#569CD6;">$1</span>',
+            );
+            hl = hl.replace(
+              /('(?:[^'\\]|\\.)*')/g,
+              '<span style="color:#CE9178;">$1</span>',
+            );
+            hl = hl.replace(
+              /(--[^\n]*)/g,
+              '<span style="color:#6A9955;">$1</span>',
+            );
+            hl = hl.replace(
+              /\b(\d+)\b/g,
+              '<span style="color:#B5CEA8;">$1</span>',
+            );
+            const lineNumStr = `<span style="display:inline-block;min-width:${lineNumWidth}px;text-align:right;color:#858585;user-select:none;padding-right:12px;border-right:1px solid #404040;margin-right:12px;">${lineNum}</span>`;
+            if (errorLineSet[lineNum])
+              return `<span style="background:rgba(255,0,0,0.15);display:inline-block;width:100%;">${lineNumStr}${hl}</span>`;
+            return lineNumStr + hl;
+          })
+          .join("\n");
+
+        if (sqlErrors.length) {
+          errorPanelHTML =
+            `<div style="background:#2d1515;border:1px solid #F44336;border-radius:6px;padding:8px 12px;margin-bottom:8px;max-height:120px;overflow:auto;width:90vw;box-sizing:border-box;">` +
+            `<div style="color:#F44336;font-weight:600;font-size:11px;margin-bottom:4px;">⚠️ ${sqlErrors.length} posible${sqlErrors.length > 1 ? "s" : ""} error${sqlErrors.length > 1 ? "es" : ""} de sintaxis:</div>` +
+            sqlErrors
+              .map(
+                (e) =>
+                  `<div style="color:#ef9a9a;font-size:11px;font-family:Consolas,monospace;padding:1px 0;">Línea ${e.line}: ${e.msg}</div>`,
+              )
+              .join("") +
+            `</div>`;
+        }
+
+        const maxHeight = sqlErrors.length ? "65vh" : "75vh";
+        return {
+          html: `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;"><div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:${maxHeight};overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">${highlighted}</pre></div>${errorPanelHTML}</div>`,
+          isText: true,
+          textContent: text,
+          isPdf: false,
+        };
+      } else if (ext === "json") {
+        highlighted = highlighted.replace(
+          /(&quot;[^&]*?&quot;)\s*:/g,
+          '<span style="color:#9CDCFE;">$1</span>:',
+        );
+        highlighted = highlighted.replace(
+          /:\s*(&quot;[^&]*?&quot;)/g,
+          ': <span style="color:#CE9178;">$1</span>',
+        );
+        highlighted = highlighted.replace(
+          /:\s*(true|false|null|\d+\.?\d*)/g,
+          ': <span style="color:#B5CEA8;">$1</span>',
+        );
+      } else if (ext === "js" || ext === "ts") {
+        highlighted = highlighted.replace(
+          /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|new|this|try|catch|throw|typeof|instanceof)\b/g,
+          '<span style="color:#569CD6;">$1</span>',
+        );
+        highlighted = highlighted.replace(
+          /(\/\/[^\n]*)/g,
+          '<span style="color:#6A9955;">$1</span>',
+        );
+        highlighted = highlighted.replace(
+          /(&quot;[^&]*?&quot;|&#39;[^&]*?&#39;)/g,
+          '<span style="color:#CE9178;">$1</span>',
+        );
+      } else if (ext === "py") {
+        highlighted = highlighted.replace(
+          /\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|in|not|and|or|True|False|None|self|print|lambda|yield|raise|pass|break|continue)\b/g,
+          '<span style="color:#569CD6;">$1</span>',
+        );
+        highlighted = highlighted.replace(
+          /(#[^\n]*)/g,
+          '<span style="color:#6A9955;">$1</span>',
+        );
+      } else if (ext === "xml" || ext === "html") {
+        highlighted = highlighted.replace(
+          /(&lt;\/?[a-zA-Z][a-zA-Z0-9]*)/g,
+          '<span style="color:#569CD6;">$1</span>',
+        );
+        highlighted = highlighted.replace(
+          /(\s[a-zA-Z-]+)=/g,
+          '<span style="color:#9CDCFE;">$1</span>=',
+        );
+        highlighted = highlighted.replace(
+          /(&lt;!--[\s\S]*?--&gt;)/g,
+          '<span style="color:#6A9955;">$1</span>',
+        );
+      } else if (ext === "css") {
+        highlighted = highlighted.replace(
+          /([.#]?[a-zA-Z_-][a-zA-Z0-9_-]*)\s*\{/g,
+          '<span style="color:#D7BA7D;">$1</span> {',
+        );
+        highlighted = highlighted.replace(
+          /([a-z-]+)\s*:/g,
+          '<span style="color:#9CDCFE;">$1</span>:',
+        );
+      }
+
       return {
-        html: `<pre style="max-width:90vw;max-height:80vh;overflow:auto;background:#1E1E1E;color:#D4D4D4;padding:20px;border-radius:8px;font-family:monospace;font-size:13px;white-space:pre-wrap;word-break:break-all;">${esc(text)}</pre>`,
+        html: `<div style="background:#1e1e1e;padding:16px;border-radius:8px;width:90vw;max-height:75vh;overflow:auto;"><pre style="margin:0;color:#d4d4d4;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-word;">${highlighted}</pre></div>`,
         isText: true,
         textContent: text,
         isPdf: false,
@@ -207,6 +430,7 @@ function buildFileContentHTML(
       /* fall through */
     }
   }
+
   return {
     html: `<div style="background:#fff;padding:24px;border-radius:8px;text-align:center;"><p style="margin:0 0 8px;font-size:14px;">📄 ${esc(fileName)}</p><a href="${url}" download="${fileName}" style="padding:10px 20px;background:#1976D2;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">📥 Descargar</a></div>`,
     isText: false,
