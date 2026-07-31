@@ -557,24 +557,15 @@ function loadManagerPanel(
   const panel = document.createElement("div");
   panel.id = "sp-manager-panel";
   panel.className = "sp-mgr-panel";
-  grid.parentElement?.insertBefore(panel, grid);
-
-  // Intercept ALL clicks inside the panel during capture phase
-  // (before React's document-level handler fires) so MuiDataGrid
-  // never sees clicks on our ticket cards.
-  panel.addEventListener(
-    "click",
-    (e: MouseEvent) => {
-      const ticket = (e.target as Element).closest<HTMLElement>(
-        ".sp-mgr-ticket, .sp-pending-ticket",
-      );
-      if (ticket) {
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-      }
-    },
-    true /* capture */,
-  );
+  // Insert BEFORE the grid's grandparent to be completely outside
+  // React's event tree and avoid MUI DataGrid capturing our clicks
+  const gridContainer = grid.parentElement;
+  const gridGrandParent = gridContainer?.parentElement;
+  if (gridGrandParent && gridContainer) {
+    gridGrandParent.insertBefore(panel, gridContainer);
+  } else {
+    grid.parentElement?.insertBefore(panel, grid);
+  }
 
   const singleGroup = groups.length === 1;
   const GROUP_INFO = SP_CONFIG.GROUP_INFO;

@@ -359,22 +359,13 @@ export async function loadTeamPanel(
   panel.id = TEAM_PANEL_ID;
   panel.style.cssText =
     "margin-bottom:12px;overflow-x:auto;font-family:system-ui;";
-  grid.parentElement?.insertBefore(panel, grid);
-
-  // Capture clicks on ticket cards before React/MUI sees them
-  panel.addEventListener(
-    "click",
-    (e: MouseEvent) => {
-      const ticket = (e.target as Element).closest<HTMLElement>(
-        ".sp-team-ticket, .sp-pending-ticket",
-      );
-      if (ticket) {
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-      }
-    },
-    true /* capture */,
-  );
+  const gridContainer = grid.parentElement;
+  const gridGrandParent = gridContainer?.parentElement;
+  if (gridGrandParent && gridContainer) {
+    gridGrandParent.insertBefore(panel, gridContainer);
+  } else {
+    grid.parentElement?.insertBefore(panel, grid);
+  }
 
   try {
     const areas = getActiveAreas(currentUserGroups);
