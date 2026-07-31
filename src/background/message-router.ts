@@ -17,19 +17,19 @@ export function registerMessageRouter(): void {
     (
       message: ExtensionMessage,
       _sender: chrome.runtime.MessageSender,
-      sendResponse: SendResponse
+      sendResponse: SendResponse,
     ): boolean => {
       // All handlers are async — we must return `true` to keep
       // the message channel open for the async response.
       void handleMessage(message, sendResponse);
       return true;
-    }
+    },
   );
 }
 
 async function handleMessage(
   msg: ExtensionMessage,
-  sendResponse: SendResponse
+  sendResponse: SendResponse,
 ): Promise<void> {
   try {
     switch (msg.type) {
@@ -114,18 +114,27 @@ async function handleMessage(
           sendResponse({ success: false, error: "No URL provided" });
           break;
         }
-        const res = await fetch(msg.url);
+        const headers: Record<string, string> = {};
+        if (msg.token) headers["Authorization"] = `Bearer ${msg.token}`;
+        if (msg.accept) headers["Accept"] = msg.accept;
+        const res = await fetch(msg.url, { headers });
         if (!res.ok) {
           sendResponse({ success: false, error: `HTTP ${res.status}` });
           break;
         }
         const buffer = await res.arrayBuffer();
-        sendResponse({ success: true, data: Array.from(new Uint8Array(buffer)) });
+        sendResponse({
+          success: true,
+          data: Array.from(new Uint8Array(buffer)),
+        });
         break;
       }
 
       default: {
-        sendResponse({ success: false, error: `Unknown message type: ${String(msg.type)}` });
+        sendResponse({
+          success: false,
+          error: `Unknown message type: ${String(msg.type)}`,
+        });
       }
     }
   } catch (e) {

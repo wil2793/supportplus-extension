@@ -19,6 +19,7 @@ export interface ExtensionMessage {
   endpoint?: string;
   body?: unknown;
   token?: string;
+  accept?: string;
   query?: string;
   variables?: Record<string, unknown>;
   url?: string;

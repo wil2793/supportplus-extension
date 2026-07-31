@@ -28,7 +28,7 @@ export interface SpFetchOptions extends RequestInit {
  */
 export async function spFetch<T = unknown>(
   endpoint: string,
-  options: SpFetchOptions = {}
+  options: SpFetchOptions = {},
 ): Promise<T> {
   const url = endpoint.startsWith("http")
     ? endpoint
@@ -70,13 +70,16 @@ export async function spFetch<T = unknown>(
  * Search tickets via the search-all-tickets endpoint.
  */
 export async function spSearchTickets(
-  params: Record<string, string | number>
+  params: Record<string, string | number>,
 ): Promise<unknown[]> {
   const query = Object.entries(params)
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
     .join("&");
   const url = `${SP_CONFIG.SP_SEARCH_API}?${query}`;
-  const json = await spFetch<{ data?: { content?: unknown[] }; content?: unknown[] }>(url);
+  const json = await spFetch<{
+    data?: { content?: unknown[] };
+    content?: unknown[];
+  }>(url);
   return (json.data ?? (json as { content?: unknown[] })).content ?? [];
 }
 
@@ -88,12 +91,16 @@ export async function spSearchTickets(
 export function mondayQuery(
   token: string,
   query: string,
-  variables: Record<string, unknown> = {}
+  variables: Record<string, unknown> = {},
 ): Promise<MondayQueryResponse> {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
       { type: "monday-query", token, query, variables },
-      (resp: { success: boolean; data?: MondayQueryResponse; error?: string } | undefined) => {
+      (
+        resp:
+          | { success: boolean; data?: MondayQueryResponse; error?: string }
+          | undefined,
+      ) => {
         if (chrome.runtime.lastError) {
           return reject(new Error(chrome.runtime.lastError.message));
         }
@@ -101,7 +108,7 @@ export function mondayQuery(
           return reject(new Error(resp?.error ?? "Monday query failed"));
         }
         resolve(resp.data!);
-      }
+      },
     );
   });
 }
@@ -139,14 +146,15 @@ export function clearMondayTokenCache(): void {
  */
 export async function getMondayTicketBoards(
   token: string,
-  workspaceId?: string
+  workspaceId?: string,
 ): Promise<MondayBoard[]> {
   const wsId =
     workspaceId ??
     (await (async () => {
-      const stored = await Storage.get<Record<string, { workspaceId?: string }>>(
-        "groupMondayConfig"
-      );
+      const stored =
+        await Storage.get<Record<string, { workspaceId?: string }>>(
+          "groupMondayConfig",
+        );
       const config = stored ?? {};
       const firstKey = Object.keys(config)[0];
       return firstKey ? (config[firstKey].workspaceId ?? "") : "";
@@ -161,7 +169,7 @@ export async function getMondayTicketBoards(
   const data = await mondayQuery(
     token,
     `{ boards(workspace_ids: [${wsId}], limit: 50) { id name } }`,
-    {}
+    {},
   );
   const boards = (data.boards ?? [])
     .filter((b) => !b.name.includes(SP_CONFIG.MONDAY_SUBITEMS_EXCLUDE))
@@ -203,9 +211,14 @@ export function getMondayUsers(token: string): Promise<MondayUsersMap> {
 export async function getMondayBoardForMonth(
   token: string,
   year: number,
-  month: number // 0-indexed
+  month: number, // 0-indexed
 ): Promise<string | null> {
-  const { MONTH_NAMES, MONDAY_BOARD_ETIQUETA, MONDAY_WORKSPACE_ID, MONDAY_FOLDER_ID } = SP_CONFIG;
+  const {
+    MONTH_NAMES,
+    MONDAY_BOARD_ETIQUETA,
+    MONDAY_WORKSPACE_ID,
+    MONDAY_FOLDER_ID,
+  } = SP_CONFIG;
   if (!MONDAY_BOARD_ETIQUETA || !MONDAY_WORKSPACE_ID) return null;
 
   const cacheKey = `monday-board-${year}-${String(month + 1).padStart(2, "0")}`;
@@ -215,7 +228,7 @@ export async function getMondayBoardForMonth(
   const boardName = `${MONDAY_BOARD_ETIQUETA} - ${MONTH_NAMES[month]} - ${year}`;
   const boards = await getMondayTicketBoards(token, MONDAY_WORKSPACE_ID);
   const board = boards.find(
-    (b) => b.name.trim().toLowerCase() === boardName.trim().toLowerCase()
+    (b) => b.name.trim().toLowerCase() === boardName.trim().toLowerCase(),
   );
 
   if (board) {
@@ -229,7 +242,7 @@ export async function getMondayBoardForMonth(
     const prevYear = month === 0 ? year - 1 : year;
     const prevBoardName = `${MONDAY_BOARD_ETIQUETA} - ${MONTH_NAMES[prevMonth]} - ${prevYear}`;
     const prevBoard = boards.find(
-      (b) => b.name.trim().toLowerCase() === prevBoardName.trim().toLowerCase()
+      (b) => b.name.trim().toLowerCase() === prevBoardName.trim().toLowerCase(),
     );
     if (!prevBoard) return null;
 
@@ -250,14 +263,14 @@ export async function getMondayBoardForMonth(
     const newBoardData = await mondayQuery(
       token,
       `{ boards(ids: [${newBoardId}]) { groups { id } } }`,
-      {}
+      {},
     );
     const groups = newBoardData.boards?.[0]?.groups ?? [];
     for (const g of groups) {
       await mondayQuery(
         token,
         `mutation { delete_group(board_id: ${newBoardId}, group_id: "${g.id}") { id } }`,
-        {}
+        {},
       );
     }
 
@@ -289,17 +302,20 @@ export function triggerSync(): Promise<Record<string, unknown>> {
  * Fetch a URL via the background proxy (avoids CORS restrictions).
  * Returns raw bytes as Uint8Array.
  */
-export function proxyFetch(url: string): Promise<Uint8Array> {
+export function proxyFetch(url: string, spToken?: string): Promise<Uint8Array> {
+  const token = spToken ?? getSpToken() ?? undefined;
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
-      { type: "proxy-fetch", url },
-      (resp: { success: boolean; data?: number[]; error?: string } | undefined) => {
+      { type: "proxy-fetch", url, token, accept: "application/json" },
+      (
+        resp: { success: boolean; data?: number[]; error?: string } | undefined,
+      ) => {
         if (resp?.success && resp.data) {
           resolve(new Uint8Array(resp.data));
         } else {
           reject(new Error(resp?.error ?? "Proxy fetch failed"));
         }
-      }
+      },
     );
   });
 }
