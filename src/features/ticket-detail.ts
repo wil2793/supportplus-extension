@@ -56,14 +56,16 @@ export interface DetailModalContext {
 // ─── Debounce guard ───────────────────────────────────────────
 
 let _lastOpen = 0;
+let _isOpening = false;
 let _commentsInterval: ReturnType<typeof setInterval> | null = null;
 
 export function showQuickDetailModal(
   ticketId: number | string,
   ctx: DetailModalContext,
 ): void {
+  if (_isOpening) return;
   if (Date.now() - _lastOpen < 500) return;
-  if (document.getElementById("sp-quick-detail-modal")) return;
+  _isOpening = true;
   _lastOpen = Date.now();
   if (_commentsInterval) {
     clearInterval(_commentsInterval);
@@ -71,7 +73,9 @@ export function showQuickDetailModal(
   }
   document.getElementById("sp-quick-detail-modal")?.remove();
   document.dispatchEvent(new CustomEvent("sp-refresh-panel"));
-  void _loadAndRender(ticketId, ctx);
+  void _loadAndRender(ticketId, ctx).finally(() => {
+    _isOpening = false;
+  });
 }
 
 // ─── Comment HTML builder (reused by send & auto-refresh) ────

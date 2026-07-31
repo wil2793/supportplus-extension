@@ -277,6 +277,24 @@ document.addEventListener("sp-open-ticket", (e: Event) => {
     showQuickDetailModal(detail.ticketId, _buildDetailCtx());
 });
 
+// Intercept clicks on kanban cards at document capture phase.
+// This fires BEFORE React's listeners. We open our modal and stop
+// the event so React's native ticket-detail modal never appears.
+document.addEventListener(
+  "click",
+  (e: MouseEvent) => {
+    const ticket = (e.target as Element)?.closest<HTMLElement>(
+      "#sp-manager-panel .sp-mgr-ticket, #sp-manager-panel .sp-pending-ticket, #sp-team-panel .sp-team-ticket, #sp-team-panel .sp-pending-ticket",
+    );
+    if (!ticket) return;
+    const ticketId = parseInt(ticket.dataset["ticketId"] ?? "0");
+    if (!ticketId) return;
+    e.stopImmediatePropagation();
+    showQuickDetailModal(ticketId, _buildDetailCtx());
+  },
+  true, // capture phase
+);
+
 // ─── Session initialization ───────────────────────────────────
 void SP_Session.checkSession().then((result: unknown) => {
   if (result === null) {
@@ -358,12 +376,6 @@ function injectFolioButtons(): void {
         btn.addEventListener("click", (e) => {
           e.stopPropagation();
           e.preventDefault();
-          // Don't open if click originated from kanban panel above
-          if (document.getElementById("sp-quick-detail-modal")) return;
-          const inKanban = (e.target as Element)?.closest(
-            "#sp-manager-panel, #sp-team-panel",
-          );
-          if (inKanban) return;
           showQuickDetailModal(ticketId, _buildDetailCtx());
         });
         folioEl.replaceWith(btn);
