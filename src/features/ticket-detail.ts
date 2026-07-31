@@ -795,7 +795,7 @@ async function _loadAndRender(
       : "";
     const closeFormHTML =
       statusName !== "En espera" && statusName !== "Cerrado"
-        ? `<div style="margin-bottom:8px;"><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;"><button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🔒 Cerrar</button>${holderEmail && holderEmail.toLowerCase() !== myEmail.toLowerCase() ? '<button id="sp-qd-steal-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#C62828;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🤚 Tomar</button>' : ""}</div><div id="sp-qd-close-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:0.9rem;"><textarea id="sp-qd-close-comment" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea><div style="display:flex;gap:6px;"><button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">Confirmar</button><button id="sp-qd-close-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:0.9rem;">Cancelar</button></div></div></div>`
+        ? `<div style="margin-bottom:8px;"><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;"><button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🔒 Cerrar</button>${holderEmail && holderEmail.toLowerCase() !== myEmail.toLowerCase() ? '<button id="sp-qd-steal-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#C62828;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🤚 Tomar</button>' : ""}</div><div id="sp-qd-close-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:0.9rem;"><label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label><textarea id="sp-qd-close-comment" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea><div style="display:flex;gap:6px;"><button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">Confirmar</button><button id="sp-qd-close-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:0.9rem;">Cancelar</button></div><div id="sp-qd-close-suggested" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;"></div></div></div>`
         : "";
     const migrateHTML = "";
     const reopenHTML =
@@ -923,6 +923,11 @@ async function _loadAndRender(
     _loadSuggestedComments(
       ctx.getTeamResolutionGroupId(),
       overlay.querySelector<HTMLElement>("#sp-qd-suggested"),
+    );
+    // Also load suggested comments into the close form
+    _loadSuggestedComments(
+      ctx.getTeamResolutionGroupId(),
+      overlay.querySelector<HTMLElement>("#sp-qd-close-suggested"),
     );
   } catch (err) {
     showErrorToast(`Error: ${(err as Error).message}`);
@@ -1224,11 +1229,16 @@ function _wireActionButtons(
   ) as HTMLElement | null;
   if (closeBtn && closeForm) {
     let shown = false;
+    const toggleCommentSection = (hide: boolean) => {
+      const cs = document.getElementById("sp-qd-comment-section");
+      if (cs) cs.style.display = hide ? "none" : "";
+    };
     closeBtn.addEventListener("click", () => {
       shown = !shown;
       closeForm.style.display = shown ? "block" : "none";
       closeBtn.textContent = shown ? "✕ Cancelar" : "🔒 Cerrar";
       closeBtn.style.background = shown ? "#999" : "#616161";
+      toggleCommentSection(shown);
     });
     document
       .getElementById("sp-qd-close-cancel")
@@ -1237,6 +1247,7 @@ function _wireActionButtons(
         closeForm.style.display = "none";
         closeBtn.textContent = "🔒 Cerrar";
         closeBtn.style.background = "#616161";
+        toggleCommentSection(false);
       });
     document
       .getElementById("sp-qd-close-confirm")
@@ -1560,8 +1571,13 @@ function _loadSuggestedComments(
       const { bg, border: borderColor, text } = stringToColor(c.text);
       chip.style.cssText = `padding:3px 8px;font-size:0.8rem;border:1px solid ${borderColor};border-radius:12px;background:${bg};color:${text};cursor:pointer;`;
       chip.addEventListener("click", () => {
+        // Fill close comment if this chip is inside the close form, otherwise fill normal input
+        const isInCloseForm = !!suggestedDiv.closest("#sp-qd-close-form");
+        const inputId = isInCloseForm
+          ? "sp-qd-close-comment"
+          : "sp-qd-comment-input";
         const inp = document.getElementById(
-          "sp-qd-comment-input",
+          inputId,
         ) as HTMLTextAreaElement | null;
         if (inp) inp.value = c.text;
       });
