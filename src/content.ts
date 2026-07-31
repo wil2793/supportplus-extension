@@ -358,6 +358,12 @@ function injectFolioButtons(): void {
         btn.addEventListener("click", (e) => {
           e.stopPropagation();
           e.preventDefault();
+          // Don't open if click originated from kanban panel above
+          if (document.getElementById("sp-quick-detail-modal")) return;
+          const inKanban = (e.target as Element)?.closest(
+            "#sp-manager-panel, #sp-team-panel",
+          );
+          if (inKanban) return;
           showQuickDetailModal(ticketId, _buildDetailCtx());
         });
         folioEl.replaceWith(btn);

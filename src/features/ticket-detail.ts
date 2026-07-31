@@ -63,6 +63,7 @@ export function showQuickDetailModal(
   ctx: DetailModalContext,
 ): void {
   if (Date.now() - _lastOpen < 500) return;
+  if (document.getElementById("sp-quick-detail-modal")) return;
   _lastOpen = Date.now();
   if (_commentsInterval) {
     clearInterval(_commentsInterval);

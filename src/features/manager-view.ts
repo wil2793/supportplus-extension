@@ -557,15 +557,7 @@ function loadManagerPanel(
   const panel = document.createElement("div");
   panel.id = "sp-manager-panel";
   panel.className = "sp-mgr-panel";
-  // Insert BEFORE the grid's grandparent to be completely outside
-  // React's event tree and avoid MUI DataGrid capturing our clicks
-  const gridContainer = grid.parentElement;
-  const gridGrandParent = gridContainer?.parentElement;
-  if (gridGrandParent && gridContainer) {
-    gridGrandParent.insertBefore(panel, gridContainer);
-  } else {
-    grid.parentElement?.insertBefore(panel, grid);
-  }
+  grid.parentElement?.insertBefore(panel, grid);
 
   const singleGroup = groups.length === 1;
   const GROUP_INFO = SP_CONFIG.GROUP_INFO;

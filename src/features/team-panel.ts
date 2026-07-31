@@ -359,13 +359,7 @@ export async function loadTeamPanel(
   panel.id = TEAM_PANEL_ID;
   panel.style.cssText =
     "margin-bottom:12px;overflow-x:auto;font-family:system-ui;";
-  const gridContainer = grid.parentElement;
-  const gridGrandParent = gridContainer?.parentElement;
-  if (gridGrandParent && gridContainer) {
-    gridGrandParent.insertBefore(panel, gridContainer);
-  } else {
-    grid.parentElement?.insertBefore(panel, grid);
-  }
+  grid.parentElement?.insertBefore(panel, grid);
 
   try {
     const areas = getActiveAreas(currentUserGroups);
