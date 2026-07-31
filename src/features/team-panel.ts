@@ -12,14 +12,15 @@ import { spGetHeaders, spHeaders, getTodayRange } from "../lib/sp-fetch";
 import { showErrorToast, showSuccessToast } from "../components";
 import type { UserConfig } from "../types";
 
-
 // ─── Team area registry ───────────────────────────────────────
-
-
 
 export const TEAM_AREAS: Record<
   number,
-  { resolutionGroupId: number; resolutionGroupLabel: string; profiles: JsonObject[] }
+  {
+    resolutionGroupId: number;
+    resolutionGroupLabel: string;
+    profiles: JsonObject[];
+  }
 > = {};
 GROUP_INFO.forEach((g) => {
   TEAM_AREAS[g.id] = {
@@ -34,9 +35,11 @@ export function setCurrentTeamArea(area: string): void {
   currentTeamArea = area;
 }
 
-export function getTeamConfig(
-  currentUserGroups: number[],
-): { resolutionGroupId: number; resolutionGroupLabel: string; profiles: JsonObject[] } {
+export function getTeamConfig(currentUserGroups: number[]): {
+  resolutionGroupId: number;
+  resolutionGroupLabel: string;
+  profiles: JsonObject[];
+} {
   return (
     TEAM_AREAS[parseInt(currentTeamArea)] ??
     TEAM_AREAS[currentUserGroups[0]] ?? {
@@ -47,9 +50,11 @@ export function getTeamConfig(
   );
 }
 
-export function getActiveAreas(
-  currentUserGroups: number[],
-): Array<{ resolutionGroupId: number; resolutionGroupLabel: string; profiles: JsonObject[] }> {
+export function getActiveAreas(currentUserGroups: number[]): Array<{
+  resolutionGroupId: number;
+  resolutionGroupLabel: string;
+  profiles: JsonObject[];
+}> {
   return currentUserGroups.map((gId) => TEAM_AREAS[gId]).filter(Boolean);
 }
 
@@ -59,7 +64,9 @@ const _profilesCache: Record<number, JsonObject[]> = {};
 const _pendingProfileRequests: Record<number, Promise<JsonObject[]>> = {};
 
 export function clearProfilesCache(): void {
-  Object.keys(_profilesCache).forEach((k) => delete _profilesCache[parseInt(k)]);
+  Object.keys(_profilesCache).forEach(
+    (k) => delete _profilesCache[parseInt(k)],
+  );
 }
 
 export function loadProfilesForGroup(
@@ -81,7 +88,8 @@ export function loadProfilesForGroup(
     .then((json: JsonObject) => {
       let profiles: JsonObject[] = json.data || json;
       if (!Array.isArray(profiles)) profiles = [];
-      const blacklist: number[] = (userConfig.blacklist as unknown as number[]) ?? [];
+      const blacklist: number[] =
+        (userConfig.blacklist as unknown as number[]) ?? [];
       const applyBlacklist = (bl: number[]) => {
         if (bl.length > 0)
           profiles = profiles.filter((p) => !bl.includes(p.profileId));
@@ -92,14 +100,23 @@ export function loadProfilesForGroup(
       if (blacklist.length > 0) return applyBlacklist(blacklist);
       return new Promise<JsonObject[]>((resolve) => {
         chrome.storage.local.get("userConfig", (stored: JsonObject) => {
-          resolve(applyBlacklist(
-            ((stored["userConfig"] || {}).blacklist as unknown as number[]) ?? [],
-          ));
+          resolve(
+            applyBlacklist(
+              ((stored["userConfig"] || {}).blacklist as unknown as number[]) ??
+                [],
+            ),
+          );
         });
       });
     })
-    .catch(() => { delete _pendingProfileRequests[groupId]; return []; })
-    .then((r: JsonObject[]) => { delete _pendingProfileRequests[groupId]; return r; });
+    .catch(() => {
+      delete _pendingProfileRequests[groupId];
+      return [];
+    })
+    .then((r: JsonObject[]) => {
+      delete _pendingProfileRequests[groupId];
+      return r;
+    });
 
   _pendingProfileRequests[groupId] = p;
   return p;
@@ -114,7 +131,9 @@ export function loadTeamArea(): Promise<void> {
         void SP_Session.resolveProfileId();
         resolve();
       });
-    } catch { resolve(); }
+    } catch {
+      resolve();
+    }
   });
 }
 
@@ -127,7 +146,9 @@ export const GUARDIAS_PANEL_ID = "sp-guardias-calendar-panel";
 
 export function injectGuardiasCalendar(): void {
   if (document.getElementById(GUARDIAS_PANEL_ID)) return;
-  const panel = document.getElementById("sp-manager-panel") || document.getElementById(TEAM_PANEL_ID);
+  const panel =
+    document.getElementById("sp-manager-panel") ||
+    document.getElementById(TEAM_PANEL_ID);
   if (!panel) return;
 
   const calPanel = document.createElement("div");
@@ -143,7 +164,8 @@ export function injectGuardiasCalendar(): void {
 
   panel.after(calPanel);
 
-  const userName = SP_Session.state.userName || SP_Session.getLoggedUserNameFromDOM() || "";
+  const userName =
+    SP_Session.state.userName || SP_Session.getLoggedUserNameFromDOM() || "";
   const userId = String(SP_Session.state.profileId ?? "");
   SP_Guardias.load(0, { currentUserName: userName, currentUserId: userId });
 }
@@ -181,7 +203,9 @@ export function refreshUnassignedColumn(currentUserGroups: number[]): void {
       .then((r) => r.json())
       .then((json: JsonObject) => {
         const tickets = (json.data ?? json).content ?? [];
-        const col = document.getElementById(`sp-team-col-unassigned-${area.resolutionGroupId}`);
+        const col = document.getElementById(
+          `sp-team-col-unassigned-${area.resolutionGroupId}`,
+        );
         if (!col) return;
         const countEl = col.querySelector(".sp-team-count");
         if (countEl) countEl.textContent = `(${tickets.length})`;
@@ -196,7 +220,9 @@ export function refreshUnassignedColumn(currentUserGroups: number[]): void {
   });
 }
 
-export function renderClosedColumn(tickets: import("../types").SpTicket[]): void {
+export function renderClosedColumn(
+  tickets: import("../types").SpTicket[],
+): void {
   const col = document.getElementById("sp-team-col-closed");
   if (!col) return;
   const countEl = col.querySelector(".sp-team-count");
@@ -234,9 +260,17 @@ export function refreshClosedColumn(currentUserGroups: number[]): void {
       { headers: spGetHeaders() },
     )
       .then((r) => r.json())
-      .then((json: JsonObject) => { allClosed.push(...((json["data"] ?? json as JsonObject)["content"] ?? []) as import("../types").SpTicket[]); })
+      .then((json: JsonObject) => {
+        allClosed.push(
+          ...(((json["data"] ?? (json as JsonObject))["content"] ??
+            []) as import("../types").SpTicket[]),
+        );
+      })
       .catch(() => {})
-      .finally(() => { pending--; if (pending <= 0) renderClosedColumn(allClosed); });
+      .finally(() => {
+        pending--;
+        if (pending <= 0) renderClosedColumn(allClosed);
+      });
   });
 }
 
@@ -255,7 +289,9 @@ export function refreshTeamPanel(currentUserGroups: number[]): void {
   }
 
   const areas = getActiveAreas(currentUserGroups);
-  const allProfiles: JsonObject[] = areas.flatMap((a) => a.profiles as JsonObject[]);
+  const allProfiles: JsonObject[] = areas.flatMap(
+    (a) => a.profiles as JsonObject[],
+  );
   let remaining = allProfiles.length;
 
   allProfiles.forEach((p) => {
@@ -278,7 +314,10 @@ export function refreshTeamPanel(currentUserGroups: number[]): void {
           );
       })
       .catch(() => {})
-      .finally(() => { remaining--; if (remaining <= 0) _teamRefreshing = false; });
+      .finally(() => {
+        remaining--;
+        if (remaining <= 0) _teamRefreshing = false;
+      });
   });
 
   refreshUnassignedColumn(currentUserGroups);
@@ -297,48 +336,67 @@ export async function loadTeamPanel(
 ): Promise<void> {
   if (SP_DOM.isDetailView()) return;
   if (_teamPanelLoading || !currentTeamArea) return;
-  if (document.getElementById("sp-manager-panel") || document.getElementById(TEAM_PANEL_ID)) return;
+  if (
+    document.getElementById("sp-manager-panel") ||
+    document.getElementById(TEAM_PANEL_ID)
+  )
+    return;
 
   _teamPanelLoading = true;
   await new Promise<void>((r) => setTimeout(r, 50));
-  if (document.getElementById(TEAM_PANEL_ID)) { _teamPanelLoading = false; return; }
+  if (document.getElementById(TEAM_PANEL_ID)) {
+    _teamPanelLoading = false;
+    return;
+  }
 
   const grid = document.querySelector(".MuiDataGrid-root");
-  if (!grid || !SP_API_Lib.getSpToken()) { _teamPanelLoading = false; return; }
+  if (!grid || !SP_API_Lib.getSpToken()) {
+    _teamPanelLoading = false;
+    return;
+  }
 
   const panel = document.createElement("div");
   panel.id = TEAM_PANEL_ID;
-  panel.style.cssText = "margin-bottom:12px;overflow-x:auto;font-family:system-ui;";
+  panel.style.cssText =
+    "margin-bottom:12px;overflow-x:auto;font-family:system-ui;";
   grid.parentElement?.insertBefore(panel, grid);
 
   try {
     const areas = getActiveAreas(currentUserGroups);
-    await Promise.all(areas.map((area) =>
-      loadProfilesForGroup(area.resolutionGroupId, userConfig).then((p) => { area.profiles = p; }),
-    ));
+    await Promise.all(
+      areas.map((area) =>
+        loadProfilesForGroup(area.resolutionGroupId, userConfig).then((p) => {
+          area.profiles = p;
+        }),
+      ),
+    );
 
     const myName = SP_Session.getLoggedUserNameFromDOM();
     const container = document.createElement("div");
-    container.style.cssText = "display:flex;gap:8px;flex-wrap:nowrap;min-width:max-content;";
+    container.style.cssText =
+      "display:flex;gap:8px;flex-wrap:nowrap;min-width:max-content;";
     panel.innerHTML = "";
     panel.appendChild(container);
 
     areas.forEach((area, idx) => {
       if (idx > 0) {
         const sep = document.createElement("div");
-        sep.style.cssText = "width:3px;background:#ddd;border-radius:2px;margin:0 4px;align-self:stretch;";
+        sep.style.cssText =
+          "width:3px;background:#ddd;border-radius:2px;margin:0 4px;align-self:stretch;";
         container.appendChild(sep);
       }
       if (areas.length > 1) {
         const label = document.createElement("div");
-        label.style.cssText = "min-width:180px;max-width:220px;display:flex;flex-direction:column;justify-content:center;align-items:center;flex-shrink:0;";
+        label.style.cssText =
+          "min-width:180px;max-width:220px;display:flex;flex-direction:column;justify-content:center;align-items:center;flex-shrink:0;";
         label.innerHTML = `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:11px;font-weight:700;color:#555;letter-spacing:1px;">${idx === 0 ? "🗄️ DBA" : "📦 APPS"}</div>`;
         container.appendChild(label);
       }
 
       const unCol = document.createElement("div");
       unCol.id = `sp-team-col-unassigned-${area.resolutionGroupId}`;
-      unCol.style.cssText = "min-width:180px;max-width:220px;border:2px solid #FF8F00;border-radius:8px;overflow:hidden;flex-shrink:0;";
+      unCol.style.cssText =
+        "min-width:180px;max-width:220px;border:2px solid #FF8F00;border-radius:8px;overflow:hidden;flex-shrink:0;";
       unCol.innerHTML =
         `<div style="background:#FF8F00;color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">⏳ Sin asignar <span class="sp-team-count" style="opacity:0.7;">(...)</span></div>` +
         `<div class="sp-team-tickets" data-profile-id="unassigned" data-area-group="${area.resolutionGroupId}" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>`;
@@ -359,7 +417,8 @@ export async function loadTeamPanel(
     // Closed today + Pending close columns
     const closedCol = document.createElement("div");
     closedCol.id = "sp-team-col-closed";
-    closedCol.style.cssText = "min-width:180px;max-width:220px;border:2px solid #2E7D32;border-radius:8px;overflow:hidden;flex-shrink:0;";
+    closedCol.style.cssText =
+      "min-width:180px;max-width:220px;border:2px solid #2E7D32;border-radius:8px;overflow:hidden;flex-shrink:0;";
     closedCol.innerHTML =
       `<div style="background:#2E7D32;color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">✅ Cerrados hoy <span class="sp-team-count" style="opacity:0.7;">(...)</span></div>` +
       `<div class="sp-team-tickets" data-profile-id="closed" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>`;
@@ -368,7 +427,8 @@ export async function loadTeamPanel(
     // Pending close
     const pendingCol = document.createElement("div");
     pendingCol.id = "sp-team-col-pending-close";
-    pendingCol.style.cssText = "min-width:180px;max-width:220px;border:2px solid #FF8F00;border-radius:8px;overflow:hidden;flex-shrink:0;display:none;";
+    pendingCol.style.cssText =
+      "min-width:180px;max-width:220px;border:2px solid #FF8F00;border-radius:8px;overflow:hidden;flex-shrink:0;display:none;";
     pendingCol.innerHTML =
       `<div style="background:#FF8F00;color:#fff;padding:6px 10px;font-size:11px;font-weight:700;text-align:center;">🕐 Pendientes <span id="sp-pending-close-count" style="opacity:0.7;">(...)</span></div>` +
       `<div id="sp-pending-close-list" style="padding:4px;max-height:200px;overflow-y:auto;background:#fafafa;min-height:30px;"></div>`;
@@ -384,7 +444,9 @@ export async function loadTeamPanel(
       const withinHours = SP_Session.isWithinWorkHours();
       listEl.innerHTML = pts
         .map((pt) => {
-          const cursor = withinHours ? "cursor:pointer;" : "cursor:not-allowed;opacity:0.6;";
+          const cursor = withinHours
+            ? "cursor:pointer;"
+            : "cursor:not-allowed;opacity:0.6;";
           return `<div class="sp-pending-ticket" data-ticket-id="${pt.ticketId}" style="display:block;padding:3px 5px;margin:2px 0;border-radius:4px;background:#fff;border:1px solid #FF8F00;font-size:9px;line-height:1.3;${cursor}"><div style="font-weight:600;color:#E65100;">${pt.ticket}</div>${!withinHours ? '<div style="color:#888;font-size:8px;">🔒 Fuera de horario</div>' : ""}</div>`;
         })
         .join("");
@@ -393,110 +455,184 @@ export async function loadTeamPanel(
           showErrorToast("⏰ Fuera de horario laboral.");
           return;
         }
-        const ticket = (e.target as Element).closest<HTMLElement>(".sp-pending-ticket");
-        if (ticket && openTicketCallback) openTicketCallback(parseInt(ticket.dataset["ticketId"] ?? "0"));
+        const ticket = (e.target as Element).closest<HTMLElement>(
+          ".sp-pending-ticket",
+        );
+        if (ticket && openTicketCallback) {
+          e.stopPropagation();
+          openTicketCallback(parseInt(ticket.dataset["ticketId"] ?? "0"));
+        }
       });
     });
 
     // Click handler
     panel.addEventListener("click", (e: MouseEvent) => {
-      const ticket = (e.target as Element).closest<HTMLElement>(".sp-team-ticket");
-      if (ticket && openTicketCallback) openTicketCallback(parseInt(ticket.dataset["ticketId"] ?? "0"));
+      const ticket = (e.target as Element).closest<HTMLElement>(
+        ".sp-team-ticket",
+      );
+      if (ticket && openTicketCallback) {
+        e.stopPropagation();
+        openTicketCallback(parseInt(ticket.dataset["ticketId"] ?? "0"));
+      }
     });
 
     // Drag & drop (reassign on drop)
     panel.addEventListener("dragstart", (e: DragEvent) => {
-      const ticket = (e.target as Element).closest<HTMLElement>(".sp-team-ticket");
+      const ticket = (e.target as Element).closest<HTMLElement>(
+        ".sp-team-ticket",
+      );
       if (!ticket) return;
       e.dataTransfer?.setData("text/plain", ticket.dataset["ticketId"] ?? "");
       (ticket as HTMLElement).style.opacity = "0.4";
     });
     panel.addEventListener("dragend", (e: DragEvent) => {
-      const ticket = (e.target as Element).closest<HTMLElement>(".sp-team-ticket");
+      const ticket = (e.target as Element).closest<HTMLElement>(
+        ".sp-team-ticket",
+      );
       if (ticket) ticket.style.opacity = "1";
     });
     panel.addEventListener("dragover", (e: DragEvent) => {
       e.preventDefault();
-      (e.target as Element).closest<HTMLElement>("[id^='sp-team-col-']")?.querySelector<HTMLElement>(".sp-team-tickets")?.style.setProperty("background", "#e3f2fd");
+      (e.target as Element)
+        .closest<HTMLElement>("[id^='sp-team-col-']")
+        ?.querySelector<HTMLElement>(".sp-team-tickets")
+        ?.style.setProperty("background", "#e3f2fd");
     });
     panel.addEventListener("dragleave", (e: DragEvent) => {
-      const col = (e.target as Element).closest<HTMLElement>("[id^='sp-team-col-']");
+      const col = (e.target as Element).closest<HTMLElement>(
+        "[id^='sp-team-col-']",
+      );
       if (col && !col.contains(e.relatedTarget as Node))
-        col.querySelector<HTMLElement>(".sp-team-tickets")?.style.setProperty("background", "#fafafa");
+        col
+          .querySelector<HTMLElement>(".sp-team-tickets")
+          ?.style.setProperty("background", "#fafafa");
     });
     panel.addEventListener("drop", async (e: DragEvent) => {
       e.preventDefault();
-      const col = (e.target as Element).closest<HTMLElement>("[id^='sp-team-col-']");
+      const col = (e.target as Element).closest<HTMLElement>(
+        "[id^='sp-team-col-']",
+      );
       if (!col) return;
       const dropZone = col.querySelector<HTMLElement>(".sp-team-tickets");
       if (!dropZone) return;
       dropZone.style.background = "#fafafa";
       const ticketId = e.dataTransfer?.getData("text/plain") ?? "";
       const targetProfileId = dropZone.dataset["profileId"] ?? "";
-      if (!ticketId || !targetProfileId || targetProfileId === "unassigned") return;
+      if (!ticketId || !targetProfileId || targetProfileId === "unassigned")
+        return;
 
       if (targetProfileId === "closed") {
         showLoadingToast("Cerrando ticket...");
         try {
           const res = await fetch(
             `${SP_CONFIG.SP_API}/update-ticket-status-with-optional-comment/${ticketId}`,
-            { method: "PATCH", headers: spHeaders(), body: JSON.stringify({ nextTicketStatusId: SP_CONFIG.SP_STATUSES["CERRADO"], ticketCommentRequest: null }) },
+            {
+              method: "PATCH",
+              headers: spHeaders(),
+              body: JSON.stringify({
+                nextTicketStatusId: SP_CONFIG.SP_STATUSES["CERRADO"],
+                ticketCommentRequest: null,
+              }),
+            },
           );
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          showSuccessToast("Ticket cerrado"); refreshClosedColumn(currentUserGroups);
-        } catch (err) { showErrorToast(`Error: ${(err as Error).message}`); }
+          showSuccessToast("Ticket cerrado");
+          refreshClosedColumn(currentUserGroups);
+        } catch (err) {
+          showErrorToast(`Error: ${(err as Error).message}`);
+        }
         return;
       }
 
-      const sourceEl = panel.querySelector<HTMLElement>(`.sp-team-ticket[data-ticket-id="${ticketId}"]`);
-      if (sourceEl?.closest<HTMLElement>(".sp-team-tickets")?.dataset["profileId"] === targetProfileId) return;
+      const sourceEl = panel.querySelector<HTMLElement>(
+        `.sp-team-ticket[data-ticket-id="${ticketId}"]`,
+      );
+      if (
+        sourceEl?.closest<HTMLElement>(".sp-team-tickets")?.dataset[
+          "profileId"
+        ] === targetProfileId
+      )
+        return;
 
-      const dropAreaGroupId = parseInt(dropZone.dataset["areaGroup"] ?? "0") || getTeamConfig(currentUserGroups).resolutionGroupId;
-      const dropAreaConfig = Object.values(TEAM_AREAS).find((a) => a.resolutionGroupId === dropAreaGroupId) || getTeamConfig(currentUserGroups);
+      const dropAreaGroupId =
+        parseInt(dropZone.dataset["areaGroup"] ?? "0") ||
+        getTeamConfig(currentUserGroups).resolutionGroupId;
+      const dropAreaConfig =
+        Object.values(TEAM_AREAS).find(
+          (a) => a.resolutionGroupId === dropAreaGroupId,
+        ) || getTeamConfig(currentUserGroups);
 
       showLoadingToast("Reasignando...");
       try {
         const res = await fetch(`${SP_CONFIG.SP_API}/reassign/${ticketId}`, {
-          method: "PUT", headers: spHeaders(),
-          body: JSON.stringify({ resolutionGroupId: dropAreaConfig.resolutionGroupId, serviceId: null, responsibleProfileId: parseInt(targetProfileId), resolutionGroup: { label: dropAreaConfig.resolutionGroupLabel, value: dropAreaConfig.resolutionGroupId } }),
+          method: "PUT",
+          headers: spHeaders(),
+          body: JSON.stringify({
+            resolutionGroupId: dropAreaConfig.resolutionGroupId,
+            serviceId: null,
+            responsibleProfileId: parseInt(targetProfileId),
+            resolutionGroup: {
+              label: dropAreaConfig.resolutionGroupLabel,
+              value: dropAreaConfig.resolutionGroupId,
+            },
+          }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        showSuccessToast("Reasignado"); refreshTeamColumn(targetProfileId);
-      } catch (err) { showErrorToast(`Error: ${(err as Error).message}`); }
+        showSuccessToast("Reasignado");
+        refreshTeamColumn(targetProfileId);
+      } catch (err) {
+        showErrorToast(`Error: ${(err as Error).message}`);
+      }
     });
 
     // Fetch tickets
     areas.forEach((area) => {
       area.profiles.forEach((p) => {
-        void fetch(`${SP_CONFIG.SP_SEARCH_API}?responsibleProfileId=${p.profileId}&ticketStatusName=Asignado`, { headers: spGetHeaders() })
+        void fetch(
+          `${SP_CONFIG.SP_SEARCH_API}?responsibleProfileId=${p.profileId}&ticketStatusName=Asignado`,
+          { headers: spGetHeaders() },
+        )
           .then((r) => r.json())
           .then((json: JsonObject) => {
             const tickets = (json.data ?? json).content ?? [];
             const col = document.getElementById(`sp-team-col-${p.profileId}`);
             if (!col) return;
-            col.querySelector(".sp-team-count")!.textContent = `(${tickets.length})`;
+            col.querySelector(".sp-team-count")!.textContent =
+              `(${tickets.length})`;
             const listEl = col.querySelector<HTMLElement>(".sp-team-tickets");
             if (listEl)
               listEl.innerHTML = SP_Templates.ticketList(
                 tickets as unknown as import("../types").SpTicket[],
                 { draggable: canDrag, showStatus: true },
               );
-          }).catch(() => {});
+          })
+          .catch(() => {});
       });
-      void fetch(`${SP_CONFIG.SP_SEARCH_API}?page=0&size=50&resolutionGroupId=${area.resolutionGroupId}&ticketStatusName=En%20espera`, { headers: spGetHeaders() })
+      void fetch(
+        `${SP_CONFIG.SP_SEARCH_API}?page=0&size=50&resolutionGroupId=${area.resolutionGroupId}&ticketStatusName=En%20espera`,
+        { headers: spGetHeaders() },
+      )
         .then((r) => r.json())
         .then((json: JsonObject) => {
           const tickets = (json.data ?? json).content ?? [];
-          const col = document.getElementById(`sp-team-col-unassigned-${area.resolutionGroupId}`);
+          const col = document.getElementById(
+            `sp-team-col-unassigned-${area.resolutionGroupId}`,
+          );
           if (!col) return;
-          col.querySelector(".sp-team-count")!.textContent = `(${tickets.length})`;
+          col.querySelector(".sp-team-count")!.textContent =
+            `(${tickets.length})`;
           const listEl = col.querySelector<HTMLElement>(".sp-team-tickets");
           if (listEl)
             listEl.innerHTML = SP_Templates.ticketList(
               tickets as unknown as import("../types").SpTicket[],
-              { draggable: canDrag, borderColor: "#FF8F00", codeColor: "#E65100" },
+              {
+                draggable: canDrag,
+                borderColor: "#FF8F00",
+                codeColor: "#E65100",
+              },
             );
-        }).catch(() => {});
+        })
+        .catch(() => {});
     });
     refreshClosedColumn(currentUserGroups);
   } catch (err) {
@@ -513,4 +649,3 @@ import { showLoadingToast } from "../components";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type JsonObject = Record<string, any>;
-
