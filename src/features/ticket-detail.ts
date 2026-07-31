@@ -5,8 +5,6 @@
 // ============================================================
 
 import {
-
-
   escHtml as esc,
   stringToColor,
   showLoadingToast,
@@ -25,7 +23,6 @@ import SP_TicketActions from "./ticket-actions";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type JsonObject = Record<string, any>;
-
 
 declare const pdfjsLib: JsonObject;
 
@@ -183,9 +180,7 @@ function buildFileContentHTML(
       });
       if (wb) {
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const html = (
-          window as JsonObject
-        ).XLSX?.utils.sheet_to_html(ws, {
+        const html = (window as JsonObject).XLSX?.utils.sheet_to_html(ws, {
           header: "",
           footer: "",
         });
@@ -231,9 +226,7 @@ async function renderPdfViewer(
   if (!pdfContainer) return;
   let scale = 1.3;
   void (
-    pdfjsLib.getDocument({ data: byteArray }).promise as Promise<
-      JsonObject
-    >
+    pdfjsLib.getDocument({ data: byteArray }).promise as Promise<JsonObject>
   )
     .then((pdf: JsonObject) => {
       const total: number = pdf.numPages;
@@ -348,16 +341,66 @@ function openCarousel(allBtns: HTMLButtonElement[], startIndex: number): void {
       '<div style="color:#fff;font-size:16px;display:flex;align-items:center;gap:12px;"><div style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp-spin 0.8s linear infinite;"></div><span>Cargando...</span></div>';
     renderHeader(fileName, "", false);
     try {
-      const data = await SP_API_Lib.proxyFetch(
-        `https://macropayapi.supportplus.mx/files/${fileId}`,
-      );
-      const blob = new Blob([data]);
+      // Endpoint returns JSON { data: { content: "<base64>" } }
+      const json = await new Promise<JsonObject>((resolve, reject) => {
+        chrome.runtime.sendMessage(
+          {
+            type: "proxy-fetch",
+            url: `https://macropayapi.supportplus.mx/files/${fileId}`,
+            token: SP_API_Lib.getSpToken() ?? undefined,
+            accept: "application/json",
+          },
+          (
+            resp:
+              | { success: boolean; data?: number[]; error?: string }
+              | undefined,
+          ) => {
+            if (!resp?.success || !resp.data) {
+              reject(new Error(resp?.error ?? "Error al cargar archivo"));
+              return;
+            }
+            try {
+              const text = new TextDecoder().decode(new Uint8Array(resp.data));
+              resolve(JSON.parse(text) as JsonObject);
+            } catch {
+              reject(new Error("Respuesta inválida del servidor"));
+            }
+          },
+        );
+      });
+
+      // Decode base64 content → Uint8Array → Blob → ObjectURL
+      const fileData: JsonObject = (json["data"] as JsonObject) ?? json;
+      const base64 = fileData["content"] as string;
+      if (!base64) throw new Error("Sin contenido en la respuesta");
+
+      const byteChars = atob(base64);
+      const byteArray = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++)
+        byteArray[i] = byteChars.charCodeAt(i);
+
+      const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+      const mimeMap: Record<string, string> = {
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        gif: "image/gif",
+        webp: "image/webp",
+        svg: "image/svg+xml",
+        bmp: "image/bmp",
+        pdf: "application/pdf",
+        zip: "application/zip",
+        txt: "text/plain",
+      };
+      const mime = mimeMap[ext] ?? "application/octet-stream";
+      const blob = new Blob([byteArray], { type: mime });
       const url = URL.createObjectURL(blob);
-      const result = buildFileContentHTML(fileName, url, data);
+
+      const result = buildFileContentHTML(fileName, url, byteArray);
       currentTextContent = result.textContent;
       renderHeader(fileName, url, result.isText);
       renderBody(result.html);
-      if (result.isPdf) await renderPdfViewer(fileModal, data);
+      if (result.isPdf) await renderPdfViewer(fileModal, byteArray);
     } catch (err) {
       fileModal.querySelector<HTMLElement>("#sp-carousel-body")!.innerHTML =
         `<div style="background:#fff;padding:24px;border-radius:8px;text-align:center;"><p style="color:#c62828;font-size:14px;">❌ Error: ${esc((err as Error).message)}</p></div>`;
@@ -413,9 +456,8 @@ async function _loadAndRender(
     if (!canReopenTickets || !canCommentClosed) {
       try {
         const perms = await new Promise<JsonObject>((r) =>
-          chrome.storage.local.get(
-            "subgroupPerms",
-            (d: JsonObject) => r(d["subgroupPerms"] || {}),
+          chrome.storage.local.get("subgroupPerms", (d: JsonObject) =>
+            r(d["subgroupPerms"] || {}),
           ),
         );
         if (!canReopenTickets) canReopenTickets = !!perms["canReopenTickets"];
@@ -448,8 +490,7 @@ async function _loadAndRender(
             { boardId: b.id, columnId: "text_mm2c9nhc", value: t.uniqueCode },
           );
           const items: JsonObject[] =
-            (itemData.items_page_by_column_values as JsonObject)
-              ?.items ?? [];
+            (itemData.items_page_by_column_values as JsonObject)?.items ?? [];
           if (items.length) {
             const cv: JsonObject = {
               status: { index: mondayIdx },
@@ -503,8 +544,7 @@ async function _loadAndRender(
     const channel: string = t.attentionChannel?.name ?? "";
     const department: string = t.ticketInfo?.departmentName ?? "";
     const location: string = t.ticketInfo?.location ?? "";
-    const attachments: JsonObject[] =
-      t.ticketAttachments?.attachments ?? [];
+    const attachments: JsonObject[] = t.ticketAttachments?.attachments ?? [];
     const comments: JsonObject[] = t.ticketComments ?? [];
     const participants: JsonObject[] = t.participants ?? [];
     const isUnassigned = statusName === "En espera";
@@ -919,7 +959,9 @@ function _wireActionButtons(
                 const pEmail = (
                   (stored["userEmail"] as string) ?? ""
                 ).toLowerCase();
-                const pUser = (((stored["usersMap"] ?? {}) as Record<string, JsonObject>)[pEmail]) as JsonObject | undefined;
+                const pUser = (
+                  (stored["usersMap"] ?? {}) as Record<string, JsonObject>
+                )[pEmail] as JsonObject | undefined;
                 if (pUser?.idUsuario)
                   await SP_TicketActions.saveTicketPendingClose(
                     t.uniqueCode ?? `T${ticketId}`,
@@ -1301,27 +1343,24 @@ function _loadSuggestedComments(
 ): void {
   const suggestedDiv = targetDiv;
   if (!suggestedDiv) return;
-  chrome.storage.local.get(
-    "suggestedComments",
-    (r: JsonObject) => {
-      const all: JsonObject = r["suggestedComments"] ?? {};
-      const items: JsonObject[] = all[groupId] ?? [];
-      items.forEach((c: JsonObject) => {
-        const chip = document.createElement("button");
-        chip.textContent =
-          String(c.text).substring(0, 40) +
-          (String(c.text).length > 40 ? "..." : "");
-        chip.title = c.text;
-        const { bg, border: borderColor, text } = stringToColor(c.text);
-        chip.style.cssText = `padding:3px 8px;font-size:0.8rem;border:1px solid ${borderColor};border-radius:12px;background:${bg};color:${text};cursor:pointer;`;
-        chip.addEventListener("click", () => {
-          const inp = document.getElementById(
-            "sp-qd-comment-input",
-          ) as HTMLTextAreaElement | null;
-          if (inp) inp.value = c.text;
-        });
-        suggestedDiv.appendChild(chip);
+  chrome.storage.local.get("suggestedComments", (r: JsonObject) => {
+    const all: JsonObject = r["suggestedComments"] ?? {};
+    const items: JsonObject[] = all[groupId] ?? [];
+    items.forEach((c: JsonObject) => {
+      const chip = document.createElement("button");
+      chip.textContent =
+        String(c.text).substring(0, 40) +
+        (String(c.text).length > 40 ? "..." : "");
+      chip.title = c.text;
+      const { bg, border: borderColor, text } = stringToColor(c.text);
+      chip.style.cssText = `padding:3px 8px;font-size:0.8rem;border:1px solid ${borderColor};border-radius:12px;background:${bg};color:${text};cursor:pointer;`;
+      chip.addEventListener("click", () => {
+        const inp = document.getElementById(
+          "sp-qd-comment-input",
+        ) as HTMLTextAreaElement | null;
+        if (inp) inp.value = c.text;
       });
-    },
-  );
+      suggestedDiv.appendChild(chip);
+    });
+  });
 }
