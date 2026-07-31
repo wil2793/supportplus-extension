@@ -271,6 +271,7 @@ const CSS = `
   gap: 6px;
   flex-wrap: nowrap;
   overflow-x: auto;
+  justify-content: center;
 }
 .sp-mgr-summary-row {
   display: flex;
