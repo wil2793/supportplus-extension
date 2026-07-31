@@ -361,6 +361,21 @@ export async function loadTeamPanel(
     "margin-bottom:12px;overflow-x:auto;font-family:system-ui;";
   grid.parentElement?.insertBefore(panel, grid);
 
+  // Capture clicks on ticket cards before React/MUI sees them
+  panel.addEventListener(
+    "click",
+    (e: MouseEvent) => {
+      const ticket = (e.target as Element).closest<HTMLElement>(
+        ".sp-team-ticket, .sp-pending-ticket",
+      );
+      if (ticket) {
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      }
+    },
+    true /* capture */,
+  );
+
   try {
     const areas = getActiveAreas(currentUserGroups);
     await Promise.all(
