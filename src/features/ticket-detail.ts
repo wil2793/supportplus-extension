@@ -16,7 +16,6 @@ import { SP_CONFIG, STATUS_TEXT_COLORS } from "../config";
 import SP_API_Lib from "../lib/api";
 import SP_Log from "../lib/logger";
 import { spHeaders, spGetHeaders, utcToLocal } from "../lib/sp-fetch";
-import { getCache } from "../lib/monday-cache";
 import { mapStatusToMonday } from "../config";
 import SP_Session from "./session";
 import SP_TicketActions from "./ticket-actions";
@@ -574,10 +573,7 @@ async function _loadAndRender(
       statusName !== "En espera" && statusName !== "Cerrado"
         ? `<div style="margin-bottom:8px;"><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;"><button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🔒 Cerrar</button>${holderEmail && holderEmail.toLowerCase() !== myEmail.toLowerCase() ? '<button id="sp-qd-steal-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#C62828;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🤚 Tomar</button>' : ""}</div><div id="sp-qd-close-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:0.9rem;"><textarea id="sp-qd-close-comment" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea><div style="display:flex;gap:6px;"><button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">Confirmar</button><button id="sp-qd-close-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:0.9rem;">Cancelar</button></div></div></div>`
         : "";
-    const migrateHTML =
-      statusName === "Cerrado" && !(t.uniqueCode && getCache()?.[t.uniqueCode])
-        ? `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><button id="sp-qd-migrate-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D94040;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🙂 Migrar a Monday</button></div>`
-        : "";
+    const migrateHTML = "";
     const reopenHTML =
       statusName === "Cerrado" && canReopenTickets
         ? `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><button id="sp-qd-reopen-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#FF8F00;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🔓 Reabrir</button></div>`
@@ -732,7 +728,6 @@ function _wireActionButtons(
       "sp-qd-steal-btn",
       "sp-qd-take-btn",
       "sp-qd-reject-btn",
-      "sp-qd-migrate-btn",
       "sp-qd-reopen-btn",
     ]) {
       const btn = document.getElementById(id) as HTMLButtonElement | null;
@@ -798,20 +793,6 @@ function _wireActionButtons(
     ?.addEventListener("click", () =>
       ctx.showReopenModalFn(ticketId, holderName),
     );
-
-  // Migrate
-  document
-    .getElementById("sp-qd-migrate-btn")
-    ?.addEventListener("click", async () => {
-      const btn = document.getElementById(
-        "sp-qd-migrate-btn",
-      ) as HTMLButtonElement;
-      btn.disabled = true;
-      btn.innerHTML = spinnerHTML(12, "Migrando...");
-      await ctx.handleMondayClick(ticketId);
-      btn.textContent = "🙂 Migrar a Monday";
-      btn.disabled = false;
-    });
 
   // Reject
   document
