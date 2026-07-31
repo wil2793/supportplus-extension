@@ -212,12 +212,14 @@ function renderGroupDetail(
     const ticket = (e.target as Element).closest<HTMLElement>(".sp-mgr-ticket");
     if (!ticket) return;
     const ticketId = ticket.dataset["ticketId"];
-    if (ticketId)
+    if (ticketId) {
+      e.stopPropagation();
       document.dispatchEvent(
         new CustomEvent("sp-open-ticket", {
           detail: { ticketId: parseInt(ticketId) },
         }),
       );
+    }
   });
 
   // Drag and drop
@@ -408,12 +410,14 @@ function renderGroupDetail(
     const ticket = (e.target as Element).closest<HTMLElement>(".sp-mgr-ticket");
     if (!ticket) return;
     const tId = ticket.dataset["ticketId"];
-    if (tId)
+    if (tId) {
+      e.stopPropagation();
       document.dispatchEvent(
         new CustomEvent("sp-open-ticket", {
           detail: { ticketId: parseInt(tId) },
         }),
       );
+    }
   });
 
   // Pending close column
@@ -451,12 +455,14 @@ function renderGroupDetail(
       );
       if (!ticket) return;
       const tId = ticket.dataset["ticketId"];
-      if (tId)
+      if (tId) {
+        e.stopPropagation();
         document.dispatchEvent(
           new CustomEvent("sp-open-ticket", {
             detail: { ticketId: parseInt(tId) },
           }),
         );
+      }
     });
   });
 
