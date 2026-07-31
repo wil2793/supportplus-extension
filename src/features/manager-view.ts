@@ -214,6 +214,8 @@ function renderGroupDetail(
     const ticketId = ticket.dataset["ticketId"];
     if (ticketId) {
       e.stopPropagation();
+      e.stopImmediatePropagation();
+      e.preventDefault();
       document.dispatchEvent(
         new CustomEvent("sp-open-ticket", {
           detail: { ticketId: parseInt(ticketId) },
@@ -556,6 +558,23 @@ function loadManagerPanel(
   panel.id = "sp-manager-panel";
   panel.className = "sp-mgr-panel";
   grid.parentElement?.insertBefore(panel, grid);
+
+  // Intercept ALL clicks inside the panel during capture phase
+  // (before React's document-level handler fires) so MuiDataGrid
+  // never sees clicks on our ticket cards.
+  panel.addEventListener(
+    "click",
+    (e: MouseEvent) => {
+      const ticket = (e.target as Element).closest<HTMLElement>(
+        ".sp-mgr-ticket, .sp-pending-ticket",
+      );
+      if (ticket) {
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      }
+    },
+    true /* capture */,
+  );
 
   const singleGroup = groups.length === 1;
   const GROUP_INFO = SP_CONFIG.GROUP_INFO;
