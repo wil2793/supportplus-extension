@@ -1353,7 +1353,7 @@ function _wireCommentSection(
     "sp-qd-comment-input",
   ) as HTMLTextAreaElement | null;
   commentInput?.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key === "Enter") commentSend.click();
+    if (e.key === "Enter" && !e.shiftKey) commentSend.click();
   });
   commentInput?.addEventListener("paste", (e: ClipboardEvent) => {
     // Clipboard paste — originalEvent is a non-standard browser extension
