@@ -98,6 +98,7 @@ export interface UserData {
   canAddProduct?: boolean;
   canAdelantar?: boolean;
   canGuardias?: boolean;
+  canAddUserToGroup?: boolean;
 }
 
 export interface UsersMap {
@@ -283,6 +284,7 @@ export interface SessionState {
   canAddProduct: boolean;
   canAdelantar: boolean;
   canGuardias: boolean;
+  canAddUserToGroup: boolean;
 
   // Config
   userConfig: UserConfig;

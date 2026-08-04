@@ -796,7 +796,7 @@ async function _loadAndRender(
 
     // ─── Action area HTML fragments ────────────────────────
     const takeFormHTML = isUnassigned
-      ? `<div style="margin-bottom:8px;"><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;"><button id="sp-qd-take-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🤚 Tomar</button>${ctx.canRejectTickets ? '<button id="sp-qd-reject-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D32F2F;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">❌ Rechazar</button>' : ""}<select id="sp-qd-assign-select" style="flex:1;padding:6px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:6px;"><option value="">-- Asignar a --</option></select></div><div id="sp-qd-take-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:0.9rem;"><label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario al tomar</label><textarea id="sp-qd-take-comment" style="width:100%;padding:5px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;">se revisa</textarea><label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:0.9rem;"><input type="checkbox" id="sp-qd-take-done"> <b>Ticket realizado</b></label><div id="sp-qd-take-extra" style="display:none;margin-top:6px;"><textarea id="sp-qd-take-close-comment" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea></div><div style="display:flex;gap:6px;margin-top:8px;"><button id="sp-qd-take-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">Confirmar</button><button id="sp-qd-take-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:0.9rem;">Cancelar</button></div></div></div>`
+      ? `<div style="margin-bottom:8px;"><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;"><button id="sp-qd-take-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🤚 Tomar</button>${ctx.canRejectTickets ? '<button id="sp-qd-reject-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D32F2F;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">❌ Rechazar</button>' : ""}<select id="sp-qd-assign-select" style="flex:1;padding:6px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:6px;"><option value="">-- Asignar a --</option></select></div><div id="sp-qd-take-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:0.9rem;"><label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario al tomar</label><div id="sp-qd-take-cb"></div><label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-top:6px;font-size:0.9rem;"><input type="checkbox" id="sp-qd-take-done"> <b>Ticket realizado</b></label><div id="sp-qd-take-extra" style="display:none;margin-top:6px;"><label style="display:block;margin-bottom:4px;font-weight:600;color:#555;font-size:0.9rem;">Comentario de cierre (opcional)</label><div id="sp-qd-close-cb"></div></div><div style="display:flex;gap:6px;margin-top:8px;"><button id="sp-qd-take-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">Confirmar</button><button id="sp-qd-take-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:0.9rem;">Cancelar</button></div></div></div>`
       : "";
     const closeFormHTML =
       statusName !== "En espera" && statusName !== "Cerrado"
@@ -1092,6 +1092,8 @@ function _wireActionButtons(
       .catch(() => {});
 
     let shown = false;
+    let takeCb: CommentBoxResult | null = null;
+    let closeCb: CommentBoxResult | null = null;
     takeBtn.addEventListener("click", () => {
       shown = !shown;
       takeForm.style.display = shown ? "block" : "none";
@@ -1100,6 +1102,33 @@ function _wireActionButtons(
       if (cs) cs.style.display = shown ? "none" : "";
       takeBtn.textContent = shown ? "✕ Cancelar" : "🤚 Tomar";
       takeBtn.style.background = shown ? "#999" : "#1976D2";
+
+      // Inject comment box components once
+      if (shown && !takeForm.dataset["cbInjected"]) {
+        takeForm.dataset["cbInjected"] = "1";
+        const cbGroupId =
+          t.resolutionGroup?.id || ctx.getTeamResolutionGroupId();
+
+        const takeCbEl = document.getElementById("sp-qd-take-cb");
+        if (takeCbEl) {
+          takeCb = createCommentBox({
+            placeholder: "Se revisa",
+            groupId: cbGroupId,
+            minHeight: "40px",
+          });
+          takeCbEl.appendChild(takeCb.element);
+        }
+
+        const closeCbEl = document.getElementById("sp-qd-close-cb");
+        if (closeCbEl) {
+          closeCb = createCommentBox({
+            placeholder: "Comentario de cierre...",
+            groupId: cbGroupId,
+            minHeight: "40px",
+          });
+          closeCbEl.appendChild(closeCb.element);
+        }
+      }
     });
     const doneChk = document.getElementById(
       "sp-qd-take-done",
@@ -1109,6 +1138,7 @@ function _wireActionButtons(
     ) as HTMLElement | null;
     doneChk?.addEventListener("change", () => {
       if (extraDiv) extraDiv.style.display = doneChk.checked ? "block" : "none";
+      if (doneChk.checked) setTimeout(() => closeCb?.focus(), 50);
     });
     document
       .getElementById("sp-qd-take-cancel")
@@ -1124,16 +1154,9 @@ function _wireActionButtons(
     document
       .getElementById("sp-qd-take-confirm")
       ?.addEventListener("click", async () => {
-        const comment =
-          (
-            document.getElementById("sp-qd-take-comment") as HTMLTextAreaElement
-          ).value.trim() || "se revisa";
+        const comment = takeCb?.getValue() || "Se revisa";
         const closeComment = doneChk?.checked
-          ? (
-              document.getElementById(
-                "sp-qd-take-close-comment",
-              ) as HTMLTextAreaElement
-            )?.value.trim()
+          ? (closeCb?.getValue() ?? "")
           : "";
         const profileId = await ctx.getMyProfileId();
         if (!profileId) {
@@ -1298,6 +1321,178 @@ function _wireActionButtons(
         }
       });
   }
+}
+
+// ─── Comment Box Component ────────────────────────────────────
+// Self-contained textarea with paste-image, suggested comments and file attach.
+// Returns the root element and a getValue/getFiles/getPastedFile API.
+interface CommentBoxResult {
+  element: HTMLElement;
+  getValue: () => string;
+  getPastedFile: () => File | null;
+  getPendingFiles: () => File[];
+  focus: () => void;
+}
+
+function createCommentBox(opts: {
+  placeholder?: string;
+  groupId: number;
+  minHeight?: string;
+  showAttach?: boolean;
+  onEnterSend?: () => void;
+}): CommentBoxResult {
+  const uid = Math.random().toString(36).slice(2, 7);
+  const taId = `sp-cb-ta-${uid}`;
+  const prevId = `sp-cb-prev-${uid}`;
+  const sugId = `sp-cb-sug-${uid}`;
+  const listId = `sp-cb-list-${uid}`;
+  const attachId = `sp-cb-attach-${uid}`;
+
+  // Build DOM
+  const root = document.createElement("div");
+  root.style.cssText = "display:flex;flex-direction:column;gap:4px;";
+
+  const textarea = document.createElement("textarea");
+  textarea.id = taId;
+  textarea.placeholder = opts.placeholder ?? "Escribe un comentario...";
+  textarea.style.cssText = `width:100%;padding:6px 10px;font-size:12px;border:1px solid #ddd;border-radius:6px;outline:none;min-height:${opts.minHeight ?? "36px"};resize:vertical;font-family:system-ui;box-sizing:border-box;`;
+
+  const pastePreview = document.createElement("div");
+  pastePreview.id = prevId;
+
+  const attachListEl = document.createElement("div");
+  attachListEl.id = listId;
+  attachListEl.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;";
+
+  const sugDiv = document.createElement("div");
+  sugDiv.id = sugId;
+  sugDiv.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;";
+
+  if (opts.showAttach) {
+    const attachRow = document.createElement("div");
+    attachRow.style.cssText = "display:flex;align-items:center;gap:6px;";
+    const attachLabel = document.createElement("label");
+    attachLabel.style.cssText =
+      "padding:6px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:14px;";
+    attachLabel.title = "Adjuntar archivos";
+    attachLabel.textContent = "📎";
+    const attachInputEl = document.createElement("input");
+    attachInputEl.id = attachId;
+    attachInputEl.type = "file";
+    attachInputEl.multiple = true;
+    attachInputEl.style.display = "none";
+    attachLabel.appendChild(attachInputEl);
+    attachRow.appendChild(textarea);
+    attachRow.appendChild(attachLabel);
+    root.appendChild(attachRow);
+  } else {
+    root.appendChild(textarea);
+  }
+
+  root.appendChild(pastePreview);
+  root.appendChild(attachListEl);
+  root.appendChild(sugDiv);
+
+  // State
+  let pastedFile: File | null = null;
+  let pastedUrl: string | null = null;
+  let pendingFiles: File[] = [];
+
+  // Attach handler
+  const attachInputEl = root.querySelector<HTMLInputElement>(`#${attachId}`);
+  if (attachInputEl) {
+    const renderPending = () => {
+      attachListEl.innerHTML = "";
+      pendingFiles.forEach((f, i) => {
+        const chip = document.createElement("span");
+        chip.style.cssText =
+          "display:inline-flex;align-items:center;gap:3px;padding:2px 6px;background:#e3f2fd;border:1px solid #1976D2;border-radius:4px;font-size:10px;color:#1976D2;";
+        chip.innerHTML = `📎 ${esc(f.name)} <span data-idx="${i}" style="cursor:pointer;color:#D94040;font-weight:700;margin-left:2px;">✕</span>`;
+        chip
+          .querySelector<HTMLElement>("[data-idx]")
+          ?.addEventListener("click", () => {
+            pendingFiles.splice(i, 1);
+            renderPending();
+          });
+        attachListEl.appendChild(chip);
+      });
+    };
+    attachInputEl.addEventListener("change", () => {
+      if (attachInputEl.files)
+        for (let i = 0; i < attachInputEl.files.length; i++)
+          pendingFiles.push(attachInputEl.files[i]);
+      attachInputEl.value = "";
+      renderPending();
+    });
+  }
+
+  // Paste image handler
+  textarea.addEventListener("paste", (e: ClipboardEvent) => {
+    const items = (
+      e.clipboardData ||
+      (e as ClipboardEvent & { originalEvent?: ClipboardEvent }).originalEvent
+        ?.clipboardData
+    )?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        const file = items[i].getAsFile();
+        if (!file) continue;
+        e.preventDefault();
+        pastedFile = file;
+        pastePreview.innerHTML = "";
+        if (pastedUrl) URL.revokeObjectURL(pastedUrl);
+        pastedUrl = URL.createObjectURL(file);
+        const prev = document.createElement("div");
+        prev.style.cssText =
+          "margin:8px 0;padding:8px;border:1px solid #1976D2;border-radius:8px;background:#e3f2fd;display:flex;align-items:center;gap:8px;";
+        prev.innerHTML = `<img src="${pastedUrl}" style="max-width:80px;max-height:60px;border-radius:4px;border:1px solid #ddd;"><span style="flex:1;font-size:0.85rem;color:#333;">📋 Imagen del portapapeles</span><button style="padding:6px 8px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:0.8rem;">✕</button>`;
+        prev.querySelector("button")?.addEventListener("click", () => {
+          pastePreview.innerHTML = "";
+          if (pastedUrl) URL.revokeObjectURL(pastedUrl);
+          pastedFile = null;
+          pastedUrl = null;
+        });
+        pastePreview.appendChild(prev);
+        break;
+      }
+    }
+  });
+
+  // Enter to send
+  if (opts.onEnterSend) {
+    textarea.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) opts.onEnterSend!();
+    });
+  }
+
+  // Suggested comments
+  chrome.storage.local.get("suggestedComments", (r) => {
+    const all = ((r as Record<string, unknown>)["suggestedComments"] ??
+      {}) as Record<string, Array<{ text: string }>>;
+    const items = all[String(opts.groupId)] ?? [];
+    items.forEach((c) => {
+      const chip = document.createElement("button");
+      chip.textContent =
+        c.text.substring(0, 40) + (c.text.length > 40 ? "..." : "");
+      chip.title = c.text;
+      const { bg, border: borderColor, text } = stringToColor(c.text);
+      chip.style.cssText = `padding:3px 8px;font-size:0.8rem;border:1px solid ${borderColor};border-radius:12px;background:${bg};color:${text};cursor:pointer;`;
+      chip.addEventListener("click", () => {
+        textarea.value = c.text;
+        textarea.focus();
+      });
+      sugDiv.appendChild(chip);
+    });
+  });
+
+  return {
+    element: root,
+    getValue: () => textarea.value.trim(),
+    getPastedFile: () => pastedFile,
+    getPendingFiles: () => pendingFiles,
+    focus: () => textarea.focus(),
+  };
 }
 
 function _wireCommentSection(

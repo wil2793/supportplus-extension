@@ -30,6 +30,7 @@ export const state: SessionState = {
   canAddProduct: false,
   canAdelantar: false,
   canGuardias: false,
+  canAddUserToGroup: false,
 
   userConfig: {} as UserConfig,
   workSchedule: {
@@ -227,8 +228,57 @@ export async function checkSession(): Promise<void> {
     state.canAddProduct = !!userData["canAddProduct"];
     state.canAdelantar = !!userData["canAdelantar"];
     state.canGuardias = !!userData["canGuardias"];
+    state.canAddUserToGroup = !!userData["canAddUserToGroup"];
 
-    if (stored.userConfig) state.userConfig = stored.userConfig;
+    // ─── Load permissions from /api/usuarios/:id/roles (source of truth) ─
+    // ─── Load permissions by email → DB userId → roles ─────────
+    // Resolves our DB userId via email, then fetches roles. Once per page load.
+    if (email) {
+      try {
+        await Promise.race([
+          new Promise<void>((resolve) => {
+            chrome.runtime.sendMessage(
+              { type: 'api-get', endpoint: `/usuarios/correo/${encodeURIComponent(email)}` },
+              (userResp) => {
+                const dbUserId =
+                  userResp?.success && userResp?.data?.data?.IdUsuario
+                    ? userResp.data.data.IdUsuario
+                    : state.profileId;
+                chrome.runtime.sendMessage(
+                  { type: 'api-get', endpoint: `/usuarios/${dbUserId}/roles` },
+                  (resp) => {
+                    if (resp?.success && Array.isArray(resp?.data?.data)) {
+                      const roleNames: string[] = resp.data.data.map(
+                        (r: { Nombre: string }) => r.Nombre.toLowerCase(),
+                      );
+                      const has = (s: string) => roleNames.some((r) => r.includes(s));
+                      state.canAddUserToGroup = has('agregar usuario grupo');
+                      state.canAdelantar      = has('adelantar producto');
+                      state.canGuardias       = has('guardias');
+                      state.canAddParticipant = has('agregar participante');
+                      state.canAddProduct     = has('agregar producto');
+                      state.canShowLabels     = has('etiqueta');
+                      state.canReopenTickets  = has('reabrir');
+                      state.canCommentClosed  = has('comentar con ticket cerrado');
+                      state.canRejectTickets  = has('rechazar');
+                      state.btnReassignApp    = has('migrar aplicaciones');
+                      state.btnAddIAM         = has('iam');
+                      state.btnDashboard      = has('dashboard');
+                      state.btnComments       = has('comentarios sugeridos');
+                      state.btnReports        = has('reporte excel');
+                    }
+                    resolve();
+                  },
+                );
+              },
+            );
+          }),
+          new Promise<void>((resolve) => setTimeout(resolve, 8000)),
+        ]);
+      } catch { /* non-critical — keep sync permissions */ }
+    }
+
+        if (stored.userConfig) state.userConfig = stored.userConfig;
 
     await Storage.setMultiple({
       userEmail: email,

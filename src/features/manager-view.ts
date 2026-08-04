@@ -613,11 +613,21 @@ function loadManagerPanel(
     panel.appendChild(collapseTagFilter.element);
   }
 
+  // ─── Agregar usuario a grupo (rol canAddUserToGroup) ─────
+  if (sessionState.canAddUserToGroup) {
+    const addUserGroupBtn = document.createElement("button");
+    addUserGroupBtn.id = "sp-add-user-group-btn";
+    addUserGroupBtn.textContent = "👥 Agregar usuario a grupo";
+    addUserGroupBtn.style.cssText =
+      "margin-bottom:10px;padding:6px 14px;border:1px solid #1976D2;border-radius:6px;background:transparent;color:#1976D2;cursor:pointer;font-size:12px;font-weight:600;";
+    addUserGroupBtn.addEventListener("click", () => showAddUserToGroupModal());
+    panel.insertBefore(addUserGroupBtn, panel.firstChild);
+  }
+
   groupsInfo.forEach((dept) => {
     const section = document.createElement("div");
     section.id = `sp-mgr-section-${dept.id}`;
     section.className = "sp-section";
-
     const header = document.createElement("div");
     header.className = "sp-section-header";
     header.innerHTML = `<span>📂 ${escHtml(dept.name)}</span><span class="sp-mgr-toggle" style="font-size:14px;">${singleGroup ? "▼" : "▶"}</span>`;
@@ -1084,6 +1094,101 @@ export function showAddUserModal(): void {
         productsEl.innerHTML =
           '<div style="opacity:.5;font-size:11px;">Selecciona un usuario primero</div>';
     },
+  });
+}
+
+// ─── Add User to Group Modal ──────────────────────────────────
+
+function showAddUserToGroupModal(): void {
+  // Load groups and users in parallel
+  Promise.all([
+    new Promise<Array<{ id: number; name: string }>>((resolve) => {
+      chrome.runtime.sendMessage(
+        { type: "api-get", endpoint: "/grupos" },
+        (resp) => {
+          const data = resp?.success && resp?.data?.data ? resp.data.data : [];
+          resolve(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            data.map((g: any) => ({ id: g.IdcatGrupo, name: g.Nombre })),
+          );
+        },
+      );
+    }),
+    new Promise<Array<{ id: number; name: string; correo: string }>>(
+      (resolve) => {
+        chrome.runtime.sendMessage(
+          { type: "api-get", endpoint: "/usuarios" },
+          (resp) => {
+            const data =
+              resp?.success && resp?.data?.data ? resp.data.data : [];
+            resolve(
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              data.map((u: any) => ({
+                id: u.IdUsuario,
+                name: u.Nombre,
+                correo: u.Correo,
+              })),
+            );
+          },
+        );
+      },
+    ),
+  ]).then(([groups, users]) => {
+    const groupOpts = groups
+      .map((g) => `<option value="${g.id}">${escHtml(g.name)}</option>`)
+      .join("");
+    const userOpts = users
+      .map(
+        (u) =>
+          `<option value="${u.id}">${escHtml(u.name)} (${escHtml(u.correo)})</option>`,
+      )
+      .join("");
+
+    formModal({
+      id: "sp-add-user-group-modal",
+      title: "👥 Agregar usuario a grupo",
+      content:
+        '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Grupo</label>' +
+        `<select id="sp-aug-group" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:12px;box-sizing:border-box;">` +
+        `<option value="">-- Selecciona un grupo --</option>${groupOpts}</select>` +
+        '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Usuario</label>' +
+        `<select id="sp-aug-user" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:4px;box-sizing:border-box;">` +
+        `<option value="">-- Selecciona un usuario --</option>${userOpts}</select>`,
+      submitText: "Guardar",
+      submitColor: "#1976D2",
+      maxWidth: "400px",
+      onSubmit: (api) => {
+        const groupId = (
+          document.getElementById("sp-aug-group") as HTMLSelectElement
+        )?.value;
+        const userId = (
+          document.getElementById("sp-aug-user") as HTMLSelectElement
+        )?.value;
+        if (!groupId || !userId) {
+          showErrorToast("Selecciona un grupo y un usuario");
+          return;
+        }
+        api.setLoading("Guardando...");
+        chrome.runtime.sendMessage(
+          {
+            type: "api-post",
+            endpoint: `/grupos/${groupId}/usuarios`,
+            body: { fkIdUsuario: parseInt(userId) },
+          },
+          (resp) => {
+            api.close();
+            if (resp?.success) {
+              showSuccessToast("✅ Usuario agregado al grupo");
+            } else {
+              showErrorToast(
+                "Error: " +
+                  (resp?.data?.message || resp?.error || "intenta de nuevo"),
+              );
+            }
+          },
+        );
+      },
+    });
   });
 }
 
