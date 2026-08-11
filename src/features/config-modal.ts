@@ -4,7 +4,7 @@
 
 import { GROUP_INFO } from "../config";
 import SP_Modal from "../lib/modal-builder";
-import { showSuccessToast } from "../components";
+import { showSuccessToast } from "../react/store/toastBridge";
 import type { UserConfig } from "../types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

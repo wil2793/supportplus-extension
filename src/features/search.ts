@@ -4,7 +4,8 @@
 
 import { SP_CONFIG } from "../config";
 import SP_Modal from "../lib/modal-builder";
-import { createHeaderButton, showErrorToast } from "../components";
+import { createHeaderButton } from "../components";
+import { showErrorToast } from "../react/store/toastBridge";
 import { spGetHeaders } from "../lib/sp-fetch";
 import { renderTicketCards } from "./ticket-summary";
 import { getCache, createSyncedBadge } from "../lib/monday-cache";
@@ -12,10 +13,6 @@ import type { TicketRow } from "./ticket-summary";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type JsonObject = Record<string, any>;
-
-
-
-
 
 export const SEARCH_BTN_ID = "sp-search-btn";
 const QUICK_SEARCH_ID = "sp-quick-search";
@@ -100,7 +97,10 @@ export function injectQuickSearch(
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as JsonObject;
-      const tickets = ((json["data"] ?? json) as JsonObject)["content"] as import("../types").SpTicket[] ?? [];
+      const tickets =
+        (((json["data"] ?? json) as JsonObject)[
+          "content"
+        ] as import("../types").SpTicket[]) ?? [];
       if (tickets.length > 0) openTicketCallback(tickets[0].id as number);
       else showErrorToast(`Ticket no encontrado: ${val}`);
     } catch (err) {

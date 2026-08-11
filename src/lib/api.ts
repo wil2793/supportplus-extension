@@ -238,10 +238,22 @@ export async function getMondayBoardForMonth(
 
   // Board doesn't exist — auto-create by duplicating previous month's board
   try {
+    // Invalidar cache y buscar de nuevo en Monday antes de crear.
+    // Otro usuario pudo haberlo creado entre la primera búsqueda y ahora.
+    Cache.remove(`monday-boards-${MONDAY_WORKSPACE_ID}`);
+    const freshBoards = await getMondayTicketBoards(token, MONDAY_WORKSPACE_ID);
+    const alreadyExists = freshBoards.find(
+      (b) => b.name.trim().toLowerCase() === boardName.trim().toLowerCase(),
+    );
+    if (alreadyExists) {
+      Cache.set(cacheKey, alreadyExists.id, 10 * 60 * 1000);
+      return alreadyExists.id;
+    }
+
     const prevMonth = month === 0 ? 11 : month - 1;
     const prevYear = month === 0 ? year - 1 : year;
     const prevBoardName = `${MONDAY_BOARD_ETIQUETA} - ${MONTH_NAMES[prevMonth]} - ${prevYear}`;
-    const prevBoard = boards.find(
+    const prevBoard = freshBoards.find(
       (b) => b.name.trim().toLowerCase() === prevBoardName.trim().toLowerCase(),
     );
     if (!prevBoard) return null;

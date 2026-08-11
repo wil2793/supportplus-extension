@@ -9,7 +9,7 @@ import SP_Session from "./session";
 import SP_Guardias from "./guardias";
 import SP_TicketActions from "./ticket-actions";
 import { spGetHeaders, spHeaders, getTodayRange } from "../lib/sp-fetch";
-import { showErrorToast, showSuccessToast } from "../components";
+import { showErrorToast, showSuccessToast } from "../react/store/toastBridge";
 import type { UserConfig } from "../types";
 
 // ─── Team area registry ───────────────────────────────────────
@@ -645,7 +645,7 @@ export async function loadTeamPanel(
 // Need SP_DOM import late to avoid circular
 import SP_DOM from "../lib/dom-utils";
 import SP_API_Lib from "../lib/api";
-import { showLoadingToast } from "../components";
+import { showLoadingToast } from "../react/store/toastBridge";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type JsonObject = Record<string, any>;

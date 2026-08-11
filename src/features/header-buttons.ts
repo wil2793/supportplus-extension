@@ -94,47 +94,160 @@ export function startHeaderObserver(): void {
 
 const _currentVersion = chrome.runtime.getManifest().version;
 
+/**
+ * Consulta la versión más reciente vía el service worker (message router).
+ * El service worker tiene el token y maneja la autenticación.
+ * No depende de chrome.storage ni del ciclo de sync — siempre fresco.
+ * Fallback a storage cacheado si el backend no responde.
+ */
 export function checkVersion(): void {
-  void Storage.getMultiple<{ latestVersion: string; latestZipUrl: string }>([
-    "latestVersion",
-    "latestZipUrl",
-  ]).then((r) => {
-    const latest = r.latestVersion ?? "";
-    const zipUrl = r.latestZipUrl ?? "";
+  chrome.runtime.sendMessage(
+    { type: "api-get", endpoint: "/versiones/latest" },
+    (
+      resp:
+        | {
+            success: boolean;
+            data?: { Version?: string; ArchivoZipUrl?: string };
+          }
+        | undefined,
+    ) => {
+      if (resp?.success && resp.data?.Version) {
+        const latest = resp.data.Version;
+        const zipUrl = resp.data.ArchivoZipUrl ?? "";
+        // Actualizar cache
+        void chrome.storage.local.set({
+          latestVersion: latest,
+          latestZipUrl: zipUrl,
+        });
+        _applyVersionCheck(latest, zipUrl);
+      } else {
+        // Fallback al storage cacheado
+        void Storage.getMultiple<{
+          latestVersion: string;
+          latestZipUrl: string;
+        }>(["latestVersion", "latestZipUrl"]).then((r) =>
+          _applyVersionCheck(r.latestVersion ?? "", r.latestZipUrl ?? ""),
+        );
+      }
+    },
+  );
+}
 
-    if (!latest || latest === _currentVersion) {
-      const btn = document.getElementById("sp-update-btn");
-      if (btn) btn.style.display = "none";
-      return;
-    }
+function _applyVersionCheck(latest: string, zipUrl: string): void {
+  if (!latest || latest === _currentVersion) {
+    const btn = document.getElementById("sp-update-btn");
+    if (btn) btn.style.display = "none";
+    return;
+  }
 
-    const cur = _currentVersion.split(".").map(Number);
-    const lat = latest.split(".").map(Number);
+  const cur = _currentVersion.split(".").map(Number);
+  const lat = latest.split(".").map(Number);
 
-    // Compare semver: [major, minor, patch]
-    const isNewer =
-      (lat[0] ?? 0) > (cur[0] ?? 0) ||
-      ((lat[0] ?? 0) === (cur[0] ?? 0) && (lat[1] ?? 0) > (cur[1] ?? 0)) ||
-      ((lat[0] ?? 0) === (cur[0] ?? 0) &&
-        (lat[1] ?? 0) === (cur[1] ?? 0) &&
-        (lat[2] ?? 0) > (cur[2] ?? 0));
+  // Comparación semver: [major, minor, patch]
+  const isNewer =
+    (lat[0] ?? 0) > (cur[0] ?? 0) ||
+    ((lat[0] ?? 0) === (cur[0] ?? 0) && (lat[1] ?? 0) > (cur[1] ?? 0)) ||
+    ((lat[0] ?? 0) === (cur[0] ?? 0) &&
+      (lat[1] ?? 0) === (cur[1] ?? 0) &&
+      (lat[2] ?? 0) > (cur[2] ?? 0));
 
-    if (!isNewer) {
-      const btn = document.getElementById("sp-update-btn");
-      if (btn) btn.style.display = "none";
-      return;
-    }
+  if (!isNewer) {
+    const btn = document.getElementById("sp-update-btn");
+    if (btn) btn.style.display = "none";
+    return;
+  }
 
-    // Major version bump → block usage and show prominent alert
-    if ((lat[0] ?? 0) > (cur[0] ?? 0)) {
-      sessionState.versionBlocked = true;
-      showVersionAlert(latest, zipUrl);
-    } else {
-      // Minor/patch → just show the update button
-      const btn = document.getElementById("sp-update-btn");
-      if (btn) btn.style.display = "inline-flex";
+  // Major version bump → bloquear y mostrar alerta prominente
+  if ((lat[0] ?? 0) > (cur[0] ?? 0)) {
+    sessionState.versionBlocked = true;
+    showVersionAlert(latest, zipUrl);
+  } else {
+    // Minor/patch → mostrar modal de actualización
+    showUpdateModal(latest, zipUrl);
+  }
+}
+
+function showUpdateModal(latest: string, zipUrl: string): void {
+  if (document.getElementById("sp-update-modal")) return;
+
+  const overlay = document.createElement("div");
+  overlay.id = "sp-update-modal";
+  overlay.style.cssText =
+    "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0);z-index:999999;" +
+    "display:flex;align-items:center;justify-content:center;" +
+    "transition:background 0.3s ease;backdrop-filter:blur(0px);";
+
+  overlay.innerHTML =
+    `<div style="background:#fff;border-radius:12px;max-width:380px;width:90%;padding:28px 24px;` +
+    `box-shadow:0 8px 40px rgba(0,0,0,0.25);text-align:center;` +
+    `transform:scale(0.85) translateY(20px);opacity:0;` +
+    `transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1),opacity 0.3s ease;">` +
+    // Icono
+    `<div style="font-size:40px;margin-bottom:12px;">🚀</div>` +
+    // Título
+    `<h3 style="margin:0 0 8px;font-size:1.1rem;font-family:Roboto,sans-serif;color:#333;">` +
+    `Nueva versión disponible</h3>` +
+    // Versiones
+    `<p style="margin:0 0 6px;font-size:13px;color:#888;font-family:Roboto,sans-serif;">` +
+    `<span style="color:#D94040;font-weight:600;">v${latest}</span> está lista para instalar.</p>` +
+    `<p style="margin:0 0 20px;font-size:11px;color:#bbb;font-family:Roboto,sans-serif;">` +
+    `Versión actual: v${_currentVersion}</p>` +
+    // Botones
+    `<div style="display:flex;gap:10px;">` +
+    `<button id="sp-update-modal-later" style="flex:1;padding:10px;border:1px solid #ddd;border-radius:8px;` +
+    `background:#fff;color:#888;cursor:pointer;font-size:13px;font-family:Roboto,sans-serif;">` +
+    `Después</button>` +
+    `<button id="sp-update-modal-now" style="flex:2;padding:10px;border:none;border-radius:8px;` +
+    `background:#D94040;color:#fff;cursor:pointer;font-size:13px;font-weight:600;font-family:Roboto,sans-serif;">` +
+    `⬇️ Actualizar ahora</button>` +
+    `</div></div>`;
+
+  document.body.appendChild(overlay);
+
+  // Animar entrada
+  requestAnimationFrame(() => {
+    overlay.style.background = "rgba(0,0,0,0.5)";
+    overlay.style.backdropFilter = "blur(4px)";
+    const box = overlay.querySelector<HTMLElement>("div");
+    if (box) {
+      box.style.transform = "scale(1) translateY(0)";
+      box.style.opacity = "1";
     }
   });
+
+  const closeOverlay = () => {
+    const box = overlay.querySelector<HTMLElement>("div");
+    if (box) {
+      box.style.transform = "scale(0.9) translateY(10px)";
+      box.style.opacity = "0";
+    }
+    overlay.style.background = "rgba(0,0,0,0)";
+    setTimeout(() => overlay.remove(), 250);
+    // Mostrar el botón de update en el header como recordatorio
+    const btn = document.getElementById("sp-update-btn");
+    if (btn) btn.style.display = "inline-flex";
+  };
+
+  document
+    .getElementById("sp-update-modal-later")
+    ?.addEventListener("click", closeOverlay);
+
+  document
+    .getElementById("sp-update-modal-now")
+    ?.addEventListener("click", () => {
+      const nowBtn = document.getElementById(
+        "sp-update-modal-now",
+      ) as HTMLButtonElement;
+      nowBtn.textContent = "⏳ Descargando...";
+      nowBtn.disabled = true;
+      // Descargar y recargar al terminar
+      downloadZip(zipUrl, latest, nowBtn);
+      // Recargar página tras 3s para que tome la extensión actualizada
+      setTimeout(() => {
+        overlay.remove();
+        window.location.reload();
+      }, 3500);
+    });
 }
 
 function showVersionAlert(latest: string, zipUrl: string): void {

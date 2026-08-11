@@ -3,7 +3,9 @@
 // ============================================================
 
 import { SP_CONFIG } from "../config";
-import { escHtml, showErrorToast, showSuccessToast } from "../components";
+import { escHtml } from "../components";
+import { showErrorToast, showSuccessToast } from "../react/store/toastBridge";
+import { userSearchHtml, initUserSearch } from "../components";
 import { formModal } from "../lib/modal-builder";
 import { getSpToken } from "../lib/api";
 import {
@@ -546,7 +548,8 @@ function loadManagerGroupDetail(
 
 // ─── Load Manager Panel ───────────────────────────────────────
 
-function loadManagerPanel(
+// Función vanilla conservada como fallback. La ruta activa es mountManagerPanel().
+export function _loadManagerPanel(
   grid: Element,
   groups: number[],
   canDrag: boolean,
@@ -613,15 +616,28 @@ function loadManagerPanel(
     panel.appendChild(collapseTagFilter.element);
   }
 
-  // ─── Agregar usuario a grupo (rol canAddUserToGroup) ─────
-  if (sessionState.canAddUserToGroup) {
-    const addUserGroupBtn = document.createElement("button");
-    addUserGroupBtn.id = "sp-add-user-group-btn";
-    addUserGroupBtn.textContent = "👥 Agregar usuario a grupo";
-    addUserGroupBtn.style.cssText =
-      "margin-bottom:10px;padding:6px 14px;border:1px solid #1976D2;border-radius:6px;background:transparent;color:#1976D2;cursor:pointer;font-size:12px;font-weight:600;";
-    addUserGroupBtn.addEventListener("click", () => showAddUserToGroupModal());
-    panel.insertBefore(addUserGroupBtn, panel.firstChild);
+  // ─── Botón "Usuarios" (reemplaza los dos botones anteriores) ─
+  const hasGestion =
+    sessionState.canAddUserToGroup ||
+    sessionState.canAddUserToRole ||
+    sessionState.userRole === "admin";
+
+  if (hasGestion) {
+    const btnBar = document.createElement("div");
+    btnBar.id = "sp-mgr-btn-bar";
+    btnBar.style.cssText =
+      "display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;";
+
+    const usuariosBtn = document.createElement("button");
+    usuariosBtn.id = "sp-usuarios-btn";
+    usuariosBtn.textContent = "👥 Usuarios";
+    usuariosBtn.style.cssText =
+      "padding:6px 14px;border:1px solid #1565C0;border-radius:6px;" +
+      "background:transparent;color:#1565C0;cursor:pointer;font-size:12px;font-weight:600;";
+    usuariosBtn.addEventListener("click", () => showUsuariosModal());
+    btnBar.appendChild(usuariosBtn);
+
+    grid.parentElement?.insertBefore(btnBar, panel);
   }
 
   groupsInfo.forEach((dept) => {
@@ -1067,6 +1083,829 @@ export function loadProductosPanel(): void {
   );
 }
 
+// ─── Catálogos para el form de usuario ───────────────────────
+
+const CARGOS_CATALOGO = [
+  { id: 0, nombre: "Sin cargo" },
+  { id: 1, nombre: "Frontend" },
+  { id: 2, nombre: "Middleware" },
+  { id: 3, nombre: "Backend" },
+  { id: 4, nombre: "DBA" },
+  { id: 5, nombre: "DevOps" },
+  { id: 6, nombre: "QA" },
+  { id: 7, nombre: "Infraestructura" },
+  { id: 8, nombre: "Soporte" },
+  { id: 9, nombre: "Lider Tecnico" },
+  { id: 10, nombre: "Arquitecto" },
+  { id: 11, nombre: "Administrador DBA" },
+  { id: 12, nombre: "GERENTE DE SERVICIOS TI SAP Y CLOUD" },
+];
+
+const NIVELES_CATALOGO = [
+  { id: 0, nombre: "No aplica" },
+  { id: 1, nombre: "Junior" },
+  { id: 2, nombre: "Semi Senior" },
+  { id: 3, nombre: "Senior" },
+];
+
+// ─── Form HTML de usuario (crear/editar) ─────────────────────
+
+function userFormHtml(defaults?: {
+  nombre?: string;
+  correo?: string;
+  cargoId?: number;
+  nivelId?: number;
+  idUsuario?: number;
+  isEdit?: boolean;
+}): string {
+  const cargoOpts = CARGOS_CATALOGO.map(
+    (c) =>
+      `<option value="${c.id}"${defaults?.cargoId === c.id ? " selected" : ""}>${escHtml(c.nombre)}</option>`,
+  ).join("");
+  const nivelOpts = NIVELES_CATALOGO.map(
+    (n) =>
+      `<option value="${n.id}"${defaults?.nivelId === n.id ? " selected" : ""}>${escHtml(n.nombre)}</option>`,
+  ).join("");
+
+  const inputStyle =
+    "width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;box-sizing:border-box;outline:none;";
+  const readonlyStyle =
+    "width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;box-sizing:border-box;outline:none;background:#f5f5f5;";
+  const labelStyle =
+    "font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px;";
+
+  const idField = !defaults?.isEdit
+    ? `<div style="grid-column:1/3"><label style="${labelStyle}">ID de usuario *</label>` +
+      `<input id="sp-uf-id" type="number" placeholder="Ej. 1001" value="${defaults?.idUsuario ?? ""}" ` +
+      `style="${inputStyle}" min="1"></div>`
+    : "";
+
+  return (
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">` +
+    idField +
+    `<div><label style="${labelStyle}">Nombre *</label>` +
+    `<input id="sp-uf-nombre" type="text" placeholder="Nombre completo" value="${escHtml(defaults?.nombre ?? "")}" style="${inputStyle}"></div>` +
+    `<div><label style="${labelStyle}">Correo *</label>` +
+    `<input id="sp-uf-correo" type="email" placeholder="correo@macropay.mx" value="${escHtml(defaults?.correo ?? "")}" style="${defaults?.isEdit ? readonlyStyle : inputStyle}"${defaults?.isEdit ? " readonly" : ""}></div>` +
+    `<div><label style="${labelStyle}">Cargo</label>` +
+    `<select id="sp-uf-cargo" style="${inputStyle}">${cargoOpts}</select></div>` +
+    `<div><label style="${labelStyle}">Nivel</label>` +
+    `<select id="sp-uf-nivel" style="${inputStyle}">${nivelOpts}</select></div>` +
+    `</div>`
+  );
+}
+// ─── Modal de crear/editar usuario ───────────────────────────
+
+function showUserFormModal(opts: {
+  mode: "create" | "edit";
+  userId?: number;
+  defaults?: Parameters<typeof userFormHtml>[0];
+  onSuccess: (userId: number, name: string) => void;
+}): void {
+  const isEdit = opts.mode === "edit";
+  const title = isEdit ? "✏️ Editar usuario" : "➕ Nuevo usuario";
+  const btnText = isEdit ? "Guardar cambios" : "Crear usuario";
+
+  // Crear overlay del form
+  const overlay = document.createElement("div");
+  overlay.id = "sp-uf-modal";
+  overlay.style.cssText =
+    "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);" +
+    "z-index:999999;display:flex;align-items:center;justify-content:center;";
+
+  overlay.innerHTML =
+    `<div style="background:#fff;border-radius:12px;max-width:520px;width:94%;padding:24px;` +
+    `box-shadow:0 8px 40px rgba(0,0,0,0.25);font-family:Roboto,sans-serif;">` +
+    `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">` +
+    `<h3 style="margin:0;font-size:1rem;">${title}</h3>` +
+    `<button id="sp-uf-cancel-x" style="border:none;background:none;font-size:1.2rem;cursor:pointer;color:#666;">✕</button>` +
+    `</div>` +
+    userFormHtml(opts.defaults) +
+    `<div style="display:flex;gap:8px;justify-content:flex-end;">` +
+    `<button id="sp-uf-cancel" style="padding:8px 16px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:12px;">Cancelar</button>` +
+    `<button id="sp-uf-submit" style="padding:8px 20px;border:none;border-radius:6px;background:#1565C0;color:#fff;cursor:pointer;font-size:12px;font-weight:600;">${btnText}</button>` +
+    `</div>` +
+    `<div id="sp-uf-error" style="margin-top:8px;font-size:11px;color:#D32F2F;min-height:16px;"></div>` +
+    `</div>`;
+
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  document.getElementById("sp-uf-cancel")?.addEventListener("click", close);
+  document.getElementById("sp-uf-cancel-x")?.addEventListener("click", close);
+
+  document.getElementById("sp-uf-submit")?.addEventListener("click", () => {
+    const nombre = (
+      document.getElementById("sp-uf-nombre") as HTMLInputElement
+    ).value.trim();
+    const correo = (
+      document.getElementById("sp-uf-correo") as HTMLInputElement
+    ).value.trim();
+    const cargoId = parseInt(
+      (document.getElementById("sp-uf-cargo") as HTMLSelectElement).value,
+    );
+    const nivelId = parseInt(
+      (document.getElementById("sp-uf-nivel") as HTMLSelectElement).value,
+    );
+    const errorEl = document.getElementById("sp-uf-error")!;
+    const btn = document.getElementById("sp-uf-submit") as HTMLButtonElement;
+
+    if (!nombre) {
+      errorEl.textContent = "El nombre es requerido";
+      return;
+    }
+    if (!isEdit && !correo) {
+      errorEl.textContent = "El correo es requerido";
+      return;
+    }
+    const idUsuario = !isEdit
+      ? parseInt(
+          (document.getElementById("sp-uf-id") as HTMLInputElement)?.value ??
+            "0",
+        )
+      : 0;
+    if (!isEdit && (!idUsuario || isNaN(idUsuario))) {
+      errorEl.textContent = "El ID de usuario es requerido";
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Guardando...";
+    errorEl.textContent = "";
+
+    if (isEdit && opts.userId) {
+      chrome.runtime.sendMessage(
+        {
+          type: "api-put",
+          endpoint: `/usuarios/${opts.userId}`,
+          body: {
+            nombre,
+            fkIdcatCargo: cargoId,
+            fkIdcatNivelCargo: nivelId,
+            usuarioModificacion: sessionState.userName,
+          },
+        },
+        (r) => {
+          btn.disabled = false;
+          btn.textContent = btnText;
+          if (r?.success) {
+            close();
+            opts.onSuccess(opts.userId!, nombre);
+            showSuccessToast("✅ Usuario actualizado");
+          } else {
+            errorEl.textContent = "Error: " + (r?.error ?? "intenta de nuevo");
+          }
+        },
+      );
+    } else {
+      chrome.runtime.sendMessage(
+        {
+          type: "api-post",
+          endpoint: "/usuarios",
+          body: {
+            idUsuario,
+            nombre,
+            correo,
+            fkIdcatCargo: cargoId,
+            fkIdcatNivelCargo: nivelId,
+            usuarioAlta: sessionState.userName,
+          },
+        },
+        (r) => {
+          btn.disabled = false;
+          btn.textContent = btnText;
+          if (r?.success) {
+            const newId: number =
+              r.data?.data?.idUsuario ?? r.data?.idUsuario ?? 0;
+            close();
+            opts.onSuccess(newId, nombre);
+            showSuccessToast("✅ Usuario creado");
+          } else {
+            errorEl.textContent = "Error: " + (r?.error ?? "intenta de nuevo");
+          }
+        },
+      );
+    }
+  });
+}
+
+// ─── Modal principal de gestión de usuarios ──────────────────
+//
+// Vista unificada: lista de usuarios a la izquierda, detalle
+// con tabs (Roles | Grupos | Blacklist | Tickets por cerrar)
+// a la derecha. Reemplaza los modales individuales de roles y grupos.
+
+function showUsuariosModal(): void {
+  // Tipos internos
+  interface UserRow {
+    id: number;
+    name: string;
+    correo: string;
+    cargo?: string;
+  }
+
+  // Cargar todos los usuarios
+  chrome.runtime.sendMessage(
+    { type: "api-get", endpoint: "/usuarios" },
+    (resp) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw: any[] =
+        resp?.success && resp?.data?.data ? resp.data.data : [];
+      const users: UserRow[] = raw.map((u) => ({
+        id: u.IdUsuario,
+        name: u.Nombre,
+        correo: u.Correo,
+        cargo: u.CargoCompleto ?? "",
+      }));
+
+      // ── HTML del modal ────────────────────────────────────
+      const overlay = document.createElement("div");
+      overlay.id = "sp-usuarios-modal";
+      overlay.style.cssText =
+        "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0);z-index:99999;" +
+        "display:flex;align-items:center;justify-content:center;" +
+        "transition:background 0.3s ease;backdrop-filter:blur(0px);";
+
+      overlay.innerHTML =
+        `<div style="background:#fff;border-radius:12px;width:96vw;max-width:1100px;height:85vh;` +
+        `display:flex;flex-direction:column;font-family:Roboto,Helvetica,Arial,sans-serif;` +
+        `font-size:0.9rem;color:#333;box-shadow:0 8px 40px rgba(0,0,0,0.25);` +
+        `transform:scale(0.95);opacity:0;transition:transform 0.2s ease,opacity 0.2s ease;overflow:hidden;">` +
+        // Header
+        `<div style="display:flex;justify-content:space-between;align-items:center;` +
+        `padding:14px 20px;border-bottom:1px solid #eee;flex-shrink:0;">` +
+        `<h3 style="margin:0;font-size:1.05rem;">👥 Gestión de usuarios</h3>` +
+        `<div style="display:flex;gap:8px;align-items:center;">` +
+        `<button id="sp-um-nuevo" style="padding:5px 12px;border:1px solid #1565C0;border-radius:6px;background:transparent;color:#1565C0;cursor:pointer;font-size:12px;font-weight:600;">+ Nuevo</button>` +
+        `<button id="sp-um-close" style="border:none;background:none;font-size:1.2rem;cursor:pointer;color:#666;">✕</button>` +
+        `</div>` +
+        // Body: dos columnas
+        `<div style="display:flex;flex:1;overflow:hidden;">` +
+        // Columna izquierda — lista de usuarios
+        `<div style="width:300px;flex-shrink:0;border-right:1px solid #eee;display:flex;flex-direction:column;">` +
+        `<div style="padding:10px 12px;border-bottom:1px solid #f0f0f0;">` +
+        `<input id="sp-um-search" type="text" placeholder="🔍 Buscar..." autocomplete="off" ` +
+        `style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;box-sizing:border-box;outline:none;">` +
+        `</div>` +
+        `<div id="sp-um-list" style="overflow-y:auto;flex:1;">` +
+        users
+          .map(
+            (u) =>
+              `<div class="sp-um-row" data-uid="${u.id}" data-uname="${escHtml(u.name)}" data-ucorreo="${escHtml(u.correo)}" ` +
+              `style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f5f5;transition:background 0.1s;" ` +
+              `onmouseover="if(!this.classList.contains('sp-um-selected'))this.style.background='#f5f5f5'" ` +
+              `onmouseout="if(!this.classList.contains('sp-um-selected'))this.style.background=''">` +
+              `<div style="font-weight:600;font-size:12px;">${escHtml(u.name)}</div>` +
+              `<div style="font-size:11px;color:#888;">${escHtml(u.correo)}</div>` +
+              `</div>`,
+          )
+          .join("") +
+        `</div></div>` +
+        // Columna derecha — detalle del usuario seleccionado
+        `<div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">` +
+        `<div id="sp-um-detail-empty" style="flex:1;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:13px;">` +
+        `Selecciona un usuario de la lista</div>` +
+        `<div id="sp-um-detail" style="flex:1;display:none;flex-direction:column;overflow:hidden;">` +
+        // Cabecera del usuario seleccionado
+        `<div id="sp-um-user-header" style="padding:14px 20px;border-bottom:1px solid #eee;flex-shrink:0;"></div>` +
+        // Tab bar
+        `<div style="display:flex;border-bottom:1px solid #eee;flex-shrink:0;padding:0 20px;">` +
+        `<button class="sp-um-tab" data-tab="roles" style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:12px;font-weight:600;border-bottom:2px solid #1565C0;color:#1565C0;">🎭 Roles</button>` +
+        `<button class="sp-um-tab" data-tab="grupos" style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:12px;font-weight:600;border-bottom:2px solid transparent;color:#888;">👥 Grupos</button>` +
+        `<button class="sp-um-tab" data-tab="blacklist" style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:12px;font-weight:600;border-bottom:2px solid transparent;color:#888;">🚫 Blacklist</button>` +
+        `<button class="sp-um-tab" data-tab="tickets" style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:12px;font-weight:600;border-bottom:2px solid transparent;color:#888;">🕐 Por cerrar</button>` +
+        `</div>` +
+        // Panel de cada tab
+        `<div style="flex:1;overflow:hidden;position:relative;">` +
+        `<div id="sp-um-panel-roles"   class="sp-um-panel" style="position:absolute;inset:0;overflow-y:auto;padding:16px 20px;"></div>` +
+        `<div id="sp-um-panel-grupos"  class="sp-um-panel" style="position:absolute;inset:0;overflow-y:auto;padding:16px 20px;display:none;"></div>` +
+        `<div id="sp-um-panel-blacklist" class="sp-um-panel" style="position:absolute;inset:0;overflow-y:auto;padding:16px 20px;display:none;"></div>` +
+        `<div id="sp-um-panel-tickets" class="sp-um-panel" style="position:absolute;inset:0;overflow-y:auto;padding:16px 20px;display:none;"></div>` +
+        `</div></div></div></div></div>`;
+
+      document.body.appendChild(overlay);
+      requestAnimationFrame(() => {
+        overlay.style.background = "rgba(0,0,0,0.5)";
+        overlay.style.backdropFilter = "blur(4px)";
+        const box = overlay.querySelector<HTMLElement>("div");
+        if (box) {
+          box.style.transform = "scale(1)";
+          box.style.opacity = "1";
+        }
+      });
+
+      const closeModal = () => {
+        const box = overlay.querySelector<HTMLElement>("div");
+        if (box) {
+          box.style.transform = "scale(0.95)";
+          box.style.opacity = "0";
+        }
+        overlay.style.background = "rgba(0,0,0,0)";
+        setTimeout(() => overlay.remove(), 200);
+      };
+
+      document
+        .getElementById("sp-um-close")
+        ?.addEventListener("click", closeModal);
+
+      // Botón "+ Nuevo usuario"
+      document.getElementById("sp-um-nuevo")?.addEventListener("click", () => {
+        showUserFormModal({
+          mode: "create",
+          onSuccess: (newId, nombre) => {
+            const listEl = document.getElementById("sp-um-list")!;
+            const newRow = document.createElement("div");
+            newRow.className = "sp-um-row";
+            newRow.dataset["uid"] = String(newId);
+            newRow.dataset["uname"] = nombre;
+            newRow.dataset["ucorreo"] = "";
+            newRow.style.cssText =
+              "padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f5f5;";
+            newRow.innerHTML =
+              `<div style="font-weight:600;font-size:12px;">${escHtml(nombre)}</div>` +
+              `<div style="font-size:11px;color:#888;"></div>`;
+            newRow.addEventListener("click", () => selectUser(newRow));
+            listEl.prepend(newRow);
+            selectUser(newRow);
+          },
+        });
+      });
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) closeModal();
+      });
+      document.addEventListener("keydown", function escH(e) {
+        if (
+          e.key === "Escape" &&
+          document.getElementById("sp-usuarios-modal")
+        ) {
+          closeModal();
+          document.removeEventListener("keydown", escH);
+        }
+      });
+
+      // ── Búsqueda en la lista ──────────────────────────────
+      document
+        .getElementById("sp-um-search")
+        ?.addEventListener("input", (e) => {
+          const q = (e.target as HTMLInputElement).value.toLowerCase();
+          document
+            .querySelectorAll<HTMLElement>(".sp-um-row")
+            .forEach((row) => {
+              const name = (row.dataset["uname"] ?? "").toLowerCase();
+              const correo = (row.dataset["ucorreo"] ?? "").toLowerCase();
+              row.style.display =
+                !q || name.includes(q) || correo.includes(q) ? "" : "none";
+            });
+        });
+
+      // ── Estado del usuario seleccionado ───────────────────
+      let selectedUid = 0;
+      let selectedUser: UserRow | null = null;
+      let activeTab = "roles";
+
+      // ── Cambio de tab ─────────────────────────────────────
+      const switchTab = (tab: string) => {
+        activeTab = tab;
+        document
+          .querySelectorAll<HTMLButtonElement>(".sp-um-tab")
+          .forEach((btn) => {
+            const isActive = btn.dataset["tab"] === tab;
+            btn.style.borderBottomColor = isActive ? "#1565C0" : "transparent";
+            btn.style.color = isActive ? "#1565C0" : "#888";
+          });
+        document.querySelectorAll<HTMLElement>(".sp-um-panel").forEach((p) => {
+          p.style.display = p.id === `sp-um-panel-${tab}` ? "block" : "none";
+        });
+        if (selectedUid) loadTabContent(tab, selectedUid);
+      };
+
+      document
+        .querySelectorAll<HTMLButtonElement>(".sp-um-tab")
+        .forEach((btn) => {
+          btn.addEventListener("click", () =>
+            switchTab(btn.dataset["tab"] ?? "roles"),
+          );
+        });
+
+      // ── Cargar contenido de un tab ────────────────────────
+      const spinner = () =>
+        `<div style="text-align:center;padding:30px;color:#aaa;font-size:12px;">` +
+        `<span class="sp-spinner" style="margin-right:6px;"></span>Cargando...</div>`;
+
+      const loadTabContent = (tab: string, uid: number) => {
+        const panel = document.getElementById(`sp-um-panel-${tab}`)!;
+        panel.innerHTML = spinner();
+
+        if (tab === "roles") {
+          Promise.all([
+            new Promise<
+              Array<{
+                IdcatRol: number;
+                Nombre: string;
+                Descripcion: string | null;
+              }>
+            >((res) =>
+              chrome.runtime.sendMessage(
+                { type: "api-get", endpoint: "/roles" },
+                (r) =>
+                  res(
+                    r?.success && Array.isArray(r.data?.data)
+                      ? r.data.data
+                      : Array.isArray(r.data)
+                        ? r.data
+                        : [],
+                  ),
+              ),
+            ),
+            new Promise<Array<{ IdcatRol: number }>>((res) =>
+              chrome.runtime.sendMessage(
+                { type: "api-get", endpoint: `/usuarios/${uid}/roles` },
+                (r) =>
+                  res(
+                    r?.success && Array.isArray(r.data?.data)
+                      ? r.data.data
+                      : Array.isArray(r.data)
+                        ? r.data
+                        : [],
+                  ),
+              ),
+            ),
+          ]).then(([allRoles, userRoles]) => {
+            const activeIds = new Set(
+              userRoles.map((r: any) => r.FK_IdcatRol ?? r.IdcatRol),
+            );
+            let count = activeIds.size;
+            const updateCount = () => {
+              count = panel.querySelectorAll<HTMLInputElement>(
+                ".sp-um-chk-rol:checked",
+              ).length;
+              const countEl =
+                panel.querySelector<HTMLElement>(".sp-um-chk-count");
+              if (countEl)
+                countEl.textContent = `${count} seleccionado${count !== 1 ? "s" : ""}`;
+            };
+            panel.innerHTML =
+              `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">` +
+              `<span style="font-size:12px;font-weight:600;">Roles disponibles</span>` +
+              `<span class="sp-um-chk-count" style="font-size:11px;color:#1565C0;">${count} seleccionado${count !== 1 ? "s" : ""}</span>` +
+              `</div>` +
+              allRoles
+                .map((r) => {
+                  const chk = activeIds.has(r.IdcatRol) ? "checked" : "";
+                  const desc = r.Descripcion
+                    ? `<span style="font-size:11px;color:#aaa;display:block;margin-left:23px;">${escHtml(r.Descripcion)}</span>`
+                    : "";
+                  return (
+                    `<label style="display:flex;flex-direction:column;padding:6px 2px;cursor:pointer;border-bottom:1px solid #f5f5f5;">` +
+                    `<span style="display:flex;align-items:center;gap:8px;">` +
+                    `<input type="checkbox" class="sp-um-chk-rol" data-rid="${r.IdcatRol}" ${chk} ` +
+                    `style="width:15px;height:15px;cursor:pointer;accent-color:#7B1FA2;">` +
+                    `<span style="font-size:12px;font-weight:500;">${escHtml(r.Nombre)}</span></span>${desc}</label>`
+                  );
+                })
+                .join("") +
+              `<div style="padding-top:12px;">` +
+              `<button id="sp-um-save-roles" style="padding:8px 20px;border:none;border-radius:6px;background:#7B1FA2;` +
+              `color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Guardar roles</button>` +
+              `<span id="sp-um-roles-msg" style="font-size:11px;margin-left:10px;"></span></div>`;
+
+            panel
+              .querySelectorAll<HTMLInputElement>(".sp-um-chk-rol")
+              .forEach((ch) => ch.addEventListener("change", updateCount));
+
+            document
+              .getElementById("sp-um-save-roles")
+              ?.addEventListener("click", () => {
+                const roles: number[] = [];
+                panel
+                  .querySelectorAll<HTMLInputElement>(".sp-um-chk-rol")
+                  .forEach((ch) => {
+                    if (ch.checked)
+                      roles.push(parseInt(ch.dataset["rid"] ?? "0"));
+                  });
+                const btn = document.getElementById(
+                  "sp-um-save-roles",
+                ) as HTMLButtonElement;
+                const msg = document.getElementById("sp-um-roles-msg")!;
+                btn.disabled = true;
+                btn.textContent = "Guardando...";
+                chrome.runtime.sendMessage(
+                  {
+                    type: "api-put",
+                    endpoint: `/usuarios/${uid}/roles`,
+                    body: { roles, usuarioModif: sessionState.userName },
+                  },
+                  (r) => {
+                    btn.disabled = false;
+                    btn.textContent = "Guardar roles";
+                    if (r?.success) {
+                      msg.style.color = "#2E7D32";
+                      msg.textContent = "✅ Guardado";
+                      showSuccessToast("Roles actualizados");
+                    } else {
+                      msg.style.color = "#D32F2F";
+                      msg.textContent =
+                        "Error: " + (r?.error ?? "intenta de nuevo");
+                    }
+                  },
+                );
+              });
+          });
+        } else if (tab === "grupos") {
+          Promise.all([
+            new Promise<Array<{ IdcatGrupo: number; Nombre: string }>>((res) =>
+              chrome.runtime.sendMessage(
+                { type: "api-get", endpoint: "/grupos" },
+                (r) =>
+                  res(
+                    r?.success && Array.isArray(r.data?.data)
+                      ? r.data.data
+                      : Array.isArray(r.data)
+                        ? r.data
+                        : [],
+                  ),
+              ),
+            ),
+            new Promise<Array<{ IdcatGrupo: number }>>((res) =>
+              chrome.runtime.sendMessage(
+                { type: "api-get", endpoint: `/usuarios/${uid}/grupos` },
+                (r) =>
+                  res(
+                    r?.success && Array.isArray(r.data?.data)
+                      ? r.data.data
+                      : Array.isArray(r.data)
+                        ? r.data
+                        : [],
+                  ),
+              ),
+            ),
+          ]).then(([allGrupos, userGrupos]) => {
+            const activeIds = new Set(
+              userGrupos.map((g: any) => g.FK_IdcatGrupo ?? g.IdcatGrupo),
+            );
+            let count = activeIds.size;
+            const updateCount = () => {
+              count = panel.querySelectorAll<HTMLInputElement>(
+                ".sp-um-chk-grp:checked",
+              ).length;
+              const countEl =
+                panel.querySelector<HTMLElement>(".sp-um-grp-count");
+              if (countEl)
+                countEl.textContent = `${count} seleccionado${count !== 1 ? "s" : ""}`;
+            };
+            panel.innerHTML =
+              `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">` +
+              `<span style="font-size:12px;font-weight:600;">Grupos disponibles</span>` +
+              `<span class="sp-um-grp-count" style="font-size:11px;color:#1565C0;">${count} seleccionado${count !== 1 ? "s" : ""}</span>` +
+              `</div>` +
+              allGrupos
+                .map((g) => {
+                  const chk = activeIds.has(g.IdcatGrupo) ? "checked" : "";
+                  return (
+                    `<label style="display:flex;align-items:center;gap:8px;padding:6px 2px;cursor:pointer;border-bottom:1px solid #f5f5f5;">` +
+                    `<input type="checkbox" class="sp-um-chk-grp" data-gid="${g.IdcatGrupo}" ${chk} ` +
+                    `style="width:15px;height:15px;cursor:pointer;accent-color:#1976D2;">` +
+                    `<span style="font-size:12px;font-weight:500;">${escHtml(g.Nombre)}</span></label>`
+                  );
+                })
+                .join("") +
+              `<div style="padding-top:12px;">` +
+              `<button id="sp-um-save-grupos" style="padding:8px 20px;border:none;border-radius:6px;background:#1976D2;` +
+              `color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Guardar grupos</button>` +
+              `<span id="sp-um-grupos-msg" style="font-size:11px;margin-left:10px;"></span></div>`;
+
+            panel
+              .querySelectorAll<HTMLInputElement>(".sp-um-chk-grp")
+              .forEach((ch) => ch.addEventListener("change", updateCount));
+
+            document
+              .getElementById("sp-um-save-grupos")
+              ?.addEventListener("click", () => {
+                const grupos: number[] = [];
+                panel
+                  .querySelectorAll<HTMLInputElement>(".sp-um-chk-grp")
+                  .forEach((ch) => {
+                    if (ch.checked)
+                      grupos.push(parseInt(ch.dataset["gid"] ?? "0"));
+                  });
+                const btn = document.getElementById(
+                  "sp-um-save-grupos",
+                ) as HTMLButtonElement;
+                const msg = document.getElementById("sp-um-grupos-msg")!;
+                btn.disabled = true;
+                btn.textContent = "Guardando...";
+                chrome.runtime.sendMessage(
+                  {
+                    type: "api-put",
+                    endpoint: `/usuarios/${uid}/grupos`,
+                    body: { grupos, usuarioModif: sessionState.userName },
+                  },
+                  (r) => {
+                    btn.disabled = false;
+                    btn.textContent = "Guardar grupos";
+                    if (r?.success) {
+                      msg.style.color = "#2E7D32";
+                      msg.textContent = "✅ Guardado";
+                      showSuccessToast("Grupos actualizados");
+                    } else {
+                      msg.style.color = "#D32F2F";
+                      msg.textContent =
+                        "Error: " + (r?.error ?? "intenta de nuevo");
+                    }
+                  },
+                );
+              });
+          });
+        } else if (tab === "blacklist") {
+          chrome.runtime.sendMessage(
+            { type: "api-get", endpoint: `/configuracion/usuario/${uid}` },
+            (r) => {
+              // La blacklist ahora viene dentro de GET /configuracion/usuario/:id
+              // como data.blacklist: [{ idUsuario, nombre, correo }]
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const items: any[] = Array.isArray(r?.data?.data?.blacklist)
+                ? r.data.data.blacklist
+                : [];
+              if (!items.length) {
+                panel.innerHTML = `<div style="text-align:center;padding:30px;color:#aaa;font-size:12px;">Sin usuarios bloqueados</div>`;
+                return;
+              }
+              panel.innerHTML =
+                `<div style="font-size:12px;font-weight:600;margin-bottom:10px;">🚫 Usuarios bloqueados (${items.length})</div>` +
+                items
+                  .map(
+                    (item) =>
+                      `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f5f5f5;">` +
+                      `<div style="width:32px;height:32px;border-radius:50%;background:#fdecea;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">🚫</div>` +
+                      `<div>` +
+                      `<div style="font-size:12px;font-weight:600;">${escHtml(item.nombre ?? item.UsuarioBloqueadoNombre ?? "")}</div>` +
+                      `<div style="font-size:11px;color:#888;">${escHtml(item.correo ?? item.UsuarioBloqueadoCorreo ?? "")}</div>` +
+                      `</div></div>`,
+                  )
+                  .join("");
+            },
+          );
+        } else if (tab === "tickets") {
+          chrome.runtime.sendMessage(
+            {
+              type: "api-get",
+              endpoint: `/usuarios/${uid}/tickets-por-cerrar`,
+            },
+            (r) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const items: any[] =
+                r?.success && Array.isArray(r.data?.data)
+                  ? r.data.data
+                  : Array.isArray(r.data)
+                    ? r.data
+                    : [];
+              if (!items.length) {
+                panel.innerHTML = `<div style="text-align:center;padding:30px;color:#aaa;font-size:12px;">Sin tickets pendientes de cierre</div>`;
+                return;
+              }
+              panel.innerHTML =
+                `<div style="font-size:12px;font-weight:600;margin-bottom:10px;">🕐 Tickets pendientes (${items.length})</div>` +
+                items
+                  .map(
+                    (item) =>
+                      `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f5f5f5;">` +
+                      `<div>` +
+                      `<div style="font-size:12px;font-weight:600;color:#1976D2;">${escHtml(item.Ticket ?? "")}</div>` +
+                      `<div style="font-size:11px;color:#888;">${escHtml(item.GrupoNombre ?? "")} · ${item.FechaAlta ? new Date(item.FechaAlta).toLocaleDateString("es-MX") : ""}</div>` +
+                      `</div>` +
+                      `<span style="font-size:10px;padding:2px 8px;border-radius:10px;${item.Cerrado ? "background:#E8F5E9;color:#2E7D32;" : "background:#FFF3E0;color:#E65100;"}">` +
+                      `${item.Cerrado ? "Cerrado" : "Pendiente"}</span>` +
+                      `</div>`,
+                  )
+                  .join("");
+            },
+          );
+        }
+      };
+
+      // ── Seleccionar usuario de la lista ───────────────────
+      const selectUser = (row: HTMLElement) => {
+        selectedUid = parseInt(row.dataset["uid"] ?? "0");
+        selectedUser = users.find((u) => u.id === selectedUid) ?? null;
+        if (!selectedUser) return;
+
+        // Resaltar fila seleccionada
+        document.querySelectorAll<HTMLElement>(".sp-um-row").forEach((r) => {
+          r.classList.remove("sp-um-selected");
+          r.style.background = "";
+        });
+        row.classList.add("sp-um-selected");
+        row.style.background = "#E3F2FD";
+
+        // Mostrar panel de detalle
+        document.getElementById("sp-um-detail-empty")!.style.display = "none";
+        const detail = document.getElementById("sp-um-detail")!;
+        detail.style.display = "flex";
+
+        // Header del usuario seleccionado con botones de acción
+        const headerEl = document.getElementById("sp-um-user-header")!;
+        headerEl.innerHTML =
+          `<div style="display:flex;justify-content:space-between;align-items:flex-start;">` +
+          `<div>` +
+          `<div style="font-weight:600;font-size:13px;">${escHtml(selectedUser.name)}</div>` +
+          `<div style="font-size:11px;color:#888;">${escHtml(selectedUser.correo)}` +
+          (selectedUser.cargo ? ` · ${escHtml(selectedUser.cargo)}` : "") +
+          `</div>` +
+          `</div>` +
+          `<div style="display:flex;gap:6px;">` +
+          `<button id="sp-um-edit-btn" style="padding:5px 12px;border:1px solid #1565C0;border-radius:6px;background:transparent;color:#1565C0;cursor:pointer;font-size:11px;font-weight:600;">✏️ Editar</button>` +
+          `<button id="sp-um-delete-btn" style="padding:5px 12px;border:1px solid #D32F2F;border-radius:6px;background:transparent;color:#D32F2F;cursor:pointer;font-size:11px;font-weight:600;">🗑 Desactivar</button>` +
+          `</div></div>`;
+
+        // Botón Editar
+        document
+          .getElementById("sp-um-edit-btn")
+          ?.addEventListener("click", () => {
+            showUserFormModal({
+              mode: "edit",
+              userId: selectedUid,
+              defaults: {
+                nombre: selectedUser!.name,
+                correo: selectedUser!.correo,
+              },
+              onSuccess: (_id, newName) => {
+                // Actualizar fila en la lista
+                const row = document.querySelector<HTMLElement>(
+                  `.sp-um-row[data-uid="${selectedUid}"]`,
+                );
+                if (row) {
+                  row.dataset["uname"] = newName;
+                  row.querySelector("div")!.textContent = newName;
+                }
+                // Actualizar header
+                document
+                  .getElementById("sp-um-user-header")!
+                  .querySelector("div > div > div")!.textContent = newName;
+              },
+            });
+          });
+
+        // Botón Desactivar
+        document
+          .getElementById("sp-um-delete-btn")
+          ?.addEventListener("click", () => {
+            if (
+              !confirm(
+                `¿Desactivar al usuario "${selectedUser?.name}"?\nEsto es una baja lógica, no se elimina permanentemente.`,
+              )
+            )
+              return;
+
+            const btn = document.getElementById(
+              "sp-um-delete-btn",
+            ) as HTMLButtonElement;
+            btn.disabled = true;
+            btn.textContent = "⏳ Desactivando...";
+
+            chrome.runtime.sendMessage(
+              {
+                type: "api-delete",
+                endpoint: `/usuarios/${selectedUid}`,
+                body: { usuarioBaja: sessionState.userName },
+              },
+              (r) => {
+                if (r?.success) {
+                  // Eliminar fila de la lista y limpiar el panel de detalle
+                  document
+                    .querySelector<HTMLElement>(
+                      `.sp-um-row[data-uid="${selectedUid}"]`,
+                    )
+                    ?.remove();
+                  document.getElementById("sp-um-detail")!.style.display =
+                    "none";
+                  document.getElementById("sp-um-detail-empty")!.style.display =
+                    "flex";
+                  selectedUid = 0;
+                  selectedUser = null;
+                  showSuccessToast("✅ Usuario desactivado");
+                } else {
+                  btn.disabled = false;
+                  btn.textContent = "🗑 Desactivar";
+                  showErrorToast("Error: " + (r?.error ?? "intenta de nuevo"));
+                }
+              },
+            );
+          });
+
+        // Limpiar panels y cargar el tab activo
+        document.querySelectorAll<HTMLElement>(".sp-um-panel").forEach((p) => {
+          p.innerHTML = "";
+        });
+        loadTabContent(activeTab, selectedUid);
+      };
+
+      document.querySelectorAll<HTMLElement>(".sp-um-row").forEach((row) => {
+        row.addEventListener("click", () => selectUser(row));
+      });
+    },
+  );
+}
+
 // ─── Add User Modal ───────────────────────────────────────────
 
 export function showAddUserModal(): void {
@@ -1098,98 +1937,572 @@ export function showAddUserModal(): void {
 }
 
 // ─── Add User to Group Modal ──────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function showAddUserToGroupModal(): void {
+  // Cargar lista de usuarios primero
+  chrome.runtime.sendMessage(
+    { type: "api-get", endpoint: "/usuarios" },
+    (respUsers) => {
+      const usersRaw =
+        respUsers?.success && respUsers?.data?.data ? respUsers.data.data : [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const users = usersRaw.map((u: any) => ({
+        id: u.IdUsuario,
+        name: u.Nombre,
+        correo: u.Correo,
+      }));
 
-function showAddUserToGroupModal(): void {
-  // Load groups and users in parallel
-  Promise.all([
-    new Promise<Array<{ id: number; name: string }>>((resolve) => {
-      chrome.runtime.sendMessage(
-        { type: "api-get", endpoint: "/grupos" },
-        (resp) => {
-          const data = resp?.success && resp?.data?.data ? resp.data.data : [];
-          resolve(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            data.map((g: any) => ({ id: g.IdcatGrupo, name: g.Nombre })),
+      formModal({
+        id: "sp-add-user-group-modal",
+        title: "👥 Gestionar grupos de usuario",
+        content:
+          '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Usuario</label>' +
+          userSearchHtml("sp-aug-user-search", "sp-aug-user", users) +
+          '<div style="margin-bottom:12px;"></div>' +
+          '<div id="sp-aug-groups-wrap" style="display:none;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+          '<label style="font-size:12px;font-weight:600;">Grupos</label>' +
+          '<span id="sp-aug-count" style="font-size:11px;color:#1976D2;"></span>' +
+          "</div>" +
+          '<div id="sp-aug-list" style="max-height:260px;overflow-y:auto;border:1px solid #eee;border-radius:6px;padding:8px;"></div>' +
+          "</div>" +
+          '<div id="sp-aug-loading" style="display:none;text-align:center;padding:16px;color:#888;font-size:13px;">' +
+          '<span class="sp-spinner" style="margin-right:6px;"></span>Cargando grupos...</div>',
+        submitText: "Guardar cambios",
+        submitColor: "#1976D2",
+        maxWidth: "440px",
+        onReady: () => {
+          initUserSearch("sp-aug-user-search", "sp-aug-user", (userId) => {
+            if (!userId) return;
+            const wrap = document.getElementById("sp-aug-groups-wrap")!;
+            const loading = document.getElementById("sp-aug-loading")!;
+            const list = document.getElementById("sp-aug-list")!;
+            const countEl = document.getElementById("sp-aug-count")!;
+            wrap.style.display = "none";
+            loading.style.display = "block";
+            list.innerHTML = "";
+
+            // Cargar todos los grupos + grupos actuales del usuario en paralelo
+            Promise.all([
+              new Promise<Array<{ IdcatGrupo: number; Nombre: string }>>(
+                (res) => {
+                  chrome.runtime.sendMessage(
+                    { type: "api-get", endpoint: "/grupos" },
+                    (r) =>
+                      res(
+                        r?.success && Array.isArray(r.data?.data)
+                          ? r.data.data
+                          : Array.isArray(r.data)
+                            ? r.data
+                            : [],
+                      ),
+                  );
+                },
+              ),
+              new Promise<Array<{ IdcatGrupo: number }>>((res) => {
+                chrome.runtime.sendMessage(
+                  { type: "api-get", endpoint: `/usuarios/${userId}/grupos` },
+                  (r) =>
+                    res(
+                      r?.success && Array.isArray(r.data?.data)
+                        ? r.data.data
+                        : Array.isArray(r.data)
+                          ? r.data
+                          : [],
+                    ),
+                );
+              }),
+            ]).then(([allGroups, userGroups]) => {
+              loading.style.display = "none";
+              wrap.style.display = "block";
+
+              const activeIds = new Set(userGroups.map((g) => g.IdcatGrupo));
+
+              const updateCount = () => {
+                const total = document.querySelectorAll<HTMLInputElement>(
+                  ".sp-aug-chk:checked",
+                ).length;
+                countEl.textContent =
+                  total + " seleccionado" + (total !== 1 ? "s" : "");
+              };
+
+              list.innerHTML = allGroups
+                .map((g) => {
+                  const chk = activeIds.has(g.IdcatGrupo) ? "checked" : "";
+                  return (
+                    '<label style="display:flex;align-items:center;gap:8px;padding:6px 4px;cursor:pointer;' +
+                    'border-radius:4px;border-bottom:1px solid #f5f5f5;">' +
+                    `<input type="checkbox" class="sp-aug-chk" data-gid="${g.IdcatGrupo}" ${chk} ` +
+                    'style="width:15px;height:15px;cursor:pointer;accent-color:#1976D2;">' +
+                    `<span style="font-size:13px;font-weight:500;">${escHtml(g.Nombre)}</span>` +
+                    "</label>"
+                  );
+                })
+                .join("");
+
+              list
+                .querySelectorAll<HTMLInputElement>(".sp-aug-chk")
+                .forEach((ch) => {
+                  ch.addEventListener("change", updateCount);
+                });
+              updateCount();
+            });
+          });
+        },
+        onSubmit: (api) => {
+          const userId = (
+            document.getElementById("sp-aug-user") as HTMLInputElement
+          )?.value;
+          if (!userId) {
+            showErrorToast("Selecciona un usuario");
+            return;
+          }
+
+          const checks =
+            document.querySelectorAll<HTMLInputElement>(".sp-aug-chk");
+          if (!checks.length) {
+            showErrorToast(
+              "Selecciona un usuario primero para cargar sus grupos",
+            );
+            return;
+          }
+
+          const grupos: number[] = [];
+          checks.forEach((ch) => {
+            if (ch.checked) grupos.push(parseInt(ch.dataset["gid"] ?? "0"));
+          });
+
+          api.setLoading("Guardando...");
+          chrome.runtime.sendMessage(
+            {
+              type: "api-put",
+              endpoint: `/usuarios/${userId}/grupos`,
+              body: { grupos, usuarioModif: sessionState.userName },
+            },
+            (resp) => {
+              api.close();
+              if (resp?.success) {
+                showSuccessToast("✅ Grupos actualizados correctamente");
+              } else {
+                showErrorToast("Error: " + (resp?.error ?? "intenta de nuevo"));
+              }
+            },
           );
         },
-      );
-    }),
-    new Promise<Array<{ id: number; name: string; correo: string }>>(
-      (resolve) => {
-        chrome.runtime.sendMessage(
-          { type: "api-get", endpoint: "/usuarios" },
-          (resp) => {
-            const data =
-              resp?.success && resp?.data?.data ? resp.data.data : [];
-            resolve(
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              data.map((u: any) => ({
-                id: u.IdUsuario,
-                name: u.Nombre,
-                correo: u.Correo,
-              })),
-            );
-          },
-        );
-      },
-    ),
-  ]).then(([groups, users]) => {
-    const groupOpts = groups
-      .map((g) => `<option value="${g.id}">${escHtml(g.name)}</option>`)
-      .join("");
-    const userOpts = users
-      .map(
-        (u) =>
-          `<option value="${u.id}">${escHtml(u.name)} (${escHtml(u.correo)})</option>`,
-      )
-      .join("");
+      });
+    },
+  );
+}
 
-    formModal({
-      id: "sp-add-user-group-modal",
-      title: "👥 Agregar usuario a grupo",
-      content:
-        '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Grupo</label>' +
-        `<select id="sp-aug-group" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:12px;box-sizing:border-box;">` +
-        `<option value="">-- Selecciona un grupo --</option>${groupOpts}</select>` +
+// ─── Agregar usuario a rol ─────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function showAddUserToRoleModal(): void {
+  // Cargar usuarios para el tab de asignación
+  chrome.runtime.sendMessage(
+    { type: "api-get", endpoint: "/usuarios" },
+    (respUsers) => {
+      const usersRaw =
+        respUsers?.success && respUsers?.data?.data ? respUsers.data.data : [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const users = usersRaw.map((u: any) => ({
+        id: u.IdUsuario,
+        name: u.Nombre,
+        correo: u.Correo,
+      }));
+
+      // ── HTML de los dos tabs ────────────────────────────────
+      const tabBar =
+        '<div style="display:flex;border-bottom:2px solid #eee;margin-bottom:16px;">' +
+        '<button id="sp-roles-tab-asignar" class="sp-roles-tab" data-tab="asignar" ' +
+        'style="flex:1;padding:8px 4px;font-size:12px;font-weight:600;border:none;background:transparent;' +
+        'cursor:pointer;border-bottom:2px solid #7B1FA2;color:#7B1FA2;margin-bottom:-2px;">👤 Asignar roles</button>' +
+        '<button id="sp-roles-tab-catalogo" class="sp-roles-tab" data-tab="catalogo" ' +
+        'style="flex:1;padding:8px 4px;font-size:12px;font-weight:600;border:none;background:transparent;' +
+        'cursor:pointer;border-bottom:2px solid transparent;color:#888;margin-bottom:-2px;">⚙️ Gestionar catálogo</button>' +
+        "</div>";
+
+      // Tab 1: asignar roles a usuario
+      const tabAsignar =
+        '<div id="sp-roles-panel-asignar">' +
         '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Usuario</label>' +
-        `<select id="sp-aug-user" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:4px;box-sizing:border-box;">` +
-        `<option value="">-- Selecciona un usuario --</option>${userOpts}</select>`,
-      submitText: "Guardar",
-      submitColor: "#1976D2",
-      maxWidth: "400px",
-      onSubmit: (api) => {
-        const groupId = (
-          document.getElementById("sp-aug-group") as HTMLSelectElement
-        )?.value;
-        const userId = (
-          document.getElementById("sp-aug-user") as HTMLSelectElement
-        )?.value;
-        if (!groupId || !userId) {
-          showErrorToast("Selecciona un grupo y un usuario");
-          return;
-        }
-        api.setLoading("Guardando...");
-        chrome.runtime.sendMessage(
-          {
-            type: "api-post",
-            endpoint: `/grupos/${groupId}/usuarios`,
-            body: { fkIdUsuario: parseInt(userId) },
-          },
-          (resp) => {
-            api.close();
-            if (resp?.success) {
-              showSuccessToast("✅ Usuario agregado al grupo");
-            } else {
-              showErrorToast(
-                "Error: " +
-                  (resp?.data?.message || resp?.error || "intenta de nuevo"),
+        userSearchHtml("sp-aur-user-search", "sp-aur-user", users) +
+        '<div style="margin-bottom:12px;"></div>' +
+        '<div id="sp-aur-roles-wrap" style="display:none;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+        '<label style="font-size:12px;font-weight:600;">Roles</label>' +
+        '<span id="sp-aur-count" style="font-size:11px;color:#7B1FA2;"></span>' +
+        "</div>" +
+        '<div id="sp-aur-list" style="max-height:220px;overflow-y:auto;border:1px solid #eee;border-radius:6px;padding:8px;"></div>' +
+        "</div>" +
+        '<div id="sp-aur-loading" style="display:none;text-align:center;padding:16px;color:#888;font-size:13px;">' +
+        '<span class="sp-spinner" style="margin-right:6px;"></span>Cargando roles...</div>' +
+        "</div>";
+
+      // Tab 2: gestionar catálogo de roles
+      const tabCatalogo =
+        '<div id="sp-roles-panel-catalogo" style="display:none;">' +
+        // Form para crear nuevo rol
+        '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:12px;margin-bottom:12px;background:#fafafa;">' +
+        '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:8px;">➕ Nuevo rol</label>' +
+        '<input id="sp-rol-nombre" type="text" placeholder="Nombre del rol *" ' +
+        'style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;' +
+        'box-sizing:border-box;margin-bottom:6px;">' +
+        '<input id="sp-rol-desc" type="text" placeholder="Descripción (opcional)" ' +
+        'style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;' +
+        'box-sizing:border-box;margin-bottom:8px;">' +
+        '<button id="sp-rol-crear-btn" type="button" ' +
+        'style="padding:7px 16px;border:none;border-radius:6px;background:#7B1FA2;color:#fff;' +
+        'font-size:12px;font-weight:600;cursor:pointer;">Crear rol</button>' +
+        '<span id="sp-rol-crear-msg" style="font-size:11px;margin-left:8px;"></span>' +
+        "</div>" +
+        // Lista de roles existentes
+        '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">Roles activos</label>' +
+        '<div id="sp-rol-lista" style="max-height:200px;overflow-y:auto;border:1px solid #eee;border-radius:6px;">' +
+        '<div style="text-align:center;padding:12px;color:#888;font-size:12px;">' +
+        '<span class="sp-spinner" style="margin-right:6px;"></span>Cargando...</div>' +
+        "</div>" +
+        "</div>";
+
+      formModal({
+        id: "sp-add-user-role-modal",
+        title: "🎭 Roles",
+        content: tabBar + tabAsignar + tabCatalogo,
+        submitText: "Guardar cambios",
+        submitColor: "#7B1FA2",
+        maxWidth: "460px",
+        onReady: () => {
+          // ── Lógica de tabs ──────────────────────────────────
+          const switchTab = (tab: string) => {
+            document
+              .querySelectorAll<HTMLElement>(".sp-roles-tab")
+              .forEach((btn) => {
+                const isActive = btn.dataset["tab"] === tab;
+                btn.style.borderBottomColor = isActive
+                  ? "#7B1FA2"
+                  : "transparent";
+                btn.style.color = isActive ? "#7B1FA2" : "#888";
+              });
+            const panelAsignar = document.getElementById(
+              "sp-roles-panel-asignar",
+            )!;
+            const panelCatalogo = document.getElementById(
+              "sp-roles-panel-catalogo",
+            )!;
+            const submitBtn = document.querySelector<HTMLButtonElement>(
+              '#sp-add-user-role-modal .sp-modal-body button[type="button"]:last-of-type',
+            );
+            panelAsignar.style.display = tab === "asignar" ? "block" : "none";
+            panelCatalogo.style.display = tab === "catalogo" ? "block" : "none";
+            // Ocultar botón guardar en tab catálogo
+            const footer = document.querySelector<HTMLElement>(
+              "#sp-add-user-role-modal .sp-modal-body > div:last-child",
+            );
+            if (footer) footer.style.display = tab === "catalogo" ? "none" : "";
+            void submitBtn;
+          };
+
+          document
+            .querySelectorAll<HTMLButtonElement>(".sp-roles-tab")
+            .forEach((btn) => {
+              btn.addEventListener("click", () => {
+                switchTab(btn.dataset["tab"] ?? "asignar");
+                if (btn.dataset["tab"] === "catalogo") cargarCatalogo();
+              });
+            });
+
+          // ── Tab 1: asignar roles ────────────────────────────
+          initUserSearch("sp-aur-user-search", "sp-aur-user", (userId) => {
+            if (!userId) return;
+            const wrap = document.getElementById("sp-aur-roles-wrap")!;
+            const loading = document.getElementById("sp-aur-loading")!;
+            const list = document.getElementById("sp-aur-list")!;
+            const countEl = document.getElementById("sp-aur-count")!;
+            wrap.style.display = "none";
+            loading.style.display = "block";
+            list.innerHTML = "";
+
+            Promise.all([
+              new Promise<
+                Array<{
+                  IdcatRol: number;
+                  Nombre: string;
+                  Descripcion: string | null;
+                }>
+              >((res) => {
+                chrome.runtime.sendMessage(
+                  { type: "api-get", endpoint: "/roles" },
+                  (r) =>
+                    res(
+                      r?.success && Array.isArray(r.data?.data)
+                        ? r.data.data
+                        : Array.isArray(r.data)
+                          ? r.data
+                          : [],
+                    ),
+                );
+              }),
+              new Promise<Array<{ IdcatRol: number }>>((res) => {
+                chrome.runtime.sendMessage(
+                  {
+                    type: "api-get",
+                    endpoint: "/usuarios/" + userId + "/roles",
+                  },
+                  (r) =>
+                    res(
+                      r?.success && Array.isArray(r.data?.data)
+                        ? r.data.data
+                        : Array.isArray(r.data)
+                          ? r.data
+                          : [],
+                    ),
+                );
+              }),
+            ]).then(([allRoles, userRoles]) => {
+              loading.style.display = "none";
+              wrap.style.display = "block";
+
+              const activeIds = new Set(userRoles.map((r) => r.IdcatRol));
+
+              const updateCount = () => {
+                const total = document.querySelectorAll<HTMLInputElement>(
+                  ".sp-aur-chk:checked",
+                ).length;
+                countEl.textContent =
+                  total + " seleccionado" + (total !== 1 ? "s" : "");
+              };
+
+              list.innerHTML = allRoles
+                .map((r) => {
+                  const chk = activeIds.has(r.IdcatRol) ? "checked" : "";
+                  const desc = r.Descripcion
+                    ? '<span style="font-size:11px;color:#888;display:block;margin-left:22px;margin-top:1px;">' +
+                      escHtml(r.Descripcion) +
+                      "</span>"
+                    : "";
+                  return (
+                    '<label style="display:flex;flex-direction:column;padding:6px 4px;cursor:pointer;' +
+                    'border-radius:4px;border-bottom:1px solid #f5f5f5;">' +
+                    '<span style="display:flex;align-items:center;gap:8px;">' +
+                    '<input type="checkbox" class="sp-aur-chk" data-rid="' +
+                    r.IdcatRol +
+                    '" ' +
+                    chk +
+                    ' style="width:15px;height:15px;cursor:pointer;accent-color:#7B1FA2;">' +
+                    '<span style="font-size:13px;font-weight:500;">' +
+                    escHtml(r.Nombre) +
+                    "</span>" +
+                    "</span>" +
+                    desc +
+                    "</label>"
+                  );
+                })
+                .join("");
+
+              list
+                .querySelectorAll<HTMLInputElement>(".sp-aur-chk")
+                .forEach((ch) => {
+                  ch.addEventListener("change", updateCount);
+                });
+              updateCount();
+            });
+          });
+
+          // ── Tab 2: gestionar catálogo ───────────────────────
+
+          const cargarCatalogo = () => {
+            const listaEl = document.getElementById("sp-rol-lista")!;
+            listaEl.innerHTML =
+              '<div style="text-align:center;padding:12px;color:#888;font-size:12px;">' +
+              '<span class="sp-spinner" style="margin-right:6px;"></span>Cargando...</div>';
+
+            chrome.runtime.sendMessage(
+              { type: "api-get", endpoint: "/roles" },
+              (r) => {
+                const roles: Array<{
+                  IdcatRol: number;
+                  Nombre: string;
+                  Descripcion: string | null;
+                }> =
+                  r?.success && Array.isArray(r.data?.data)
+                    ? r.data.data
+                    : Array.isArray(r.data)
+                      ? r.data
+                      : [];
+
+                if (!roles.length) {
+                  listaEl.innerHTML =
+                    '<div style="text-align:center;padding:12px;color:#aaa;font-size:12px;">Sin roles</div>';
+                  return;
+                }
+
+                listaEl.innerHTML = roles
+                  .map(
+                    (rol) =>
+                      '<div style="display:flex;align-items:center;justify-content:space-between;' +
+                      'padding:8px 10px;border-bottom:1px solid #f5f5f5;">' +
+                      "<div>" +
+                      '<div style="font-size:13px;font-weight:500;">' +
+                      escHtml(rol.Nombre) +
+                      "</div>" +
+                      (rol.Descripcion
+                        ? '<div style="font-size:11px;color:#888;">' +
+                          escHtml(rol.Descripcion) +
+                          "</div>"
+                        : "") +
+                      "</div>" +
+                      '<button class="sp-rol-del-btn" data-rid="' +
+                      rol.IdcatRol +
+                      '" data-rname="' +
+                      escHtml(rol.Nombre) +
+                      '" type="button" title="Eliminar rol" ' +
+                      'style="border:none;background:none;color:#D32F2F;cursor:pointer;' +
+                      'font-size:16px;padding:2px 6px;border-radius:4px;line-height:1;" ' +
+                      "onmouseover=\"this.style.background='#fdecea'\" onmouseout=\"this.style.background='none'\">🗑</button>" +
+                      "</div>",
+                  )
+                  .join("");
+
+                // Botones de eliminar
+                listaEl
+                  .querySelectorAll<HTMLButtonElement>(".sp-rol-del-btn")
+                  .forEach((btn) => {
+                    btn.addEventListener("click", () => {
+                      const rid = btn.dataset["rid"] ?? "";
+                      const rname = btn.dataset["rname"] ?? "";
+                      if (!rid) return;
+                      if (
+                        !confirm(
+                          `¿Eliminar el rol "${rname}"?\nEsto lo desactivará (baja lógica).`,
+                        )
+                      )
+                        return;
+
+                      btn.disabled = true;
+                      btn.textContent = "⏳";
+                      chrome.runtime.sendMessage(
+                        {
+                          type: "api-delete",
+                          endpoint: `/roles/${rid}`,
+                          body: { usuarioBaja: sessionState.userName },
+                        },
+                        (resp) => {
+                          if (resp?.success) {
+                            showSuccessToast("✅ Rol eliminado");
+                            cargarCatalogo(); // refrescar lista
+                          } else {
+                            btn.disabled = false;
+                            btn.textContent = "🗑";
+                            showErrorToast(
+                              "Error: " + (resp?.error ?? "intenta de nuevo"),
+                            );
+                          }
+                        },
+                      );
+                    });
+                  });
+              },
+            );
+          };
+
+          // Botón crear rol
+          document
+            .getElementById("sp-rol-crear-btn")
+            ?.addEventListener("click", () => {
+              const nombreInput = document.getElementById(
+                "sp-rol-nombre",
+              ) as HTMLInputElement;
+              const descInput = document.getElementById(
+                "sp-rol-desc",
+              ) as HTMLInputElement;
+              const msgEl = document.getElementById("sp-rol-crear-msg")!;
+              const nombre = nombreInput.value.trim();
+
+              if (!nombre) {
+                msgEl.style.color = "#D32F2F";
+                msgEl.textContent = "El nombre es requerido";
+                return;
+              }
+
+              const btn = document.getElementById(
+                "sp-rol-crear-btn",
+              ) as HTMLButtonElement;
+              btn.disabled = true;
+              btn.textContent = "Creando...";
+              msgEl.textContent = "";
+
+              chrome.runtime.sendMessage(
+                {
+                  type: "api-post",
+                  endpoint: "/roles",
+                  body: {
+                    nombre: nombre,
+                    descripcion: descInput.value.trim() || null,
+                    usuarioAlta: sessionState.userName,
+                  },
+                },
+                (resp) => {
+                  btn.disabled = false;
+                  btn.textContent = "Crear rol";
+                  if (resp?.success) {
+                    msgEl.style.color = "#2E7D32";
+                    msgEl.textContent = "✅ Rol creado";
+                    nombreInput.value = "";
+                    descInput.value = "";
+                    cargarCatalogo(); // refrescar lista
+                  } else {
+                    msgEl.style.color = "#D32F2F";
+                    msgEl.textContent =
+                      "Error: " + (resp?.error ?? "intenta de nuevo");
+                  }
+                },
               );
-            }
-          },
-        );
-      },
-    });
-  });
+            });
+        },
+        onSubmit: (api) => {
+          // Solo aplica en tab de asignación
+          const userId = (
+            document.getElementById("sp-aur-user") as HTMLInputElement
+          )?.value;
+          if (!userId) {
+            showErrorToast("Selecciona un usuario");
+            return;
+          }
+
+          const checks =
+            document.querySelectorAll<HTMLInputElement>(".sp-aur-chk");
+          if (!checks.length) {
+            showErrorToast(
+              "Selecciona un usuario primero para cargar sus roles",
+            );
+            return;
+          }
+
+          const roles: number[] = [];
+          checks.forEach((ch) => {
+            if (ch.checked) roles.push(parseInt(ch.dataset["rid"] ?? "0"));
+          });
+
+          api.setLoading("Guardando...");
+          chrome.runtime.sendMessage(
+            {
+              type: "api-put",
+              endpoint: "/usuarios/" + userId + "/roles",
+              body: { roles, usuarioModif: sessionState.userName },
+            },
+            (resp) => {
+              api.close();
+              if (resp?.success) {
+                showSuccessToast("✅ Roles actualizados correctamente");
+              } else {
+                showErrorToast("Error: " + (resp?.error ?? "intenta de nuevo"));
+              }
+            },
+          );
+        },
+      });
+    },
+  );
 }
 
 // ─── Init Manager View ────────────────────────────────────────
@@ -1210,7 +2523,7 @@ export function initManagerView(): void {
     if (!grid) return;
     if (document.getElementById("sp-manager-panel")) return;
     loading = true;
-    loadManagerPanel(grid, groups, canDrag);
+    _loadManagerPanel(grid, groups, canDrag);
   };
 
   const interval = setInterval(() => {
@@ -1228,7 +2541,7 @@ export function initManagerView(): void {
     if (!grid) return;
     if (document.getElementById("sp-manager-panel")) return;
     loading = true;
-    loadManagerPanel(grid, groups, canDrag);
+    _loadManagerPanel(grid, groups, canDrag);
   }, 500);
 
   const mgrObserver = new MutationObserver(() => {

@@ -8,10 +8,12 @@
     "build:dev": "webpack --mode development",
     "watch": "webpack --mode development --watch",
     "type-check": "tsc --noEmit",
-    "lint": "eslint \"src/**/*.ts\""
+    "lint": "eslint \"src/**/*.{ts,tsx}\""
   },
   "devDependencies": {
     "@types/chrome": "0.0.270",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
     "@typescript-eslint/eslint-plugin": "7.18.0",
     "@typescript-eslint/parser": "7.18.0",
     "copy-webpack-plugin": "12.0.2",
@@ -20,5 +22,10 @@
     "typescript": "5.5.4",
     "webpack": "5.93.0",
     "webpack-cli": "5.1.4"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.6"
   }
 }

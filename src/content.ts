@@ -26,7 +26,10 @@ import SP_RowColors from "./features/row-colors";
 import SP_Reports from "./features/reports";
 import SP_DetailView from "./features/detail-view";
 
-import { showSuccessToast, showErrorToast, spinnerHTML } from "./components";
+import { spinnerHTML } from "./components";
+import { showSuccessToast, showErrorToast } from "./react/store/toastBridge";
+import { initToastRoot } from "./react/components/Toast";
+import { useSessionStore } from "./react/store/sessionStore";
 import SP_Modal from "./lib/modal-builder";
 import { injectDashboardButton } from "./features/dashboard";
 import { showConfigModal } from "./features/config-modal";
@@ -65,6 +68,7 @@ type JsonObject = Record<string, any>;
 
 // ─── Boot ─────────────────────────────────────────────────────
 injectStyles();
+initToastRoot(); // Activa el sistema de toasts React
 SP_Log.info("Extension loading...");
 
 // Initialize header button registry (registers sp-config-btn, sp-update-btn, sp-dba-info-btn)
@@ -320,6 +324,8 @@ void SP_Session.checkSession().then((result: unknown) => {
   _userConfig = ss.userConfig;
   _workSchedule = ss.workSchedule;
   _sessionProfileId = ss.profileId;
+  // Hidratar el store de React con el estado de sesión actual
+  useSessionStore.getState().hydrateSession(ss);
   // Load team area then start extension
   chrome.storage.local.get("teamArea", (r: JsonObject) => {
     if (r["teamArea"]) _currentTeamArea = r["teamArea"] as string;

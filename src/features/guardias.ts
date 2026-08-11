@@ -3,8 +3,10 @@
 // ============================================================
 
 import { MONTH_NAMES } from "../config";
-import { showSuccessToast, showErrorToast } from "../components";
 import { infoModal } from "../lib/modal-builder";
+import { showSuccessToast, showErrorToast } from "../react/store/toastBridge";
+import { mountGuardiasPanel } from "../react/features/Guardias";
+import { unmountReact } from "../react/mount";
 import type { GuardiaEntry, GuardiaSolicitud } from "../types";
 
 // ─── State ────────────────────────────────────────────────────
@@ -35,7 +37,7 @@ const _state: GuardiasState = {
 function apiMessage<T = unknown>(
   type: string,
   endpoint: string,
-  body?: unknown
+  body?: unknown,
 ): Promise<T | null> {
   return new Promise((resolve) => {
     const msg: Record<string, unknown> = { type, endpoint };
@@ -44,7 +46,7 @@ function apiMessage<T = unknown>(
       msg,
       (resp: { success: boolean; data?: T } | undefined) => {
         resolve(resp?.success ? (resp.data ?? null) : null);
-      }
+      },
     );
   });
 }
@@ -58,7 +60,7 @@ export interface LoadGuardiasOptions {
 
 export function loadGuardias(
   offset: number,
-  options: LoadGuardiasOptions = {}
+  options: LoadGuardiasOptions = {},
 ): void {
   _state.monthOffset = offset;
   _state.currentUserName = options.currentUserName ?? _state.currentUserName;
@@ -66,7 +68,14 @@ export function loadGuardias(
 
   const gContent = document.getElementById("sp-dba-guardias-content");
   if (!gContent) return;
-  void _loadGuardiasInto(gContent, offset);
+  mountGuardiasPanel(
+    "sp-dba-guardias-content",
+    {
+      name: _state.currentUserName,
+      userId: _state.currentUserId,
+    },
+    offset,
+  );
 }
 
 export function loadGuardiasInto(
@@ -75,36 +84,38 @@ export function loadGuardiasInto(
   nextBtn: HTMLElement | null,
   _titleEl: HTMLElement | null,
   offset: number,
-  options: LoadGuardiasOptions = {}
+  options: LoadGuardiasOptions = {},
 ): void {
   _state.currentUserName = options.currentUserName ?? _state.currentUserName;
   _state.currentUserId = options.currentUserId ?? _state.currentUserId;
   _state.monthOffset = offset;
-  _state._contentEl = contentEl;
-  _state._prevBtn = prevBtn ?? undefined;
-  _state._nextBtn = nextBtn ?? undefined;
 
-  if (prevBtn) {
-    prevBtn.onclick = () => {
-      _state.monthOffset--;
-      void _loadGuardiasInto(contentEl, _state.monthOffset);
-    };
-  }
-  if (nextBtn) {
-    nextBtn.onclick = () => {
-      _state.monthOffset++;
-      void _loadGuardiasInto(contentEl, _state.monthOffset);
-    };
-  }
+  // Asegurar ID en el contenedor para que React pueda montarse
+  if (!contentEl.id) contentEl.id = "sp-guardias-react-container";
 
-  void _loadGuardiasInto(contentEl, _state.monthOffset);
+  // Desmontar root previo si existe (evita el problema de nodo desconectado
+  // cuando el modal vanilla recrea el DOM al reabrirse)
+  unmountReact(contentEl.id);
+
+  // Los botones de nav externos se ocultan — React los gestiona internamente
+  if (prevBtn) (prevBtn as HTMLElement).style.display = "none";
+  if (nextBtn) (nextBtn as HTMLElement).style.display = "none";
+
+  mountGuardiasPanel(
+    contentEl.id,
+    {
+      name: _state.currentUserName,
+      userId: _state.currentUserId,
+    },
+    offset,
+  );
 }
 
 // ─── Internal loader ─────────────────────────────────────────
 
 async function _loadGuardiasInto(
   gContent: HTMLElement,
-  offset: number
+  offset: number,
 ): Promise<void> {
   gContent.innerHTML =
     '<div style="text-align:center;color:#888;padding:20px;">Cargando...</div>';
@@ -113,7 +124,7 @@ async function _loadGuardiasInto(
   const targetMonth = new Date(
     today.getFullYear(),
     today.getMonth() + offset,
-    1
+    1,
   );
   const year = targetMonth.getFullYear();
   const month = targetMonth.getMonth();
@@ -122,17 +133,24 @@ async function _loadGuardiasInto(
 
   const resp = await apiMessage<{ data?: unknown[] | { data?: unknown[] } }>(
     "api-get",
-    `/guardias?mes=${month + 1}&anio=${year}`
+    `/guardias?mes=${month + 1}&anio=${year}`,
   );
 
   const rawGuardias = Array.isArray(resp?.data)
     ? resp!.data
-    : (resp?.data as { data?: unknown[] })?.data ?? [];
+    : ((resp?.data as { data?: unknown[] })?.data ?? []);
 
   const entries: Record<string, string> = {};
   const rawEntries: GuardiaEntry[] = [];
 
-  (rawGuardias as Array<{ Fecha?: string; UsuarioNombre?: string; FK_IdUsuario?: number; IdControlGuardia?: number }>).forEach((g) => {
+  (
+    rawGuardias as Array<{
+      Fecha?: string;
+      UsuarioNombre?: string;
+      FK_IdUsuario?: number;
+      IdControlGuardia?: number;
+    }>
+  ).forEach((g) => {
     const date = g.Fecha ? g.Fecha.split("T")[0] : "";
     const name = g.UsuarioNombre ?? "";
     const userId = String(g.FK_IdUsuario ?? "");
@@ -149,17 +167,15 @@ async function _loadGuardiasInto(
 
   _state.entries = entries;
   _state.rawEntries = rawEntries;
-  _state.myDays = rawEntries.filter(
-    (e) => e.userId === _state.currentUserId
-  );
+  _state.myDays = rawEntries.filter((e) => e.userId === _state.currentUserId);
 
   const solResp = await apiMessage<{ data?: unknown[] | { data?: unknown[] } }>(
     "api-get",
-    "/guardias/solicitudes?pendientes=true"
+    "/guardias/solicitudes?pendientes=true",
   );
   const rawPending = Array.isArray(solResp?.data)
     ? solResp!.data
-    : (solResp?.data as { data?: unknown[] })?.data ?? [];
+    : ((solResp?.data as { data?: unknown[] })?.data ?? []);
 
   renderCalendar(
     gContent,
@@ -169,7 +185,7 @@ async function _loadGuardiasInto(
     month,
     lastDay,
     todayStr,
-    rawPending as GuardiaSolicitud[]
+    rawPending as GuardiaSolicitud[],
   );
 }
 
@@ -183,7 +199,7 @@ function renderCalendar(
   month: number,
   lastDay: number,
   todayStr: string,
-  pending: GuardiaSolicitud[]
+  pending: GuardiaSolicitud[],
 ): void {
   const currentUserName = _state.currentUserName;
   const firstDayOfWeek = new Date(year, month, 1).getDay();
@@ -195,7 +211,7 @@ function renderCalendar(
   ];
   dias.forEach((d, i) => {
     headerParts.push(
-      `<div style="text-align:center;font-size:10px;font-weight:600;color:${i >= 5 ? "#E65100" : "#888"};padding:4px;">${d}</div>`
+      `<div style="text-align:center;font-size:10px;font-weight:600;color:${i >= 5 ? "#E65100" : "#888"};padding:4px;">${d}</div>`,
     );
   });
   headerParts.push("</div>");
@@ -222,9 +238,7 @@ function renderCalendar(
     const isOtherDay = entry && !isMyDay;
 
     const pendingForDay = rawEntry
-      ? pending.find(
-          (p) => p.FK_IdControlGuardiaSolicitado === rawEntry.id
-        )
+      ? pending.find((p) => p.FK_IdControlGuardiaSolicitado === rawEntry.id)
       : null;
     const hasPendingIndicator =
       pendingForDay && rawEntry && rawEntry.userId === _state.currentUserId;
@@ -232,17 +246,17 @@ function renderCalendar(
     const bgColor = isToday
       ? "#E3F2FD"
       : isMyDay
-      ? "#E8F5E9"
-      : isWeekend
-      ? "#FFF3E0"
-      : "#f9f9f9";
+        ? "#E8F5E9"
+        : isWeekend
+          ? "#FFF3E0"
+          : "#f9f9f9";
     const borderColor = isToday
       ? "#1976D2"
       : isMyDay
-      ? "#4CAF50"
-      : hasPendingIndicator
-      ? "#FF8F00"
-      : "#e0e0e0";
+        ? "#4CAF50"
+        : hasPendingIndicator
+          ? "#FF8F00"
+          : "#e0e0e0";
     const firstName = entry ? entry.split(" ")[0] : "";
     const clickable = isOtherDay ? "cursor:pointer;" : "";
     const dataAttrs = rawEntry
@@ -254,10 +268,10 @@ function renderCalendar(
 
     calParts.push(
       `<div class="sp-guardia-day" ${dataAttrs} style="padding:4px 6px;min-height:50px;background:${bgColor};border:1px solid ${borderColor};border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;${clickable}">` +
-      `<div style="font-size:13px;font-weight:${isToday ? "700" : "600"};color:${isToday ? "#1976D2" : isWeekend ? "#E65100" : "#333"};">${day}</div>` +
-      `<div style="font-size:9px;color:#555;text-align:center;margin-top:2px;${isMyDay ? "font-weight:700;color:#2E7D32;" : ""}">${firstName}</div>` +
-      pendingDot +
-      "</div>"
+        `<div style="font-size:13px;font-weight:${isToday ? "700" : "600"};color:${isToday ? "#1976D2" : isWeekend ? "#E65100" : "#333"};">${day}</div>` +
+        `<div style="font-size:9px;color:#555;text-align:center;margin-top:2px;${isMyDay ? "font-weight:700;color:#2E7D32;" : ""}">${firstName}</div>` +
+        pendingDot +
+        "</div>",
     );
   }
   calParts.push("</div>");
@@ -269,8 +283,10 @@ function renderCalendar(
 
   // Rebind nav buttons
   const targetEl = _state._contentEl ?? gContent;
-  const prevBtn = _state._prevBtn ?? document.getElementById("sp-dba-guardias-prev");
-  const nextBtn = _state._nextBtn ?? document.getElementById("sp-dba-guardias-next");
+  const prevBtn =
+    _state._prevBtn ?? document.getElementById("sp-dba-guardias-prev");
+  const nextBtn =
+    _state._nextBtn ?? document.getElementById("sp-dba-guardias-next");
   if (prevBtn) {
     prevBtn.onclick = () => {
       _state.monthOffset--;
@@ -285,27 +301,32 @@ function renderCalendar(
   }
 
   // Click handlers on day cells
-  gContent.querySelectorAll<HTMLElement>(".sp-guardia-day[data-guardia-id]").forEach((cell) => {
-    cell.addEventListener("click", () => {
-      const guardiaId = parseInt(cell.dataset["guardiaId"] ?? "0");
-      const guardiaDate = cell.dataset["guardiaDate"] ?? "";
-      const guardiaName = cell.dataset["guardiaName"] ?? "";
-      const rawEntry = _state.rawEntries.find((e) => e.id === guardiaId);
-      if (!rawEntry) return;
+  gContent
+    .querySelectorAll<HTMLElement>(".sp-guardia-day[data-guardia-id]")
+    .forEach((cell) => {
+      cell.addEventListener("click", () => {
+        const guardiaId = parseInt(cell.dataset["guardiaId"] ?? "0");
+        const guardiaDate = cell.dataset["guardiaDate"] ?? "";
+        const guardiaName = cell.dataset["guardiaName"] ?? "";
+        const rawEntry = _state.rawEntries.find((e) => e.id === guardiaId);
+        if (!rawEntry) return;
 
-      const pendingForMe = pending.find(
-        (p) => p.FK_IdControlGuardiaSolicitado === guardiaId
-      );
-      if (rawEntry.userId === _state.currentUserId && pendingForMe) {
-        showAcceptModal(pendingForMe, guardiaDate, guardiaName);
-        return;
-      }
+        const pendingForMe = pending.find(
+          (p) => p.FK_IdControlGuardiaSolicitado === guardiaId,
+        );
+        if (rawEntry.userId === _state.currentUserId && pendingForMe) {
+          showAcceptModal(pendingForMe, guardiaDate, guardiaName);
+          return;
+        }
 
-      if (rawEntry.userId !== _state.currentUserId && _state.myDays.length > 0) {
-        showSwapModal(guardiaId, guardiaDate, guardiaName);
-      }
+        if (
+          rawEntry.userId !== _state.currentUserId &&
+          _state.myDays.length > 0
+        ) {
+          showSwapModal(guardiaId, guardiaDate, guardiaName);
+        }
+      });
     });
-  });
 }
 
 // ─── Swap Request Modal ───────────────────────────────────────
@@ -313,7 +334,7 @@ function renderCalendar(
 function showSwapModal(
   targetGuardiaId: number,
   targetDate: string,
-  targetName: string
+  targetName: string,
 ): void {
   const myDayOpts = _state.myDays
     .map((d) => `<option value="${d.id}">${d.date}</option>`)
@@ -335,17 +356,34 @@ function showSwapModal(
     maxWidth: "420px",
   });
 
-  document.getElementById("sp-guardia-cancel")?.addEventListener("click", m.close);
+  document
+    .getElementById("sp-guardia-cancel")
+    ?.addEventListener("click", m.close);
 
   document.getElementById("sp-guardia-send")?.addEventListener("click", () => {
-    const myDayId = (document.getElementById("sp-guardia-my-day") as HTMLSelectElement)?.value;
-    const motivo = (document.getElementById("sp-guardia-motivo") as HTMLTextAreaElement)?.value.trim();
+    const myDayId = (
+      document.getElementById("sp-guardia-my-day") as HTMLSelectElement
+    )?.value;
+    const motivo = (
+      document.getElementById("sp-guardia-motivo") as HTMLTextAreaElement
+    )?.value.trim();
 
-    if (!myDayId) { showErrorToast("Selecciona uno de tus días"); return; }
-    if (!motivo) { showErrorToast("Escribe un motivo"); return; }
+    if (!myDayId) {
+      showErrorToast("Selecciona uno de tus días");
+      return;
+    }
+    if (!motivo) {
+      showErrorToast("Escribe un motivo");
+      return;
+    }
 
-    const sendBtn = document.getElementById("sp-guardia-send") as HTMLButtonElement | null;
-    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = "⏳ Enviando..."; }
+    const sendBtn = document.getElementById(
+      "sp-guardia-send",
+    ) as HTMLButtonElement | null;
+    if (sendBtn) {
+      sendBtn.disabled = true;
+      sendBtn.textContent = "⏳ Enviando...";
+    }
 
     chrome.runtime.sendMessage(
       {
@@ -370,7 +408,7 @@ function showSwapModal(
         } else {
           showErrorToast(`Error al enviar: ${resp?.error ?? "revisa consola"}`);
         }
-      }
+      },
     );
   });
 }
@@ -380,15 +418,18 @@ function showSwapModal(
 function showAcceptModal(
   solicitud: GuardiaSolicitud,
   targetDate: string,
-  _targetName: string
+  _targetName: string,
 ): void {
-  const solicitanteName = (solicitud["SolicitanteNombre"] as string | undefined) ?? "Alguien";
+  const solicitanteName =
+    (solicitud["SolicitanteNombre"] as string | undefined) ?? "Alguien";
   const ofrecidoEntry = _state.rawEntries.find(
-    (e) => e.id === (solicitud["FK_IdControlGuardiaOfrecido"] as number | undefined)
+    (e) =>
+      e.id === (solicitud["FK_IdControlGuardiaOfrecido"] as number | undefined),
   );
   const ofrecidoDate =
     ofrecidoEntry?.date ??
-    ((solicitud["FechaOfrecida"] as string | undefined)?.split("T")[0] ?? "?");
+    (solicitud["FechaOfrecida"] as string | undefined)?.split("T")[0] ??
+    "?";
 
   const m = infoModal({
     id: "sp-guardia-accept-modal",
@@ -407,33 +448,42 @@ function showAcceptModal(
     maxWidth: "420px",
   });
 
-  document.getElementById("sp-guardia-reject")?.addEventListener("click", m.close);
+  document
+    .getElementById("sp-guardia-reject")
+    ?.addEventListener("click", m.close);
 
-  document.getElementById("sp-guardia-accept")?.addEventListener("click", () => {
-    const acceptBtn = document.getElementById("sp-guardia-accept") as HTMLButtonElement | null;
-    if (acceptBtn) { acceptBtn.disabled = true; acceptBtn.textContent = "⏳ Procesando..."; }
-
-    const solicitudId = solicitud["IdSolicitudCambio"] as number | undefined;
-    chrome.runtime.sendMessage(
-      {
-        type: "api-put",
-        endpoint: `/guardias/solicitud/${solicitudId ?? 0}/aceptar`,
-        body: { usuarioModificacion: "EXTENSION" },
-      },
-      (resp: { success: boolean; error?: string } | undefined) => {
-        m.close();
-        if (resp?.success) {
-          showSuccessToast("Cambio de guardia aceptado");
-          loadGuardias(_state.monthOffset, {
-            currentUserName: _state.currentUserName,
-            currentUserId: _state.currentUserId,
-          });
-        } else {
-          showErrorToast(`Error al aceptar: ${resp?.error ?? "unknown"}`);
-        }
+  document
+    .getElementById("sp-guardia-accept")
+    ?.addEventListener("click", () => {
+      const acceptBtn = document.getElementById(
+        "sp-guardia-accept",
+      ) as HTMLButtonElement | null;
+      if (acceptBtn) {
+        acceptBtn.disabled = true;
+        acceptBtn.textContent = "⏳ Procesando...";
       }
-    );
-  });
+
+      const solicitudId = solicitud["IdSolicitudCambio"] as number | undefined;
+      chrome.runtime.sendMessage(
+        {
+          type: "api-put",
+          endpoint: `/guardias/solicitud/${solicitudId ?? 0}/aceptar`,
+          body: { usuarioModificacion: "EXTENSION" },
+        },
+        (resp: { success: boolean; error?: string } | undefined) => {
+          m.close();
+          if (resp?.success) {
+            showSuccessToast("Cambio de guardia aceptado");
+            loadGuardias(_state.monthOffset, {
+              currentUserName: _state.currentUserName,
+              currentUserId: _state.currentUserId,
+            });
+          } else {
+            showErrorToast(`Error al aceptar: ${resp?.error ?? "unknown"}`);
+          }
+        },
+      );
+    });
 }
 
 const SP_Guardias = { load: loadGuardias, loadInto: loadGuardiasInto };

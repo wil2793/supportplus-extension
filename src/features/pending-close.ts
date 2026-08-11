@@ -7,15 +7,12 @@ import { SP_CONFIG } from "../config";
 import SP_Modal from "../lib/modal-builder";
 import SP_Session from "./session";
 import { spHeaders, spGetHeaders } from "../lib/sp-fetch";
-import { showSuccessToast, showErrorToast, spinnerHTML } from "../components";
+import { showSuccessToast, showErrorToast } from "../react/store/toastBridge";
+import { spinnerHTML } from "../components";
 import type { WorkSchedule } from "../types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type JsonObject = Record<string, any>;
-
-
-
-
 
 let _shown = false;
 

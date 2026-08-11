@@ -46,12 +46,21 @@ export async function syncFromAPI(): Promise<void> {
   if (currentEmail && userData?.idUsuario) {
     try {
       const cfgResp = await apiGet<BackendUserConfigResponse>(
-        `/configuracion/usuario/${userData.idUsuario}`
+        `/configuracion/usuario/${userData.idUsuario}`,
       );
       if (cfgResp.data) {
+        // La blacklist viene como array de objetos { idUsuario, nombre, correo }
+        // o como array de números (formato legacy). Normalizamos a number[].
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rawBlacklist: any[] = cfgResp.data.blacklist ?? [];
+        const blacklistIds: number[] = rawBlacklist.map((item) =>
+          typeof item === "number"
+            ? item
+            : (item as { idUsuario: number }).idUsuario,
+        );
         userConfig = {
           onlyWithTickets: !!cfgResp.data.MostrarSoloConTickets,
-          blacklist: cfgResp.data.blacklist ?? [],
+          blacklist: blacklistIds as unknown as string[],
         };
       }
     } catch {
@@ -84,7 +93,7 @@ export async function syncFromAPI(): Promise<void> {
   });
 
   console.log(
-    `[SP] Synced: ${Object.keys(d.usersMap).length} users, v: ${d.latestVersion}`
+    `[SP] Synced: ${Object.keys(d.usersMap).length} users, v: ${d.latestVersion}`,
   );
 }
 

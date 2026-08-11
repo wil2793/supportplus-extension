@@ -5,18 +5,15 @@
 import { GROUP_INFO } from "../config";
 import SP_Modal from "../lib/modal-builder";
 import {
-
-
   createHeaderButton,
   showSuccessToast,
   showErrorToast,
 } from "../components";
 import { spGetHeaders } from "../lib/sp-fetch";
+import { openDashboardModal } from "../react/features/Dashboard";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type JsonObject = Record<string, any>;
-
-
 
 const DASHBOARD_BTN_ID = "sp-dashboard-btn";
 const DASHBOARD_CACHE_KEY = "sp_dashboard_cache";
@@ -145,7 +142,8 @@ export async function generateDashboard(
       const data = (json["data"] ?? json) as JsonObject;
       const tickets = (data["content"] ?? []) as import("../types").SpTicket[];
       tickets.forEach((t) => {
-        if ((t as import("../types").SpTicket).ticketStatusName === "Cerrado") allTickets.push(t as import("../types").SpTicket);
+        if ((t as import("../types").SpTicket).ticketStatusName === "Cerrado")
+          allTickets.push(t as import("../types").SpTicket);
       });
       btn.innerHTML = `<span class="sp-btn-icon">⏳</span><span class="sp-btn-label"> ${allTickets.length} tickets...</span>`;
       if (page >= ((data["totalPages"] as number) || 1) - 1) break;
@@ -251,44 +249,8 @@ export async function handleDashboardClick(
   currentUserGroups: number[],
   getTeamGroupId: () => number,
 ): Promise<void> {
-  const btn = document.getElementById(
-    DASHBOARD_BTN_ID,
-  ) as HTMLButtonElement | null;
-  if (!btn) return;
-  if (currentUserGroups.length > 1 && !_data?.length) {
-    const opts = currentUserGroups
-      .map((gId) => {
-        const g = GROUP_INFO.find((gi) => gi.id === gId) ?? {
-          id: gId,
-          name: `Grupo ${gId}`,
-        };
-        return `<option value="${g.id}">${g.name}</option>`;
-      })
-      .join("");
-    const mm = SP_Modal.info({
-      id: "sp-dashboard-group-modal",
-      title: "📊 Generar Dashboard",
-      content: `<p style="font-size:0.85rem;color:#555;margin:0 0 12px;">Selecciona el grupo:</p><select id="sp-dash-group-select" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:12px;">${opts}</select><button id="sp-dash-group-confirm" style="width:100%;padding:10px;border:none;border-radius:6px;background:#00796B;color:#fff;cursor:pointer;font-weight:600;">Generar</button>`,
-      maxWidth: "400px",
-    });
-    (
-      document.getElementById("sp-dash-group-confirm") as HTMLButtonElement
-    ).addEventListener("click", () => {
-      const selG = parseInt(
-        (document.getElementById("sp-dash-group-select") as HTMLSelectElement)
-          .value,
-      );
-      mm.close();
-      _data = null;
-      void generateDashboard(btn, selG);
-    });
-    return;
-  }
-  if (_data?.length) {
-    showDashboardModal(currentUserGroups, getTeamGroupId);
-    return;
-  }
-  void generateDashboard(btn, getTeamGroupId());
+  void getTeamGroupId; // referencia mantenida para compatibilidad de firma
+  openDashboardModal(currentUserGroups, GROUP_INFO);
 }
 
 // ─── Button injector ──────────────────────────────────────────

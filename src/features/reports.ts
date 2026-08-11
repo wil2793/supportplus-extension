@@ -3,10 +3,22 @@
 // ============================================================
 
 import { SP_CONFIG } from "../config";
-import { escHtml, createHeaderButton, showErrorToast, showLoadingToast, showSuccessToast } from "../components";
+import {
+  escHtml,
+  createHeaderButton,
+  showErrorToast,
+  showLoadingToast,
+  showSuccessToast,
+} from "../components";
 import { infoModal } from "../lib/modal-builder";
-import { getSpToken, getMondayToken, getMondayBoardId, mondayQuery } from "../lib/api";
+import {
+  getSpToken,
+  getMondayToken,
+  getMondayBoardId,
+  mondayQuery,
+} from "../lib/api";
 import { state as sessionState } from "./session";
+import { openReportsModal } from "../react/features/Reports";
 
 const REPORT_BTN_ID = "sp-report-btn";
 const MONDAY_STATS_BTN_ID = "sp-monday-stats-btn";
@@ -29,14 +41,15 @@ export function injectReportButton(): void {
     icon: "📥",
     label: "Reporte Excel",
     color: "#1565C0",
-    onClick: () => void handleReportClick(),
+    onClick: () => openReportsModal(),
   });
   refBtn.parentElement?.insertBefore(btn, refBtn.nextSibling);
 }
 
 // ─── Report Modal ─────────────────────────────────────────────
 
-async function handleReportClick(): Promise<void> {
+// Función vanilla conservada como fallback. La ruta activa es openReportsModal().
+export async function _handleReportClick(): Promise<void> {
   if (_generating) return;
 
   const stored = await new Promise<{
@@ -44,9 +57,8 @@ async function handleReportClick(): Promise<void> {
     userEmail?: string;
     groupNames?: Record<string, string>;
   }>((resolve) => {
-    chrome.storage.local.get(
-      ["usersMap", "userEmail", "groupNames"],
-      (r) => resolve(r as typeof stored)
+    chrome.storage.local.get(["usersMap", "userEmail", "groupNames"], (r) =>
+      resolve(r as typeof stored),
     );
   });
 
@@ -75,7 +87,7 @@ async function handleReportClick(): Promise<void> {
 
   const monthOpts = SP_CONFIG.MONTH_NAMES.map(
     (m, i) =>
-      `<option value="${i}"${i === currentMonth ? " selected" : ""}>${m}</option>`
+      `<option value="${i}"${i === currentMonth ? " selected" : ""}>${m}</option>`,
   ).join("");
 
   const yearOpts = Array.from({ length: 4 }, (_, i) => {
@@ -86,7 +98,7 @@ async function handleReportClick(): Promise<void> {
   const groupCheckboxes = groupOptions
     .map(
       (g) =>
-        `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;font-size:12px;"><input type="checkbox" value="${g.id}" checked> ${escHtml(g.name)}</label>`
+        `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;font-size:12px;"><input type="checkbox" value="${g.id}" checked> ${escHtml(g.name)}</label>`,
     )
     .join("");
 
@@ -118,21 +130,39 @@ async function handleReportClick(): Promise<void> {
   const overlay = m.overlay;
 
   // Toggle month/range view
-  overlay.querySelectorAll<HTMLInputElement>('[name="sp-rpt-mode"]').forEach((radio) => {
-    radio.addEventListener("change", () => {
-      const monthSection = document.getElementById("sp-rpt-month-section");
-      const rangeSection = document.getElementById("sp-rpt-range-section");
-      if (monthSection) monthSection.style.display = radio.value === "month" ? "flex" : "none";
-      if (rangeSection) rangeSection.style.display = radio.value === "range" ? "block" : "none";
+  overlay
+    .querySelectorAll<HTMLInputElement>('[name="sp-rpt-mode"]')
+    .forEach((radio) => {
+      radio.addEventListener("change", () => {
+        const monthSection = document.getElementById("sp-rpt-month-section");
+        const rangeSection = document.getElementById("sp-rpt-range-section");
+        if (monthSection)
+          monthSection.style.display =
+            radio.value === "month" ? "flex" : "none";
+        if (rangeSection)
+          rangeSection.style.display =
+            radio.value === "range" ? "block" : "none";
+      });
     });
-  });
 
-  document.getElementById("sp-rpt-select-all")?.addEventListener("click", () => {
-    overlay.querySelectorAll<HTMLInputElement>('#sp-rpt-groups input[type="checkbox"]').forEach((cb) => (cb.checked = true));
-  });
-  document.getElementById("sp-rpt-select-none")?.addEventListener("click", () => {
-    overlay.querySelectorAll<HTMLInputElement>('#sp-rpt-groups input[type="checkbox"]').forEach((cb) => (cb.checked = false));
-  });
+  document
+    .getElementById("sp-rpt-select-all")
+    ?.addEventListener("click", () => {
+      overlay
+        .querySelectorAll<HTMLInputElement>(
+          '#sp-rpt-groups input[type="checkbox"]',
+        )
+        .forEach((cb) => (cb.checked = true));
+    });
+  document
+    .getElementById("sp-rpt-select-none")
+    ?.addEventListener("click", () => {
+      overlay
+        .querySelectorAll<HTMLInputElement>(
+          '#sp-rpt-groups input[type="checkbox"]',
+        )
+        .forEach((cb) => (cb.checked = false));
+    });
   document.getElementById("sp-rpt-cancel")?.addEventListener("click", m.close);
 
   document.getElementById("sp-rpt-generate")?.addEventListener("click", () => {
@@ -143,14 +173,18 @@ async function handleReportClick(): Promise<void> {
 async function generateReport(
   overlay: HTMLElement,
   groupOptions: Array<{ id: number; name: string }>,
-  closeModal: () => void
+  closeModal: () => void,
 ): Promise<void> {
   const selectedGroups: Array<{ id: number; name: string }> = [];
-  overlay.querySelectorAll<HTMLInputElement>('#sp-rpt-groups input[type="checkbox"]:checked').forEach((cb) => {
-    const gId = parseInt(cb.value);
-    const g = groupOptions.find((x) => x.id === gId);
-    selectedGroups.push({ id: gId, name: g?.name ?? `Grupo ${gId}` });
-  });
+  overlay
+    .querySelectorAll<HTMLInputElement>(
+      '#sp-rpt-groups input[type="checkbox"]:checked',
+    )
+    .forEach((cb) => {
+      const gId = parseInt(cb.value);
+      const g = groupOptions.find((x) => x.id === gId);
+      selectedGroups.push({ id: gId, name: g?.name ?? `Grupo ${gId}` });
+    });
 
   if (!selectedGroups.length) {
     showErrorToast("Selecciona al menos un grupo");
@@ -158,25 +192,42 @@ async function generateReport(
   }
 
   const range = { from: "", to: "" };
-  const modeEl = overlay.querySelector<HTMLInputElement>('[name="sp-rpt-mode"]:checked');
+  const modeEl = overlay.querySelector<HTMLInputElement>(
+    '[name="sp-rpt-mode"]:checked',
+  );
   const mode = modeEl?.value ?? "month";
 
   if (mode === "month") {
-    const month = parseInt((document.getElementById("sp-rpt-month") as HTMLSelectElement)?.value ?? "0");
-    const year = parseInt((document.getElementById("sp-rpt-year") as HTMLSelectElement)?.value ?? String(new Date().getFullYear()));
+    const month = parseInt(
+      (document.getElementById("sp-rpt-month") as HTMLSelectElement)?.value ??
+        "0",
+    );
+    const year = parseInt(
+      (document.getElementById("sp-rpt-year") as HTMLSelectElement)?.value ??
+        String(new Date().getFullYear()),
+    );
     const lastDay = new Date(year, month + 1, 0).getDate();
     range.from = `${year}-${String(month + 1).padStart(2, "0")}-01T00:00`;
     range.to = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}T23:59`;
   } else {
-    const fromVal = (document.getElementById("sp-rpt-from") as HTMLInputElement)?.value;
-    const toVal = (document.getElementById("sp-rpt-to") as HTMLInputElement)?.value;
+    const fromVal = (document.getElementById("sp-rpt-from") as HTMLInputElement)
+      ?.value;
+    const toVal = (document.getElementById("sp-rpt-to") as HTMLInputElement)
+      ?.value;
     const rangeError = document.getElementById("sp-rpt-range-error");
     if (!fromVal || !toVal) {
-      if (rangeError) { rangeError.textContent = "Selecciona ambas fechas"; rangeError.style.display = "block"; }
+      if (rangeError) {
+        rangeError.textContent = "Selecciona ambas fechas";
+        rangeError.style.display = "block";
+      }
       return;
     }
     if (fromVal > toVal) {
-      if (rangeError) { rangeError.textContent = "La fecha inicio no puede ser mayor a la fecha fin"; rangeError.style.display = "block"; }
+      if (rangeError) {
+        rangeError.textContent =
+          "La fecha inicio no puede ser mayor a la fecha fin";
+        rangeError.style.display = "block";
+      }
       return;
     }
     if (rangeError) rangeError.style.display = "none";
@@ -187,8 +238,13 @@ async function generateReport(
   closeModal();
   _generating = true;
 
-  const reportBtn = document.getElementById(REPORT_BTN_ID) as HTMLButtonElement | null;
-  if (reportBtn) { reportBtn.disabled = true; reportBtn.style.opacity = "0.5"; }
+  const reportBtn = document.getElementById(
+    REPORT_BTN_ID,
+  ) as HTMLButtonElement | null;
+  if (reportBtn) {
+    reportBtn.disabled = true;
+    reportBtn.style.opacity = "0.5";
+  }
 
   showLoadingToast("Generando reporte...");
 
@@ -205,12 +261,22 @@ async function generateReport(
           `${SP_CONFIG.SP_SEARCH_API}?resolutionGroupId=${group.id}&page=${page}&size=100` +
           `&initDate=${encodeURIComponent(range.from)}&endDate=${encodeURIComponent(range.to)}`;
         const res = await fetch(url, {
-          headers: { accept: "application/json", authorization: `Bearer ${spToken}` },
+          headers: {
+            accept: "application/json",
+            authorization: `Bearer ${spToken}`,
+          },
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status} en grupo ${group.name}`);
-        const json = (await res.json()) as { data?: { content?: unknown[] }; content?: unknown[] };
-        const tickets = (json.data ?? json as { content?: unknown[] }).content ?? [];
-        (tickets as Record<string, unknown>[]).forEach((t) => (t["_groupName"] = group.name));
+        if (!res.ok)
+          throw new Error(`HTTP ${res.status} en grupo ${group.name}`);
+        const json = (await res.json()) as {
+          data?: { content?: unknown[] };
+          content?: unknown[];
+        };
+        const tickets =
+          (json.data ?? (json as { content?: unknown[] })).content ?? [];
+        (tickets as Record<string, unknown>[]).forEach(
+          (t) => (t["_groupName"] = group.name),
+        );
         allTickets.push(...(tickets as Record<string, unknown>[]));
         hasMore = tickets.length === 100;
         page++;
@@ -223,7 +289,19 @@ async function generateReport(
     }
 
     // Build CSV
-    const headers = ["Folio", "Asunto", "Grupo", "Solicitante", "Responsable", "Estado", "Prioridad", "Tipo", "Canal", "Fecha Creacion", "Fecha Actualizacion"];
+    const headers = [
+      "Folio",
+      "Asunto",
+      "Grupo",
+      "Solicitante",
+      "Responsable",
+      "Estado",
+      "Prioridad",
+      "Tipo",
+      "Canal",
+      "Fecha Creacion",
+      "Fecha Actualizacion",
+    ];
     const csvRows = [headers.join(",")];
     allTickets.forEach((t) => {
       const safe = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -244,7 +322,7 @@ async function generateReport(
           safe(t["attentionChannelName"]),
           dateStr(t["createdAt"]),
           dateStr(t["updatedAt"]),
-        ].join(",")
+        ].join(","),
       );
     });
 
@@ -257,12 +335,19 @@ async function generateReport(
     a.click();
     URL.revokeObjectURL(downloadUrl);
 
-    showSuccessToast(`📥 CSV listo: ${allTickets.length} tickets de ${selectedGroups.length} grupo(s)`);
+    showSuccessToast(
+      `📥 CSV listo: ${allTickets.length} tickets de ${selectedGroups.length} grupo(s)`,
+    );
   } catch (err) {
-    showErrorToast(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    showErrorToast(
+      `Error: ${err instanceof Error ? err.message : String(err)}`,
+    );
   } finally {
     _generating = false;
-    if (reportBtn) { reportBtn.disabled = false; reportBtn.style.opacity = "1"; }
+    if (reportBtn) {
+      reportBtn.disabled = false;
+      reportBtn.style.opacity = "1";
+    }
   }
 }
 
@@ -296,7 +381,9 @@ export function injectMondayStatsButton(): void {
 }
 
 async function handleMondayStats(): Promise<void> {
-  const btn = document.getElementById(MONDAY_STATS_BTN_ID) as HTMLButtonElement | null;
+  const btn = document.getElementById(
+    MONDAY_STATS_BTN_ID,
+  ) as HTMLButtonElement | null;
   if (!btn || btn.disabled) return;
   btn.disabled = true;
   btn.textContent = "⏳ Cargando...";
@@ -307,13 +394,17 @@ async function handleMondayStats(): Promise<void> {
     const boardId = await getMondayBoardId(mondayToken);
     if (!mondayToken || !boardId) throw new Error("Configura Monday");
 
-    type MondayItem = { id: string; name: string; column_values: Array<{ id: string; text: string; value: string }> };
+    type MondayItem = {
+      id: string;
+      name: string;
+      column_values: Array<{ id: string; text: string; value: string }>;
+    };
     const allItems: MondayItem[] = [];
 
     const firstPage = await mondayQuery(
       mondayToken,
       "query ($boardId: [ID!]!) { boards(ids: $boardId) { name items_page(limit: 500) { cursor items { id name column_values { id text value } } } } }",
-      { boardId: boardId }
+      { boardId: boardId },
     );
 
     const board = firstPage.boards?.[0];
@@ -331,9 +422,11 @@ async function handleMondayStats(): Promise<void> {
       const next = await mondayQuery(
         mondayToken,
         "query ($cursor: String!) { next_items_page(limit: 500, cursor: $cursor) { cursor items { id name column_values { id text value } } } }",
-        { cursor }
+        { cursor },
       );
-      allItems.push(...(next.next_items_page?.items as unknown as MondayItem[] ?? []));
+      allItems.push(
+        ...((next.next_items_page?.items as unknown as MondayItem[]) ?? []),
+      );
       cursor = next.next_items_page?.cursor;
     }
 
@@ -341,15 +434,24 @@ async function handleMondayStats(): Promise<void> {
     const statsByPerson: Record<string, number> = {};
     allItems.forEach((item) => {
       const personCol = item.column_values.find(
-        (col) => col.id === "multiple_person_mm25nvfq" && col.text
+        (col) => col.id === "multiple_person_mm25nvfq" && col.text,
       );
       const person = personCol?.text ?? "Sin asignar";
       statsByPerson[person] = (statsByPerson[person] ?? 0) + 1;
     });
 
-    const personSorted = Object.entries(statsByPerson).sort((a, b) => b[1] - a[1]);
+    const personSorted = Object.entries(statsByPerson).sort(
+      (a, b) => b[1] - a[1],
+    );
     const maxTotal = personSorted[0]?.[1] ?? 1;
-    const colors = ["#1976D2", "#2E7D32", "#D94040", "#7B1FA2", "#E65100", "#00796B"];
+    const colors = [
+      "#1976D2",
+      "#2E7D32",
+      "#D94040",
+      "#7B1FA2",
+      "#E65100",
+      "#00796B",
+    ];
 
     const barsHTML = personSorted
       .map(([name, total], idx) => {
@@ -374,7 +476,9 @@ async function handleMondayStats(): Promise<void> {
       modalOptions: { width: "95%", maxHeight: "90vh" },
     });
   } catch (err) {
-    showErrorToast(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    showErrorToast(
+      `Error: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   if (btn) {

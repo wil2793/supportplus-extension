@@ -4,6 +4,9 @@
   "parserOptions": {
     "ecmaVersion": 2019,
     "sourceType": "module",
+    "ecmaFeatures": {
+      "jsx": true
+    },
     "project": "./tsconfig.json"
   },
   "plugins": ["@typescript-eslint"],
@@ -17,6 +20,11 @@
     "es2019": true,
     "webextensions": true
   },
+  "settings": {
+    "react": {
+      "version": "18"
+    }
+  },
   "rules": {
     "@typescript-eslint/no-explicit-any": "warn",
     "@typescript-eslint/explicit-function-return-type": "off",
@@ -26,7 +34,18 @@
     "@typescript-eslint/no-misused-promises": "error",
     "@typescript-eslint/await-thenable": "error",
     "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
-    "no-console": "off"
+    "no-console": "off",
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "CallExpression[callee.name='useState']",
+        "message": "useState está prohibido en este proyecto. Usa un store de Zustand en src/react/store/ en su lugar."
+      },
+      {
+        "selector": "ImportDeclaration[source.value='react'] > ImportSpecifier[imported.name='useState']",
+        "message": "useState está prohibido en este proyecto. Usa un store de Zustand en src/react/store/ en su lugar."
+      }
+    ]
   },
   "ignorePatterns": ["dist/", "node_modules/", "*.min.js", "webpack.config.js"]
 }

@@ -285,6 +285,7 @@ export interface SessionState {
   canAdelantar: boolean;
   canGuardias: boolean;
   canAddUserToGroup: boolean;
+  canAddUserToRole: boolean;
 
   // Config
   userConfig: UserConfig;

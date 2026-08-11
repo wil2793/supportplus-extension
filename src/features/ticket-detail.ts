@@ -4,14 +4,13 @@
 // carousel, inline take/close/reopen actions.
 // ============================================================
 
+import { escHtml as esc, stringToColor, spinnerHTML } from "../components";
 import {
-  escHtml as esc,
-  stringToColor,
   showLoadingToast,
   showSuccessToast,
   showErrorToast,
-  spinnerHTML,
-} from "../components";
+  dismissLoadingToasts,
+} from "../react/store/toastBridge";
 import { SP_CONFIG, STATUS_TEXT_COLORS } from "../config";
 import SP_API_Lib from "../lib/api";
 import SP_Log from "../lib/logger";
@@ -19,6 +18,7 @@ import { spHeaders, spGetHeaders, utcToLocal } from "../lib/sp-fetch";
 import { mapStatusToMonday } from "../config";
 import SP_Session from "./session";
 import SP_TicketActions from "./ticket-actions";
+import SP_MondayUtils from "../lib/monday-utils";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type JsonObject = Record<string, any>;
@@ -659,12 +659,48 @@ function openCarousel(allBtns: HTMLButtonElement[], startIndex: number): void {
 
 // ─── Main loader ──────────────────────────────────────────────
 
+const MONTH_NAMES_ES = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre",
+];
+
+/**
+ * Formatea una fecha ISO a "08 de agosto del 2026 a las 14:32"
+ * Las horas van en formato 24h.
+ */
+function _formatTicketDate(isoStr: string): string {
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return isoStr;
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = MONTH_NAMES_ES[d.getMonth()];
+    const year = d.getFullYear();
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${day} de ${month} del ${year} a las ${hh}:${mm}`;
+  } catch {
+    return isoStr;
+  }
+}
+
 async function _loadAndRender(
   ticketId: number | string,
   ctx: DetailModalContext,
 ): Promise<void> {
-  showLoadingToast("Cargando detalle...");
+  const loadingId = showLoadingToast("Cargando detalle...");
+  void loadingId;
   if (!SP_API_Lib.getSpToken()) {
+    dismissLoadingToasts();
     showErrorToast("No hay token");
     return;
   }
@@ -676,7 +712,7 @@ async function _loadAndRender(
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = (await res.json()) as JsonObject;
     const t: JsonObject = json.data || json;
-    document.getElementById("sp-loading-toast")?.remove();
+    dismissLoadingToasts();
 
     // Resolve permissions from storage if not loaded yet
     let canCommentClosed = ctx.canCommentClosed;
@@ -764,10 +800,10 @@ async function _loadAndRender(
     const groupName: string = t.resolutionGroup?.name ?? "";
     const reportType: string = t.reportType?.name ?? "";
     const createdAt: string = t.createdAt
-      ? t.createdAt.replace("T", " ").substring(0, 16)
+      ? _formatTicketDate(t.createdAt as string)
       : "";
     const updatedAt: string = t.updatedAt
-      ? t.updatedAt.replace("T", " ").substring(0, 16)
+      ? _formatTicketDate(t.updatedAt as string)
       : "";
     const channel: string = t.attentionChannel?.name ?? "";
     const department: string = t.ticketInfo?.departmentName ?? "";
@@ -800,7 +836,7 @@ async function _loadAndRender(
       : "";
     const closeFormHTML =
       statusName !== "En espera" && statusName !== "Cerrado"
-        ? `<div style="margin-bottom:8px;"><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;"><button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🔒 Cerrar</button>${holderEmail && holderEmail.toLowerCase() !== myEmail.toLowerCase() ? '<button id="sp-qd-steal-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#C62828;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🤚 Tomar</button>' : ""}</div><div id="sp-qd-close-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:0.9rem;"><label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label><textarea id="sp-qd-close-comment" placeholder="Comentario de cierre..." style="width:100%;padding:5px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-bottom:6px;min-height:40px;resize:vertical;font-family:system-ui;"></textarea><div style="display:flex;gap:6px;"><button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">Confirmar</button><button id="sp-qd-close-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:0.9rem;">Cancelar</button></div><div id="sp-qd-close-suggested" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;"></div></div></div>`
+        ? `<div style="margin-bottom:8px;"><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;"><button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🔒 Cerrar</button>${holderEmail && holderEmail.toLowerCase() !== myEmail.toLowerCase() ? '<button id="sp-qd-steal-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#C62828;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🤚 Tomar</button>' : ""}</div><div id="sp-qd-close-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:0.9rem;"><label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label><div id="sp-qd-close-cb"></div><div style="display:flex;gap:6px;margin-top:6px;"><button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">Confirmar</button><button id="sp-qd-close-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:0.9rem;">Cancelar</button></div></div></div>`
         : "";
     const migrateHTML = "";
     const reopenHTML =
@@ -815,7 +851,7 @@ async function _loadAndRender(
       "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0);z-index:99999;display:flex;align-items:center;justify-content:center;transition:background 0.3s ease,backdrop-filter 0.3s ease;backdrop-filter:blur(0px);";
     overlay.innerHTML =
       `<div style="background:#fff;padding:clamp(16px,2vw,28px);border-radius:12px;width:92vw;max-width:900px;max-height:85vh;display:flex;flex-direction:column;overflow-y:auto;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);transform:scale(0.95);opacity:0;transition:transform 0.2s ease,opacity 0.2s ease;box-shadow:0 8px 40px rgba(0,0,0,0.25);">` +
-      `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h3 style="margin:0;font-size:1.1rem;">📋 ${t.uniqueCode ?? ticketId} <span class="sp-qd-copy-folio" data-copy="${t.uniqueCode ?? ticketId}" style="cursor:pointer;font-size:0.85rem;opacity:0.6;" title="Copiar folio">⧉</span> <span style="font-weight:400;color:${STATUS_TEXT_COLORS[statusName] ?? "#333"};font-size:0.85rem;">(${statusName})</span></h3><div style="display:flex;gap:6px;align-items:center;"><span id="sp-qd-actions" style="display:flex;gap:4px;"></span><a href="/es/dashboard/tickets/${ticketId}" target="_blank" style="padding:5px 10px;border:1px solid #1976D2;border-radius:6px;font-size:0.9rem;text-decoration:none;color:#1976D2;">Abrir ↗</a><button id="sp-qd-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:0.9rem;">✕</button></div></div>` +
+      `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h3 style="margin:0;font-size:1.1rem;">📋 ${t.uniqueCode ?? ticketId} <span class="sp-qd-copy-folio" data-copy="${t.uniqueCode ?? ticketId}" style="cursor:pointer;font-size:0.85rem;opacity:0.6;" title="Copiar folio">⧉</span> <span style="font-weight:400;color:${STATUS_TEXT_COLORS[statusName] ?? "#333"};font-size:0.85rem;">(${statusName})</span> <span id="sp-qd-monday-tag" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:0.75rem;font-weight:600;background:#f5f5f5;color:#888;border:1px solid #e0e0e0;vertical-align:middle;margin-left:6px;cursor:default;" title="Estado en Monday">⏳ Verificando...</span></h3><div style="display:flex;gap:6px;align-items:center;"><span id="sp-qd-actions" style="display:flex;gap:4px;"></span><a href="/es/dashboard/tickets/${ticketId}" target="_blank" style="padding:5px 10px;border:1px solid #1976D2;border-radius:6px;font-size:0.9rem;text-decoration:none;color:#1976D2;">Abrir ↗</a><button id="sp-qd-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:0.9rem;">✕</button></div></div>` +
       `<div style="flex:1;overflow:auto;"><div style="background:#f5f5f5;padding:8px 10px;border-radius:6px;font-size:13px;font-weight:600;margin-bottom:8px;">${t.subject ?? "Sin asunto"}</div>` +
       `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;font-size:0.9rem;"><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;">${statusBadge}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Prioridad:</span> ${priorityName}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Tipo:</span> ${reportType}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Canal:</span> ${channel}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Grupo:</span> ${groupName}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Servicio:</span> ${serviceName}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Creado:</span> ${createdAt}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Actualizado:</span> ${updatedAt}</div></div>` +
       takeFormHTML +
@@ -909,6 +945,7 @@ async function _loadAndRender(
       closeModal,
       statusName,
       holderName,
+      holderEmail,
       department,
       groupName,
       myName,
@@ -925,6 +962,24 @@ async function _loadAndRender(
     );
     _wireFileCarousel(overlay);
     _loadStatusOptions(ticketId, t, ctx);
+
+    // ─── Sync con Monday al abrir el modal (background, no bloqueante) ──
+    // Solo si el ticket ya tiene analista asignado (status != "En espera")
+    if (statusName !== "En espera") {
+      _setMondayTag("⏳ Sincronizando...", "loading");
+      void SP_MondayUtils.syncTicketWithMonday({
+        ticket: {
+          ...t,
+          id: ticketId as number,
+        } as import("../types").SpTicket & { id: number },
+        statusName,
+        holderEmail,
+        departmentName: department,
+      }).then(() => void _checkMondayStatus(t.uniqueCode ?? String(ticketId)));
+    } else {
+      // En espera — solo verificar si ya existe, sin crear
+      void _checkMondayStatus(t.uniqueCode ?? String(ticketId));
+    }
     _loadSuggestedComments(
       ctx.getTeamResolutionGroupId(),
       overlay.querySelector<HTMLElement>("#sp-qd-suggested"),
@@ -935,11 +990,144 @@ async function _loadAndRender(
       overlay.querySelector<HTMLElement>("#sp-qd-close-suggested"),
     );
   } catch (err) {
+    dismissLoadingToasts();
     showErrorToast(`Error: ${(err as Error).message}`);
   }
 }
 
+// ─── Monday status tag helpers ───────────────────────────────
+
+/** Actualiza el tag de Monday en el header del modal */
+function _setMondayTag(
+  text: string,
+  style: "loading" | "synced" | "none",
+  href?: string,
+): void {
+  const tag = document.getElementById("sp-qd-monday-tag");
+  if (!tag) return;
+
+  const colors: Record<string, { bg: string; border: string; color: string }> =
+    {
+      loading: { bg: "#f5f5f5", border: "#e0e0e0", color: "#888" },
+      synced: { bg: "#E8F5E9", border: "#4CAF50", color: "#2E7D32" },
+      none: { bg: "#f5f5f5", border: "#e0e0e0", color: "#aaa" },
+    };
+  const c = colors[style];
+  tag.style.background = c.bg;
+  tag.style.borderColor = c.border;
+  tag.style.color = c.color;
+  tag.style.cursor = href ? "pointer" : "default";
+  tag.textContent = text;
+
+  if (href) {
+    tag.title = "Ver en Monday";
+    tag.onclick = (e) => {
+      e.stopPropagation();
+      window.open(href, "_blank");
+    };
+  } else {
+    tag.title = "";
+    tag.onclick = null;
+  }
+}
+
+/** Verifica si el ticket ya está en Monday y actualiza el tag */
+async function _checkMondayStatus(uniqueCode: string): Promise<void> {
+  try {
+    const { getCache } = await import("../lib/monday-cache");
+    const cached = getCache();
+
+    // 1. Revisar cache local primero (rápido)
+    if (cached?.[uniqueCode]) {
+      const itemId = cached[uniqueCode];
+      const href = `${SP_CONFIG.MONDAY_BASE_URL}/boards/${SP_CONFIG.MONDAY_BOARD_ID}/pulses/${itemId}`;
+      _setMondayTag("✅ En Monday", "synced", href);
+      return;
+    }
+
+    // 2. Si no está en cache, consultar Monday en tiempo real
+    const { getMondayToken, getMondayBoardId, getSpToken } =
+      await import("../lib/api");
+    const token = await getMondayToken();
+    if (!token) {
+      _setMondayTag("○ Sin token", "none");
+      return;
+    }
+
+    const spToken = getSpToken();
+    const boardId = spToken ? await getMondayBoardId(spToken) : null;
+    if (!boardId) {
+      _setMondayTag("○ No migrado", "none");
+      return;
+    }
+
+    const { findMondayItem } = await import("../lib/monday-utils");
+    const found = await findMondayItem(token, uniqueCode, {
+      boards: [{ id: boardId, name: "" }],
+    });
+
+    if (found) {
+      const { addToCache } = await import("../lib/monday-cache");
+      addToCache(uniqueCode, found.itemId);
+      const href = `${SP_CONFIG.MONDAY_BASE_URL}/boards/${found.boardId}/pulses/${found.itemId}`;
+      _setMondayTag("✅ En Monday", "synced", href);
+    } else {
+      _setMondayTag("○ No migrado", "none");
+    }
+  } catch {
+    _setMondayTag("○ No migrado", "none");
+  }
+}
+
 // ─── Event wiring helpers ─────────────────────────────────────
+
+/**
+ * Sube una imagen pegada y la adjunta a un comentario existente.
+ * Retorna true si se adjuntó con éxito, false/undefined si no había imagen o falló.
+ */
+async function _uploadImageToComment(
+  imageFile: File | null,
+  commentId: string,
+  spToken: string | null,
+): Promise<void> {
+  if (!imageFile || !commentId || !spToken) return;
+
+  const named = new File([imageFile], `clipboard_${Date.now()}.png`, {
+    type: imageFile.type,
+  });
+  const fmData = new FormData();
+  fmData.append("files", named);
+
+  const iRes = await fetch("https://macropayapi.supportplus.mx/files", {
+    method: "POST",
+    headers: { authorization: `Bearer ${spToken}` },
+    body: fmData,
+  });
+  if (!iRes.ok) {
+    SP_Log.warn("[SP Paste] Upload imagen falló:", iRes.status);
+    return;
+  }
+  const iJson = (await iRes.json()) as Record<string, unknown>;
+  const imgs = (iJson["data"] ?? iJson) as Array<Record<string, unknown>>;
+  if (!Array.isArray(imgs) || !imgs.length) return;
+
+  await fetch(
+    "https://macropayapi.supportplus.mx/tickets/web/comment/attachments",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        accept: "application/json",
+        authorization: `Bearer ${spToken}`,
+      },
+      body: JSON.stringify({
+        attachments: imgs.map((f) => ({ fileId: f["id"] ?? f["fileId"] })),
+        commentId,
+        isInternal: false,
+      }),
+    },
+  );
+}
 
 function _wireActionButtons(
   overlay: HTMLElement,
@@ -949,6 +1137,7 @@ function _wireActionButtons(
   closeModal: () => void,
   statusName: string,
   holderName: string,
+  holderEmail: string,
   department: string,
   groupName: string,
   _myName: string,
@@ -1213,15 +1402,35 @@ function _wireActionButtons(
                 closeModal();
                 return;
               }
-              if (closeComment)
-                await fetch(`${SP_CONFIG.SP_API}/comment/${ticketId}`, {
-                  method: "POST",
-                  headers: spHeaders(),
-                  body: JSON.stringify({
-                    content: `<p>${closeComment}</p>`,
-                    internal: false,
-                  }),
-                });
+              if (closeComment) {
+                const closeCommentRes = await fetch(
+                  `${SP_CONFIG.SP_API}/comment/${ticketId}`,
+                  {
+                    method: "POST",
+                    headers: spHeaders(),
+                    body: JSON.stringify({
+                      content: `<p>${closeComment}</p>`,
+                      internal: false,
+                    }),
+                  },
+                );
+                // Adjuntar imagen pegada al comentario de cierre si existe
+                if (closeCommentRes.ok && closeCb?.getPastedFile()) {
+                  const closeCommentJson =
+                    (await closeCommentRes.json()) as JsonObject;
+                  const closeCommentData =
+                    closeCommentJson["data"] ?? closeCommentJson;
+                  const closeCommentId = String(
+                    closeCommentData?.id ?? closeCommentData?.data?.id ?? "",
+                  );
+                  if (closeCommentId)
+                    await _uploadImageToComment(
+                      closeCb.getPastedFile(),
+                      closeCommentId,
+                      SP_API_Lib.getSpToken(),
+                    );
+                }
+              }
               await fetch(
                 `${SP_CONFIG.SP_API}/update-ticket-status-with-optional-comment/${ticketId}`,
                 {
@@ -1234,6 +1443,19 @@ function _wireActionButtons(
                 },
               );
               showSuccessToast("Ticket tomado y cerrado");
+              // ── Sync con Monday de forma no bloqueante ──────
+              _setMondayTag("⏳ Migrando...", "loading");
+              void SP_MondayUtils.syncTicketWithMonday({
+                ticket: {
+                  ...t,
+                  id: ticketId as number,
+                } as import("../types").SpTicket & { id: number },
+                statusName: "Cerrado",
+                holderEmail: holderEmail,
+                departmentName: department,
+              }).then(
+                () => void _checkMondayStatus(t.uniqueCode ?? String(ticketId)),
+              );
             } else {
               showSuccessToast("Ticket tomado");
             }
@@ -1257,6 +1479,9 @@ function _wireActionButtons(
   ) as HTMLElement | null;
   if (closeBtn && closeForm) {
     let shown = false;
+    let closeCbInstance: CommentBoxResult | null = null;
+    const cbGroupId = t.resolutionGroup?.id || ctx.getTeamResolutionGroupId();
+
     const toggleCommentSection = (hide: boolean) => {
       const cs = document.getElementById("sp-qd-comment-section");
       if (cs) cs.style.display = hide ? "none" : "";
@@ -1267,6 +1492,20 @@ function _wireActionButtons(
       closeBtn.textContent = shown ? "✕ Cancelar" : "🔒 Cerrar";
       closeBtn.style.background = shown ? "#999" : "#616161";
       toggleCommentSection(shown);
+
+      // Inyectar CommentBox la primera vez que se abre
+      if (shown && !closeForm.dataset["cbInjected"]) {
+        closeForm.dataset["cbInjected"] = "1";
+        const closeCbEl = document.getElementById("sp-qd-close-cb");
+        if (closeCbEl) {
+          closeCbInstance = createCommentBox({
+            placeholder: "Comentario de cierre (opcional)...",
+            groupId: cbGroupId,
+            minHeight: "40px",
+          });
+          closeCbEl.appendChild(closeCbInstance.element);
+        }
+      }
     });
     document
       .getElementById("sp-qd-close-cancel")
@@ -1280,9 +1519,8 @@ function _wireActionButtons(
     document
       .getElementById("sp-qd-close-confirm")
       ?.addEventListener("click", async () => {
-        const commentText = (
-          document.getElementById("sp-qd-close-comment") as HTMLTextAreaElement
-        ).value.trim();
+        const commentText = closeCbInstance?.getValue() ?? "";
+        const pastedImg = closeCbInstance?.getPastedFile() ?? null;
         const confirmBtn = document.getElementById(
           "sp-qd-close-confirm",
         ) as HTMLButtonElement;
@@ -1290,15 +1528,32 @@ function _wireActionButtons(
         confirmBtn.innerHTML = spinnerHTML(12, "Cerrando...");
         showLoadingToast("Cerrando ticket...");
         try {
-          if (commentText)
-            await fetch(`${SP_CONFIG.SP_API}/comment/${ticketId}`, {
-              method: "POST",
-              headers: spHeaders(),
-              body: JSON.stringify({
-                content: `<p>${commentText}</p>`,
-                internal: false,
-              }),
-            });
+          let createdCommentId = "";
+          if (commentText || pastedImg) {
+            const commentRes = await fetch(
+              `${SP_CONFIG.SP_API}/comment/${ticketId}`,
+              {
+                method: "POST",
+                headers: spHeaders(),
+                body: JSON.stringify({
+                  content: `<p>${commentText || "(imagen adjunta)"}</p>`,
+                  internal: false,
+                }),
+              },
+            );
+            if (commentRes.ok) {
+              const cJson = (await commentRes.json()) as JsonObject;
+              const cData = cJson["data"] ?? cJson;
+              const rawId = cData?.id ?? cData?.data?.id ?? cJson["id"];
+              createdCommentId = rawId != null ? String(rawId) : "";
+              if (createdCommentId && pastedImg)
+                await _uploadImageToComment(
+                  pastedImg,
+                  createdCommentId,
+                  SP_API_Lib.getSpToken(),
+                );
+            }
+          }
           const r = await fetch(
             `${SP_CONFIG.SP_API}/update-ticket-status-with-optional-comment/${ticketId}`,
             {
@@ -1312,6 +1567,18 @@ function _wireActionButtons(
           );
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           showSuccessToast("Ticket cerrado");
+          _setMondayTag("⏳ Migrando...", "loading");
+          void SP_MondayUtils.syncTicketWithMonday({
+            ticket: {
+              ...t,
+              id: ticketId as number,
+            } as import("../types").SpTicket & { id: number },
+            statusName: "Cerrado",
+            holderEmail: holderEmail,
+            departmentName: department,
+          }).then(
+            () => void _checkMondayStatus(t.uniqueCode ?? String(ticketId)),
+          );
           closeModal();
           void _loadAndRender(ticketId, ctx);
         } catch (err) {
@@ -1518,6 +1785,27 @@ function _wireCommentSection(
   let pastedFile: File | null = null;
   let pastedImgUrl: string | null = null;
 
+  const handlePasteImage = (file: File) => {
+    pastedFile = file;
+    document.getElementById("sp-qd-paste-preview")?.remove();
+    if (pastedImgUrl) URL.revokeObjectURL(pastedImgUrl);
+    pastedImgUrl = URL.createObjectURL(file);
+    const prev = document.createElement("div");
+    prev.id = "sp-qd-paste-preview";
+    prev.style.cssText =
+      "margin:8px 0;padding:8px;border:1px solid #1976D2;border-radius:8px;background:#e3f2fd;display:flex;align-items:center;gap:8px;";
+    prev.innerHTML = `<img src="${pastedImgUrl}" style="max-width:80px;max-height:60px;border-radius:4px;border:1px solid #ddd;"><span style="flex:1;font-size:0.85rem;color:#333;">📋 Imagen del portapapeles</span><button id="sp-qd-paste-cancel" style="padding:6px 8px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:0.8rem;">✕</button>`;
+    commentInput?.parentElement?.insertAdjacentElement("afterend", prev);
+    (
+      document.getElementById("sp-qd-paste-cancel") as HTMLButtonElement
+    )?.addEventListener("click", () => {
+      prev.remove();
+      if (pastedImgUrl) URL.revokeObjectURL(pastedImgUrl);
+      pastedFile = null;
+      pastedImgUrl = null;
+    });
+  };
+
   const renderPending = () => {
     if (!attachList) return;
     attachList.innerHTML = "";
@@ -1548,7 +1836,11 @@ function _wireCommentSection(
     "sp-qd-comment-input",
   ) as HTMLTextAreaElement | null;
   commentInput?.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) commentSend.click();
+    // Solo enviar con Ctrl+Enter — Enter solo hace salto de línea normal
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      commentSend.click();
+    }
   });
   commentInput?.addEventListener("paste", (e: ClipboardEvent) => {
     // Clipboard paste — originalEvent is a non-standard browser extension
@@ -1563,28 +1855,38 @@ function _wireCommentSection(
         const file = items[i].getAsFile();
         if (!file) continue;
         e.preventDefault();
-        pastedFile = file;
-        document.getElementById("sp-qd-paste-preview")?.remove();
-        if (pastedImgUrl) URL.revokeObjectURL(pastedImgUrl);
-        pastedImgUrl = URL.createObjectURL(file);
-        const prev = document.createElement("div");
-        prev.id = "sp-qd-paste-preview";
-        prev.style.cssText =
-          "margin:8px 0;padding:8px;border:1px solid #1976D2;border-radius:8px;background:#e3f2fd;display:flex;align-items:center;gap:8px;";
-        prev.innerHTML = `<img src="${pastedImgUrl}" style="max-width:80px;max-height:60px;border-radius:4px;border:1px solid #ddd;"><span style="flex:1;font-size:0.85rem;color:#333;">📋 Imagen del portapapeles</span><button id="sp-qd-paste-cancel" style="padding:6px 8px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:0.8rem;">✕</button>`;
-        commentInput.parentElement?.insertAdjacentElement("afterend", prev);
-        (
-          document.getElementById("sp-qd-paste-cancel") as HTMLButtonElement
-        ).addEventListener("click", () => {
-          prev.remove();
-          if (pastedImgUrl) URL.revokeObjectURL(pastedImgUrl);
-          pastedFile = null;
-          pastedImgUrl = null;
-        });
+        handlePasteImage(file);
         break;
       }
     }
   });
+
+  // Fallback: capturar paste en document cuando el textarea tiene foco
+  // (algunos builds de Chrome en extensiones bloquean el evento en el elemento)
+  const docPasteHandler = (e: Event) => {
+    const ce = e as ClipboardEvent;
+    if (document.activeElement !== commentInput) return;
+    const items = ce.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        const file = items[i].getAsFile();
+        if (!file) continue;
+        ce.preventDefault();
+        handlePasteImage(file);
+        break;
+      }
+    }
+  };
+  document.addEventListener("paste", docPasteHandler);
+  // Limpiar el listener cuando el modal se cierre
+  const observer = new MutationObserver(() => {
+    if (!document.getElementById("sp-quick-detail-modal")) {
+      document.removeEventListener("paste", docPasteHandler);
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.body, { childList: true });
 
   commentSend.addEventListener("click", async () => {
     const input = document.getElementById(
@@ -1610,7 +1912,14 @@ function _wireCommentSection(
       });
       if (!commentRes.ok) throw new Error(`HTTP ${commentRes.status}`);
       const commentJson = (await commentRes.json()) as JsonObject;
-      const commentId: string = commentJson["data"]?.id ?? commentJson["id"];
+      const commentData = commentJson["data"] ?? commentJson;
+      const rawId =
+        commentData?.id ?? commentData?.data?.id ?? commentJson["id"];
+      const commentId: string = rawId != null ? String(rawId) : "";
+
+      if (!commentId) {
+        SP_Log.warn("No se obtuvo commentId del API — adjuntos omitidos");
+      }
 
       // Upload pending files
       if (pendingFiles.length && commentId) {
@@ -1641,37 +1950,9 @@ function _wireCommentSection(
             },
           );
       }
-      // Upload pasted image
+      // Upload pasted image usando el helper centralizado
       if (pastedFile && commentId) {
-        const named = new File([pastedFile], `clipboard_${Date.now()}.png`, {
-          type: pastedFile.type,
-        });
-        const fmData = new FormData();
-        fmData.append("files", named);
-        const iRes = await fetch("https://macropayapi.supportplus.mx/files", {
-          method: "POST",
-          headers: { authorization: `Bearer ${spToken}` },
-          body: fmData,
-        });
-        if (iRes.ok) {
-          const iJson = (await iRes.json()) as JsonObject;
-          const imgs: JsonObject[] = iJson["data"] ?? iJson;
-          if (Array.isArray(imgs) && imgs.length)
-            await fetch(
-              "https://macropayapi.supportplus.mx/tickets/web/comment/attachments",
-              {
-                method: "POST",
-                headers: spHeaders(),
-                body: JSON.stringify({
-                  attachments: imgs.map((f: JsonObject) => ({
-                    fileId: f.id,
-                  })),
-                  commentId,
-                  isInternal: false,
-                }),
-              },
-            );
-        }
+        await _uploadImageToComment(pastedFile, commentId, spToken);
         document.getElementById("sp-qd-paste-preview")?.remove();
         if (pastedImgUrl) URL.revokeObjectURL(pastedImgUrl);
         pastedFile = null;
