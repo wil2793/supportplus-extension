@@ -4,6 +4,7 @@
     "lib": ["ES2019", "DOM", "DOM.Iterable"],
     "module": "ES2020",
     "moduleResolution": "node",
+    "jsx": "react-jsx",
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -21,9 +22,10 @@
       "@types/*": ["./src/types/*"],
       "@lib/*": ["./src/lib/*"],
       "@features/*": ["./src/features/*"],
-      "@background/*": ["./src/background/*"]
+      "@background/*": ["./src/background/*"],
+      "@react/*": ["./src/react/*"]
     }
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "dist"]
 }

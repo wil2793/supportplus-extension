@@ -20,14 +20,14 @@ const config = {
 
   // ── Module resolution ─────────────────────────────────────────────────────
   resolve: {
-    extensions: [".ts", ".js"],
+    extensions: [".ts", ".tsx", ".js"],
   },
 
   // ── Loaders ───────────────────────────────────────────────────────────────
   module: {
     rules: [
       {
-        test: /\.ts$/,
+        test: /\.(ts|tsx)$/,
         use: [{ loader: "ts-loader", options: { transpileOnly: false } }],
         exclude: /node_modules/,
       },

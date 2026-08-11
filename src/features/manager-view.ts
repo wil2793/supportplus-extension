@@ -1339,6 +1339,7 @@ function showUsuariosModal(): void {
         `<button id="sp-um-nuevo" style="padding:5px 12px;border:1px solid #1565C0;border-radius:6px;background:transparent;color:#1565C0;cursor:pointer;font-size:12px;font-weight:600;">+ Nuevo</button>` +
         `<button id="sp-um-close" style="border:none;background:none;font-size:1.2rem;cursor:pointer;color:#666;">✕</button>` +
         `</div>` +
+        `</div>` +
         // Body: dos columnas
         `<div style="display:flex;flex:1;overflow:hidden;">` +
         // Columna izquierda — lista de usuarios
@@ -1821,28 +1822,38 @@ function showUsuariosModal(): void {
         document
           .getElementById("sp-um-edit-btn")
           ?.addEventListener("click", () => {
-            showUserFormModal({
-              mode: "edit",
-              userId: selectedUid,
-              defaults: {
-                nombre: selectedUser!.name,
-                correo: selectedUser!.correo,
+            // Obtener cargo y nivel actuales del API antes de abrir el form
+            chrome.runtime.sendMessage(
+              { type: "api-get", endpoint: `/usuarios/${selectedUid}` },
+              (r) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const data: any = r?.data?.data ?? r?.data ?? {};
+                showUserFormModal({
+                  mode: "edit",
+                  userId: selectedUid,
+                  defaults: {
+                    nombre: selectedUser!.name,
+                    correo: selectedUser!.correo,
+                    cargoId: data.FkIdcatCargo ?? data.fkIdcatCargo ?? 0,
+                    nivelId:
+                      data.FkIdcatNivelCargo ?? data.fkIdcatNivelCargo ?? 0,
+                    isEdit: true,
+                  },
+                  onSuccess: (_id, newName) => {
+                    const row = document.querySelector<HTMLElement>(
+                      `.sp-um-row[data-uid="${selectedUid}"]`,
+                    );
+                    if (row) {
+                      row.dataset["uname"] = newName;
+                      row.querySelector("div")!.textContent = newName;
+                    }
+                    document
+                      .getElementById("sp-um-user-header")!
+                      .querySelector("div > div > div")!.textContent = newName;
+                  },
+                });
               },
-              onSuccess: (_id, newName) => {
-                // Actualizar fila en la lista
-                const row = document.querySelector<HTMLElement>(
-                  `.sp-um-row[data-uid="${selectedUid}"]`,
-                );
-                if (row) {
-                  row.dataset["uname"] = newName;
-                  row.querySelector("div")!.textContent = newName;
-                }
-                // Actualizar header
-                document
-                  .getElementById("sp-um-user-header")!
-                  .querySelector("div > div > div")!.textContent = newName;
-              },
-            });
+            );
           });
 
         // Botón Desactivar

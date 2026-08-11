@@ -162,92 +162,10 @@ function _applyVersionCheck(latest: string, zipUrl: string): void {
     sessionState.versionBlocked = true;
     showVersionAlert(latest, zipUrl);
   } else {
-    // Minor/patch → mostrar modal de actualización
-    showUpdateModal(latest, zipUrl);
-  }
-}
-
-function showUpdateModal(latest: string, zipUrl: string): void {
-  if (document.getElementById("sp-update-modal")) return;
-
-  const overlay = document.createElement("div");
-  overlay.id = "sp-update-modal";
-  overlay.style.cssText =
-    "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0);z-index:999999;" +
-    "display:flex;align-items:center;justify-content:center;" +
-    "transition:background 0.3s ease;backdrop-filter:blur(0px);";
-
-  overlay.innerHTML =
-    `<div style="background:#fff;border-radius:12px;max-width:380px;width:90%;padding:28px 24px;` +
-    `box-shadow:0 8px 40px rgba(0,0,0,0.25);text-align:center;` +
-    `transform:scale(0.85) translateY(20px);opacity:0;` +
-    `transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1),opacity 0.3s ease;">` +
-    // Icono
-    `<div style="font-size:40px;margin-bottom:12px;">🚀</div>` +
-    // Título
-    `<h3 style="margin:0 0 8px;font-size:1.1rem;font-family:Roboto,sans-serif;color:#333;">` +
-    `Nueva versión disponible</h3>` +
-    // Versiones
-    `<p style="margin:0 0 6px;font-size:13px;color:#888;font-family:Roboto,sans-serif;">` +
-    `<span style="color:#D94040;font-weight:600;">v${latest}</span> está lista para instalar.</p>` +
-    `<p style="margin:0 0 20px;font-size:11px;color:#bbb;font-family:Roboto,sans-serif;">` +
-    `Versión actual: v${_currentVersion}</p>` +
-    // Botones
-    `<div style="display:flex;gap:10px;">` +
-    `<button id="sp-update-modal-later" style="flex:1;padding:10px;border:1px solid #ddd;border-radius:8px;` +
-    `background:#fff;color:#888;cursor:pointer;font-size:13px;font-family:Roboto,sans-serif;">` +
-    `Después</button>` +
-    `<button id="sp-update-modal-now" style="flex:2;padding:10px;border:none;border-radius:8px;` +
-    `background:#D94040;color:#fff;cursor:pointer;font-size:13px;font-weight:600;font-family:Roboto,sans-serif;">` +
-    `⬇️ Actualizar ahora</button>` +
-    `</div></div>`;
-
-  document.body.appendChild(overlay);
-
-  // Animar entrada
-  requestAnimationFrame(() => {
-    overlay.style.background = "rgba(0,0,0,0.5)";
-    overlay.style.backdropFilter = "blur(4px)";
-    const box = overlay.querySelector<HTMLElement>("div");
-    if (box) {
-      box.style.transform = "scale(1) translateY(0)";
-      box.style.opacity = "1";
-    }
-  });
-
-  const closeOverlay = () => {
-    const box = overlay.querySelector<HTMLElement>("div");
-    if (box) {
-      box.style.transform = "scale(0.9) translateY(10px)";
-      box.style.opacity = "0";
-    }
-    overlay.style.background = "rgba(0,0,0,0)";
-    setTimeout(() => overlay.remove(), 250);
-    // Mostrar el botón de update en el header como recordatorio
+    // Minor/patch → mostrar botón de actualizar en el header
     const btn = document.getElementById("sp-update-btn");
     if (btn) btn.style.display = "inline-flex";
-  };
-
-  document
-    .getElementById("sp-update-modal-later")
-    ?.addEventListener("click", closeOverlay);
-
-  document
-    .getElementById("sp-update-modal-now")
-    ?.addEventListener("click", () => {
-      const nowBtn = document.getElementById(
-        "sp-update-modal-now",
-      ) as HTMLButtonElement;
-      nowBtn.textContent = "⏳ Descargando...";
-      nowBtn.disabled = true;
-      // Descargar y recargar al terminar
-      downloadZip(zipUrl, latest, nowBtn);
-      // Recargar página tras 3s para que tome la extensión actualizada
-      setTimeout(() => {
-        overlay.remove();
-        window.location.reload();
-      }, 3500);
-    });
+  }
 }
 
 function showVersionAlert(latest: string, zipUrl: string): void {
