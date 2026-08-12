@@ -765,6 +765,15 @@ export function _loadManagerPanel(
     if (document.visibilityState === "visible") refreshOpenCollapsibles();
   });
   document.addEventListener("sp-refresh-panel", refreshOpenCollapsibles);
+
+  // Auto-refresh de columnas cada 15s — detecta rápido tickets tomados
+  const columnsInterval = setInterval(() => {
+    if (!document.getElementById("sp-manager-panel")) {
+      clearInterval(columnsInterval);
+      return;
+    }
+    refreshOpenCollapsibles();
+  }, 15000);
 }
 
 // ─── Birthday Panel ───────────────────────────────────────────

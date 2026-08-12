@@ -28,9 +28,8 @@ export function initToastRoot(): void {
 
   const container = document.createElement("div");
   container.id = TOAST_ROOT_ID;
-  // El div es invisible — los toasts se posicionan via CSS fixed en .sp-toast
   container.style.cssText =
-    "position:fixed;z-index:999999;pointer-events:none;";
+    "position:fixed;z-index:2147483647;pointer-events:none;top:0;left:0;width:0;height:0;";
   document.body.appendChild(container);
 
   const root = createRoot(container, { identifierPrefix: "sp-ext-" });
@@ -39,6 +38,7 @@ export function initToastRoot(): void {
       <ToastContainer />
     </React.StrictMode>,
   );
+  console.info("[SP Toast] initToastRoot OK — root montado");
 }
 
 // Re-export de ToastContainer para barrel

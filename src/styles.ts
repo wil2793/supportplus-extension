@@ -108,7 +108,7 @@ const CSS = `
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
-  z-index: 999999;
+  z-index: 2147483647;
   display: flex;
   align-items: center;
   gap: 8px;

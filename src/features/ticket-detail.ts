@@ -823,7 +823,10 @@ async function _loadAndRender(
       ? `<div style="margin-top:12px;"><b style="font-size:12px;">👥 Participantes (${participants.length}):</b><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;">${participants.map((p: JsonObject) => `<span style="padding:2px 6px;background:#e8f5e9;border:1px solid #2E7D32;border-radius:4px;font-size:10px;">${p.profileFullName ?? p.email ?? ""}</span>`).join("")}</div></div>`
       : "";
     const commentsHTML = comments.length
-      ? comments.map((c) => buildCommentHTML(c, myName, myEmail)).join("")
+      ? [...comments]
+          .reverse()
+          .map((c) => buildCommentHTML(c, myName, myEmail))
+          .join("")
       : '<div style="color:#aaa;font-size:0.9rem;padding:4px;">Sin comentarios</div>';
     const statusBadge =
       statusName === "Cerrado"
@@ -831,13 +834,9 @@ async function _loadAndRender(
         : `<select id="sp-qd-status-select" style="font-size:0.9rem;border:none;background:transparent;color:${STATUS_TEXT_COLORS[statusName] ?? "#333"};font-weight:700;cursor:pointer;"><option value="" selected>${statusName}</option><option value="" disabled>Cargando...</option></select>`;
 
     // ─── Action area HTML fragments ────────────────────────
-    const takeFormHTML = isUnassigned
-      ? `<div style="margin-bottom:8px;"><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;"><button id="sp-qd-take-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🤚 Tomar</button>${ctx.canRejectTickets ? '<button id="sp-qd-reject-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#D32F2F;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">❌ Rechazar</button>' : ""}<select id="sp-qd-assign-select" style="flex:1;padding:6px 8px;font-size:0.9rem;border:1px solid #ddd;border-radius:6px;"><option value="">-- Asignar a --</option></select></div><div id="sp-qd-take-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:0.9rem;"><label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario al tomar</label><div id="sp-qd-take-cb"></div><label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-top:6px;font-size:0.9rem;"><input type="checkbox" id="sp-qd-take-done"> <b>Ticket realizado</b></label><div id="sp-qd-take-extra" style="display:none;margin-top:6px;"><label style="display:block;margin-bottom:4px;font-weight:600;color:#555;font-size:0.9rem;">Comentario de cierre (opcional)</label><div id="sp-qd-close-cb"></div></div><div style="display:flex;gap:6px;margin-top:8px;"><button id="sp-qd-take-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">Confirmar</button><button id="sp-qd-take-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:0.9rem;">Cancelar</button></div></div></div>`
-      : "";
-    const closeFormHTML =
-      statusName !== "En espera" && statusName !== "Cerrado"
-        ? `<div style="margin-bottom:8px;"><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;"><button id="sp-qd-close-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🔒 Cerrar</button>${holderEmail && holderEmail.toLowerCase() !== myEmail.toLowerCase() ? '<button id="sp-qd-steal-btn" style="padding:6px 12px;border:none;border-radius:6px;background:#C62828;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;white-space:nowrap;">🤚 Tomar</button>' : ""}</div><div id="sp-qd-close-form" style="display:none;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-size:0.9rem;"><label style="display:block;margin-bottom:4px;font-weight:600;color:#555;">Comentario antes de cerrar (opcional)</label><div id="sp-qd-close-cb"></div><div style="display:flex;gap:6px;margin-top:6px;"><button id="sp-qd-close-confirm" style="padding:6px 12px;border:none;border-radius:6px;background:#616161;color:#fff;cursor:pointer;font-size:0.9rem;font-weight:600;">Confirmar</button><button id="sp-qd-close-cancel" style="padding:6px 12px;border:1px solid #999;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-size:0.9rem;">Cancelar</button></div></div></div>`
-        : "";
+    // Los forms de tomar/cerrar ahora están integrados en el chat
+    const takeFormHTML = "";
+    const closeFormHTML = "";
     const migrateHTML = "";
     const reopenHTML =
       statusName === "Cerrado" && canReopenTickets
@@ -850,22 +849,33 @@ async function _loadAndRender(
     overlay.style.cssText =
       "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0);z-index:99999;display:flex;align-items:center;justify-content:center;transition:background 0.3s ease,backdrop-filter 0.3s ease;backdrop-filter:blur(0px);";
     overlay.innerHTML =
-      `<div style="background:#fff;padding:clamp(16px,2vw,28px);border-radius:12px;width:92vw;max-width:900px;max-height:85vh;display:flex;flex-direction:column;overflow-y:auto;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);transform:scale(0.95);opacity:0;transition:transform 0.2s ease,opacity 0.2s ease;box-shadow:0 8px 40px rgba(0,0,0,0.25);">` +
-      `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h3 style="margin:0;font-size:1.1rem;">📋 ${t.uniqueCode ?? ticketId} <span class="sp-qd-copy-folio" data-copy="${t.uniqueCode ?? ticketId}" style="cursor:pointer;font-size:0.85rem;opacity:0.6;" title="Copiar folio">⧉</span> <span style="font-weight:400;color:${STATUS_TEXT_COLORS[statusName] ?? "#333"};font-size:0.85rem;">(${statusName})</span> <span id="sp-qd-monday-tag" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:0.75rem;font-weight:600;background:#f5f5f5;color:#888;border:1px solid #e0e0e0;vertical-align:middle;margin-left:6px;cursor:default;" title="Estado en Monday">⏳ Verificando...</span></h3><div style="display:flex;gap:6px;align-items:center;"><span id="sp-qd-actions" style="display:flex;gap:4px;"></span><a href="/es/dashboard/tickets/${ticketId}" target="_blank" style="padding:5px 10px;border:1px solid #1976D2;border-radius:6px;font-size:0.9rem;text-decoration:none;color:#1976D2;">Abrir ↗</a><button id="sp-qd-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:0.9rem;">✕</button></div></div>` +
-      `<div style="flex:1;overflow:auto;"><div style="background:#f5f5f5;padding:8px 10px;border-radius:6px;font-size:13px;font-weight:600;margin-bottom:8px;">${t.subject ?? "Sin asunto"}</div>` +
-      `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;font-size:0.9rem;"><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;">${statusBadge}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Prioridad:</span> ${priorityName}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Tipo:</span> ${reportType}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Canal:</span> ${channel}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Grupo:</span> ${groupName}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Servicio:</span> ${serviceName}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Creado:</span> ${createdAt}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Actualizado:</span> ${updatedAt}</div></div>` +
+      `<div style="background:#fff;padding:0;border-radius:12px;width:96vw;max-width:1100px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;font-family:Roboto,Helvetica,Arial,sans-serif;font-size:1rem;line-height:1.5;color:rgb(51,51,51);transform:scale(0.95);opacity:0;transition:transform 0.2s ease,opacity 0.2s ease;box-shadow:0 8px 40px rgba(0,0,0,0.25);">` +
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid #eee;flex-shrink:0;gap:8px;"><h3 style="margin:0;font-size:1.05rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📋 ${t.uniqueCode ?? ticketId} <span class="sp-qd-copy-folio" data-copy="${t.uniqueCode ?? ticketId}" style="cursor:pointer;font-size:0.85rem;opacity:0.6;" title="Copiar folio">⧉</span> <span id="sp-qd-monday-tag" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:0.75rem;font-weight:600;background:#f5f5f5;color:#888;border:1px solid #e0e0e0;vertical-align:middle;margin-left:6px;cursor:default;" title="Estado en Monday">⏳ Verificando...</span> <span style="font-weight:400;color:${STATUS_TEXT_COLORS[statusName] ?? "#333"};font-size:0.85rem;">(${statusName})</span></h3><div style="display:flex;gap:6px;align-items:center;flex-shrink:0;"><span id="sp-qd-actions" style="display:flex;gap:4px;"></span><a href="/es/dashboard/tickets/${ticketId}" target="_blank" style="padding:5px 10px;border:1px solid #1976D2;border-radius:6px;font-size:0.9rem;text-decoration:none;color:#1976D2;">Abrir ↗</a><button id="sp-qd-close" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:0.9rem;">✕</button></div></div>` +
+      `<div style="display:flex;flex:1;overflow:hidden;">` +
+      `<div style="flex:1;min-width:0;overflow-y:auto;padding:clamp(12px,2vw,20px);border-right:1px solid #eee;">` +
+      `<div style="background:#f5f5f5;padding:8px 10px;border-radius:6px;font-size:13px;font-weight:600;margin-bottom:8px;">${t.subject ?? "Sin asunto"}</div>` +
+      `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;font-size:0.85rem;"><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;">${statusBadge}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Prioridad:</span> ${priorityName}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Tipo:</span> ${reportType}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Canal:</span> ${channel}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Grupo:</span> ${groupName}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Servicio:</span> ${serviceName}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Creado:</span> ${createdAt}</div><div style="padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;"><span style="color:#888;">Actualizado:</span> ${updatedAt}</div></div>` +
       takeFormHTML +
       closeFormHTML +
       migrateHTML +
       reopenHTML +
-      `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;"><div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:0.9rem;"><b style="color:#888;">👤 Solicitante:</b> ${requesterName} <span class="sp-qd-copy-name" data-copy="${requesterName}" style="cursor:pointer;font-size:0.8rem;opacity:0.6;" title="Copiar nombre">📋</span>${requesterEmail ? `<br><span style="color:#888;">(${requesterEmail}) <span class="sp-qd-copy-email" data-copy="${requesterEmail}" style="cursor:pointer;opacity:0.6;" title="Copiar correo">📋</span></span>` : ""}${department ? `<br><span style="color:#aaa;">${department} | ${location}</span>` : ""}</div><div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:0.9rem;"><b style="color:#888;">🔍 Analista:</b> ${holderName}${holderEmail ? `<br><span style="color:#888;">(${holderEmail}) <span class="sp-qd-copy-email" data-copy="${holderEmail}" style="cursor:pointer;opacity:0.6;" title="Copiar correo">📋</span></span>` : ""}</div></div>` +
-      `<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;margin-bottom:8px;"><b style="font-size:0.8rem;color:#888;">📝 Descripción</b><div style="margin:4px 0 0;font-size:0.9rem;line-height:1.5;color:#333;max-height:200px;overflow:auto;">${desc}</div></div>` +
+      `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;"><div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:0.85rem;"><b style="color:#888;">👤 Solicitante:</b> ${requesterName} <span class="sp-qd-copy-name" data-copy="${requesterName}" style="cursor:pointer;font-size:0.8rem;opacity:0.6;" title="Copiar nombre">📋</span>${requesterEmail ? `<br><span style="color:#888;">(${requesterEmail}) <span class="sp-qd-copy-email" data-copy="${requesterEmail}" style="cursor:pointer;opacity:0.6;" title="Copiar correo">📋</span></span>` : ""}${department ? `<br><span style="color:#aaa;">${department} | ${location}</span>` : ""}</div><div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;font-size:0.85rem;"><b style="color:#888;">🔍 Analista:</b> ${holderName}${holderEmail ? `<br><span style="color:#888;">(${holderEmail}) <span class="sp-qd-copy-email" data-copy="${holderEmail}" style="cursor:pointer;opacity:0.6;" title="Copiar correo">📋</span></span>` : ""}</div></div>` +
+      `<div style="border:1px solid #e0e0e0;border-radius:6px;padding:6px 8px;margin-bottom:8px;"><b style="font-size:0.8rem;color:#888;">📝 Descripción</b><div style="margin:4px 0 0;font-size:0.85rem;line-height:1.5;color:#333;max-height:300px;overflow:auto;">${desc}</div></div>` +
       attachHTML +
       participantsHTML +
-      `<div style="margin-top:8px;border-top:1px solid #eee;padding-top:8px;"><b style="font-size:12px;">💬 Comentarios (${comments.length})</b><div id="sp-qd-comments-list" style="max-height:250px;overflow-y:auto;margin-top:6px;display:flex;flex-direction:column-reverse;">${commentsHTML}</div>` +
+      `</div>` +
+      `<div style="width:340px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;background:#fafafa;">` +
+      `<div style="padding:10px 14px;border-bottom:1px solid #eee;flex-shrink:0;background:#fff;"><b style="font-size:12px;color:#555;">💬 Comentarios (${comments.length})</b></div>` +
+      `<div id="sp-qd-comments-list" style="flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:6px;">${commentsHTML}</div>` +
       (statusName !== "Cerrado" || canCommentClosed
-        ? `<div id="sp-qd-comment-section"><div style="display:flex;gap:6px;margin-top:8px;align-items:center;"><textarea id="sp-qd-comment-input" placeholder="Escribe un comentario..." style="flex:1;padding:6px 10px;font-size:12px;border:1px solid #ddd;border-radius:6px;outline:none;min-height:36px;resize:vertical;font-family:system-ui;"></textarea><label style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:14px;" title="Adjuntar archivos">📎<input id="sp-qd-attach-input" type="file" multiple style="display:none;"></label><button id="sp-qd-comment-send" style="padding:6px 12px;border:none;border-radius:6px;background:#1976D2;color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">Enviar</button></div><div id="sp-qd-attach-list" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;"></div><div id="sp-qd-suggested" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;"></div></div>`
-        : "") +
+        ? `<div id="sp-qd-comment-section" style="border-top:1px solid #eee;padding:10px 12px;background:#fff;flex-shrink:0;"><div id="sp-qd-paste-preview"></div><div id="sp-qd-attach-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px;"></div><div style="position:relative;"><div id="sp-qd-suggested-popup" style="display:none;position:absolute;bottom:calc(100% + 6px);left:0;right:0;background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:10px;box-shadow:0 -4px 16px rgba(0,0,0,0.12);z-index:9999;max-height:200px;overflow-y:auto;flex-wrap:wrap;gap:6px;"></div><div style="display:flex;gap:6px;align-items:flex-end;"><textarea id="sp-qd-comment-input" placeholder="Escribe... (Ctrl+Enter envía)" style="flex:1;padding:8px 10px;font-size:12px;border:1px solid #ddd;border-radius:8px;outline:none;min-height:60px;max-height:120px;resize:vertical;font-family:system-ui;line-height:1.4;"></textarea><button id="sp-qd-comment-send" style="padding:10px 14px;border:none;border-radius:8px;background:#1976D2;color:#fff;cursor:pointer;font-size:16px;font-weight:600;line-height:1;align-self:flex-end;">➤</button></div><div style="display:flex;gap:8px;margin-top:6px;"><label style="display:flex;align-items:center;gap:4px;padding:5px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:11px;color:#555;background:#fafafa;user-select:none;" title="Adjuntar archivos">📎 Adjuntar<input id="sp-qd-attach-input" type="file" multiple style="display:none;"></label><button id="sp-qd-suggested-btn" style="display:flex;align-items:center;gap:4px;padding:5px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:11px;color:#555;background:#fafafa;" title="Comentarios sugeridos">💬 Comentarios sugeridos</button></div></div>${
+            isUnassigned
+              ? `<div style="display:flex;align-items:center;gap:12px;margin-top:8px;"><label id="sp-qd-take-check-label" style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;user-select:none;"><input type="checkbox" id="sp-qd-take-check" style="width:14px;height:14px;cursor:pointer;"> <span>Tomar</span></label><label id="sp-qd-take-and-close-label" style="display:none;align-items:center;gap:6px;cursor:pointer;font-size:12px;user-select:none;"><input type="checkbox" id="sp-qd-take-and-close-check" style="width:14px;height:14px;cursor:pointer;"> <span>Cerrar</span></label></div>`
+              : statusName !== "Cerrado"
+                ? `<label id="sp-qd-close-check-label" style="display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer;font-size:12px;user-select:none;"><input type="checkbox" id="sp-qd-close-check" style="width:14px;height:14px;cursor:pointer;"> <span>Cerrar</span></label>`
+                : ""
+          }</div>`
+        : `<div style="padding:10px 12px;text-align:center;font-size:11px;color:#aaa;flex-shrink:0;">Comentarios deshabilitados</div>`) +
       `</div></div></div>`;
 
     document.body.appendChild(overlay);
@@ -877,6 +887,9 @@ async function _loadAndRender(
         box.style.transform = "scale(1)";
         box.style.opacity = "1";
       }
+      // Scroll al fondo del chat para mostrar el mensaje más reciente
+      const commentsList = document.getElementById("sp-qd-comments-list");
+      if (commentsList) commentsList.scrollTop = commentsList.scrollHeight;
     });
 
     const closeModal = () => {
@@ -928,10 +941,13 @@ async function _loadAndRender(
           )
             return;
           list.innerHTML = newComments.length
-            ? newComments
+            ? [...newComments]
+                .reverse()
                 .map((c) => buildCommentHTML(c, myName, myEmail))
                 .join("")
             : '<div style="color:#aaa;font-size:0.9rem;padding:4px;">Sin comentarios</div>';
+          // Scroll al fondo tras actualizar
+          list.scrollTop = list.scrollHeight;
         })
         .catch(() => {});
     }, 30000);
@@ -959,6 +975,9 @@ async function _loadAndRender(
       closeModal,
       myName,
       myEmail,
+      holderEmail,
+      department,
+      t,
     );
     _wireFileCarousel(overlay);
     _loadStatusOptions(ticketId, t, ctx);
@@ -982,7 +1001,7 @@ async function _loadAndRender(
     }
     _loadSuggestedComments(
       ctx.getTeamResolutionGroupId(),
-      overlay.querySelector<HTMLElement>("#sp-qd-suggested"),
+      overlay.querySelector<HTMLElement>("#sp-qd-suggested-popup"),
     );
     // Also load suggested comments into the close form
     _loadSuggestedComments(
@@ -1136,7 +1155,7 @@ function _wireActionButtons(
   ctx: DetailModalContext,
   closeModal: () => void,
   statusName: string,
-  holderName: string,
+  _holderName: string,
   holderEmail: string,
   department: string,
   groupName: string,
@@ -1213,9 +1232,74 @@ function _wireActionButtons(
   // Reopen
   document
     .getElementById("sp-qd-reopen-btn")
-    ?.addEventListener("click", () =>
-      ctx.showReopenModalFn(ticketId, holderName),
-    );
+    ?.addEventListener("click", async () => {
+      const btn = document.getElementById(
+        "sp-qd-reopen-btn",
+      ) as HTMLButtonElement;
+      if (!btn) return;
+      btn.disabled = true;
+      btn.textContent = "⏳...";
+      showLoadingToast("Reabriendo ticket...");
+      try {
+        // Reasignar al analista que ya tenía el ticket (holderEmail → profileId)
+        // Si no tiene analista previo, usar el profileId del usuario actual
+        let targetProfileId: number | null = null;
+
+        // Intentar resolver el profileId del analista previo por email
+        if (holderEmail) {
+          const profileRes = await fetch(
+            `https://macropayapi.supportplus.mx/tickets/web/active-profiles-by-resolution-group/${ctx.getTeamResolutionGroupId()}`,
+            { headers: spGetHeaders() },
+          );
+          if (profileRes.ok) {
+            const profileJson = (await profileRes.json()) as JsonObject;
+            const profiles: JsonObject[] = profileJson.data || profileJson;
+            const match = Array.isArray(profiles)
+              ? profiles.find(
+                  (p: JsonObject) =>
+                    String(
+                      p["profileEmail"] ?? p["email"] ?? "",
+                    ).toLowerCase() === holderEmail.toLowerCase(),
+                )
+              : null;
+            if (match) targetProfileId = match["profileId"] as number;
+          }
+        }
+
+        // Fallback al profileId del usuario actual
+        if (!targetProfileId) targetProfileId = await ctx.getMyProfileId();
+        if (!targetProfileId) {
+          showErrorToast("No se pudo obtener el perfil del analista");
+          btn.disabled = false;
+          btn.textContent = "🔓 Reabrir";
+          return;
+        }
+
+        const res = await fetch(`${SP_CONFIG.SP_API}/reassign/${ticketId}`, {
+          method: "PUT",
+          headers: spHeaders(),
+          body: JSON.stringify({
+            resolutionGroupId: ctx.getTeamResolutionGroupId(),
+            serviceId: null,
+            responsibleProfileId: targetProfileId,
+            resolutionGroup: {
+              label: ctx.getTeamResolutionGroupLabel(),
+              value: ctx.getTeamResolutionGroupId(),
+            },
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        dismissLoadingToasts();
+        showSuccessToast("✅ Ticket reabierto");
+        closeModal();
+        void _loadAndRender(ticketId, ctx);
+      } catch (err) {
+        dismissLoadingToasts();
+        showErrorToast(`Error: ${(err as Error).message}`);
+        btn.disabled = false;
+        btn.textContent = "🔓 Reabrir";
+      }
+    });
 
   // Reject
   document
@@ -1770,6 +1854,9 @@ function _wireCommentSection(
   closeModal: () => void,
   _myName: string,
   _myEmail: string,
+  holderEmail: string,
+  department: string,
+  t: JsonObject,
 ): void {
   const commentSend = document.getElementById(
     "sp-qd-comment-send",
@@ -1781,6 +1868,68 @@ function _wireCommentSection(
   const attachList = document.getElementById(
     "sp-qd-attach-list",
   ) as HTMLElement | null;
+
+  // ── Botón 💬 — toggle popup de comentarios sugeridos ──────
+  const suggestedBtn = document.getElementById(
+    "sp-qd-suggested-btn",
+  ) as HTMLButtonElement | null;
+  const suggestedPop = document.getElementById(
+    "sp-qd-suggested-popup",
+  ) as HTMLElement | null;
+  if (suggestedBtn && suggestedPop) {
+    suggestedBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = suggestedPop.style.display !== "none";
+      suggestedPop.style.display = isOpen ? "none" : "flex";
+      suggestedBtn.style.background = isOpen ? "#fff" : "#e3f2fd";
+      suggestedBtn.style.color = isOpen ? "#888" : "#1976D2";
+      suggestedBtn.style.borderColor = isOpen ? "#ddd" : "#1976D2";
+    });
+    // Cerrar al hacer click fuera
+    document.addEventListener("click", (e) => {
+      if (
+        suggestedPop.style.display !== "none" &&
+        !suggestedPop.contains(e.target as Node) &&
+        e.target !== suggestedBtn
+      ) {
+        suggestedPop.style.display = "none";
+        suggestedBtn.style.background = "#fff";
+        suggestedBtn.style.color = "#888";
+        suggestedBtn.style.borderColor = "#ddd";
+      }
+    });
+    // Al seleccionar un sugerido, cerrar el popup
+    suggestedPop.addEventListener("click", () => {
+      suggestedPop.style.display = "none";
+      suggestedBtn.style.background = "#fff";
+      suggestedBtn.style.color = "#888";
+      suggestedBtn.style.borderColor = "#ddd";
+    });
+    // Ocultar el botón si no hay sugeridos
+    if (!suggestedPop.children.length) {
+      // Se revisará después de que _loadSuggestedComments llene el popup
+      setTimeout(() => {
+        if (!suggestedPop.children.length) suggestedBtn.style.display = "none";
+      }, 500);
+    }
+  }
+
+  // ── Toggle check "Cerrar" cuando se marca "Tomar" ──────────
+  const takeCheckEl = document.getElementById(
+    "sp-qd-take-check",
+  ) as HTMLInputElement | null;
+  if (takeCheckEl) {
+    takeCheckEl.addEventListener("change", () => {
+      const lbl = document.getElementById(
+        "sp-qd-take-and-close-label",
+      ) as HTMLElement | null;
+      const chk = document.getElementById(
+        "sp-qd-take-and-close-check",
+      ) as HTMLInputElement | null;
+      if (lbl) lbl.style.display = takeCheckEl.checked ? "flex" : "none";
+      if (chk && !takeCheckEl.checked) chk.checked = false;
+    });
+  }
   let pendingFiles: File[] = [];
   let pastedFile: File | null = null;
   let pastedImgUrl: string | null = null;
@@ -1893,14 +2042,234 @@ function _wireCommentSection(
       "sp-qd-comment-input",
     ) as HTMLTextAreaElement | null;
     const text = input?.value.trim() ?? "";
-    if (!text && !pendingFiles.length && !pastedFile) return;
+
+    // Leer los checks
+    const takeCheck =
+      (document.getElementById("sp-qd-take-check") as HTMLInputElement | null)
+        ?.checked ?? false;
+    const takeAndCloseCheck =
+      (
+        document.getElementById(
+          "sp-qd-take-and-close-check",
+        ) as HTMLInputElement | null
+      )?.checked ?? false;
+    const closeCheck =
+      (document.getElementById("sp-qd-close-check") as HTMLInputElement | null)
+        ?.checked ?? false;
+
+    // Requiere al menos texto, archivo, imagen, o una acción (tomar/cerrar)
+    if (
+      !text &&
+      !pendingFiles.length &&
+      !pastedFile &&
+      !takeCheck &&
+      !closeCheck
+    )
+      return;
+
     const btn = document.getElementById(
       "sp-qd-comment-send",
     ) as HTMLButtonElement;
     btn.disabled = true;
     btn.textContent = "...";
+
     try {
       const spToken = SP_API_Lib.getSpToken();
+
+      // ── Caso: Tomar ticket ─────────────────────────────────
+      if (takeCheck) {
+        const profileId = await ctx.getMyProfileId();
+        if (!profileId) {
+          showErrorToast("No se pudo obtener tu perfil");
+          return;
+        }
+        showLoadingToast("Tomando ticket...");
+        const commentText = text || "Se revisa";
+        const res = await fetch(
+          `${SP_API_Lib.getSpToken() ? SP_CONFIG.SP_API : SP_API}/reassign/${ticketId}`,
+          {
+            method: "PUT",
+            headers: spHeaders(),
+            body: JSON.stringify({
+              resolutionGroupId: ctx.getTeamResolutionGroupId(),
+              serviceId: null,
+              responsibleProfileId: profileId,
+              resolutionGroup: {
+                label: ctx.getTeamResolutionGroupLabel(),
+                value: ctx.getTeamResolutionGroupId(),
+              },
+              ticketCommentRequest: { internal: false, content: commentText },
+            }),
+          },
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as JsonObject;
+        if (!json["success"]) throw new Error("No success");
+        dismissLoadingToasts();
+
+        // Si también marcó Cerrar → cerrar el ticket tras tomarlo
+        if (takeAndCloseCheck) {
+          if (!SP_Session.isWithinWorkHours()) {
+            const stored = await new Promise<JsonObject>((r) =>
+              chrome.storage.local.get(["usersMap", "userEmail"], (d) =>
+                r(d as JsonObject),
+              ),
+            );
+            const pEmail = (
+              (stored["userEmail"] as string) ?? ""
+            ).toLowerCase();
+            const pUser = (
+              (stored["usersMap"] ?? {}) as Record<string, JsonObject>
+            )[pEmail] as JsonObject | undefined;
+            if (pUser?.idUsuario)
+              await SP_TicketActions.saveTicketPendingClose(
+                t.uniqueCode ?? `T${ticketId}`,
+                ticketId as number,
+                String(pUser.idUsuario),
+                "",
+              );
+            showSuccessToast(
+              "Ticket tomado. Cierre pendiente (fuera de horario).",
+            );
+          } else {
+            showLoadingToast("Cerrando ticket...");
+            await fetch(
+              `${SP_CONFIG.SP_API}/update-ticket-status-with-optional-comment/${ticketId}`,
+              {
+                method: "PATCH",
+                headers: spHeaders(),
+                body: JSON.stringify({
+                  nextTicketStatusId: SP_CONFIG.SP_STATUSES["CERRADO"],
+                  ticketCommentRequest: null,
+                }),
+              },
+            );
+            dismissLoadingToasts();
+            showSuccessToast("✅ Ticket tomado y cerrado");
+            _setMondayTag("⏳ Migrando...", "loading");
+            void SP_MondayUtils.syncTicketWithMonday({
+              ticket: {
+                ...t,
+                id: ticketId as number,
+              } as import("../types").SpTicket & { id: number },
+              statusName: "Cerrado",
+              holderEmail,
+              departmentName: department,
+            }).then(
+              () => void _checkMondayStatus(t.uniqueCode ?? String(ticketId)),
+            );
+          }
+        } else {
+          showSuccessToast("✅ Ticket tomado");
+        }
+
+        if (input) input.value = "";
+        pendingFiles = [];
+        renderPending();
+        closeModal();
+        void _loadAndRender(ticketId, ctx);
+        return;
+      }
+
+      // ── Caso: Cerrar ticket (primero comentario, luego cerrar) ─
+      if (closeCheck) {
+        // 1. Comentario de cierre si tiene texto o imagen
+        if (text || pastedFile || pendingFiles.length) {
+          const commentText = text || "(archivo adjunto)";
+          const commentRes = await fetch(
+            `${SP_CONFIG.SP_API}/comment/${ticketId}`,
+            {
+              method: "POST",
+              headers: spHeaders(),
+              body: JSON.stringify({
+                content: `<p>${commentText}</p>`,
+                internal: false,
+              }),
+            },
+          );
+          if (commentRes.ok) {
+            const cJson = (await commentRes.json()) as JsonObject;
+            const cData = cJson["data"] ?? cJson;
+            const rawId = cData?.id ?? cData?.data?.id ?? cJson["id"];
+            const commentId = rawId != null ? String(rawId) : "";
+            if (commentId) {
+              if (pendingFiles.length) {
+                const formData = new FormData();
+                pendingFiles.forEach((f) => formData.append("files", f));
+                const fRes = await fetch(
+                  "https://macropayapi.supportplus.mx/files",
+                  {
+                    method: "POST",
+                    headers: { authorization: `Bearer ${spToken}` },
+                    body: formData,
+                  },
+                );
+                if (fRes.ok) {
+                  const fJson = (await fRes.json()) as JsonObject;
+                  const uploaded: JsonObject[] = fJson["data"] ?? fJson;
+                  if (Array.isArray(uploaded) && uploaded.length)
+                    await fetch(
+                      "https://macropayapi.supportplus.mx/tickets/web/comment/attachments",
+                      {
+                        method: "POST",
+                        headers: spHeaders(),
+                        body: JSON.stringify({
+                          attachments: uploaded.map((f: JsonObject) => ({
+                            fileId: f.id,
+                          })),
+                          commentId,
+                          isInternal: false,
+                        }),
+                      },
+                    );
+                }
+              }
+              if (pastedFile)
+                await _uploadImageToComment(pastedFile, commentId, spToken);
+            }
+          }
+        }
+        // 2. Cerrar ticket
+        showLoadingToast("Cerrando ticket...");
+        const r = await fetch(
+          `${SP_CONFIG.SP_API}/update-ticket-status-with-optional-comment/${ticketId}`,
+          {
+            method: "PATCH",
+            headers: spHeaders(),
+            body: JSON.stringify({
+              nextTicketStatusId: SP_CONFIG.SP_STATUSES["CERRADO"],
+              ticketCommentRequest: null,
+            }),
+          },
+        );
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        dismissLoadingToasts();
+        showSuccessToast("✅ Ticket cerrado");
+        _setMondayTag("⏳ Migrando...", "loading");
+        void SP_MondayUtils.syncTicketWithMonday({
+          ticket: {
+            ...t,
+            id: ticketId as number,
+          } as import("../types").SpTicket & { id: number },
+          statusName: "Cerrado",
+          holderEmail,
+          departmentName: department,
+        }).then(
+          () => void _checkMondayStatus(t.uniqueCode ?? String(ticketId)),
+        );
+        if (input) input.value = "";
+        pendingFiles = [];
+        renderPending();
+        document.getElementById("sp-qd-paste-preview")?.remove();
+        if (pastedImgUrl) URL.revokeObjectURL(pastedImgUrl);
+        pastedFile = null;
+        pastedImgUrl = null;
+        closeModal();
+        void _loadAndRender(ticketId, ctx);
+        return;
+      }
+
+      // ── Caso: Solo comentario ──────────────────────────────
       const commentText = text || "(archivo adjunto)";
       const commentRes = await fetch(`${SP_API}/comment/${ticketId}`, {
         method: "POST",
@@ -1917,11 +2286,9 @@ function _wireCommentSection(
         commentData?.id ?? commentData?.data?.id ?? commentJson["id"];
       const commentId: string = rawId != null ? String(rawId) : "";
 
-      if (!commentId) {
+      if (!commentId)
         SP_Log.warn("No se obtuvo commentId del API — adjuntos omitidos");
-      }
 
-      // Upload pending files
       if (pendingFiles.length && commentId) {
         const formData = new FormData();
         pendingFiles.forEach((f) => formData.append("files", f));
@@ -1950,7 +2317,6 @@ function _wireCommentSection(
             },
           );
       }
-      // Upload pasted image usando el helper centralizado
       if (pastedFile && commentId) {
         await _uploadImageToComment(pastedFile, commentId, spToken);
         document.getElementById("sp-qd-paste-preview")?.remove();
@@ -1967,7 +2333,7 @@ function _wireCommentSection(
       showErrorToast(`Error: ${(err as Error).message}`);
     }
     btn.disabled = false;
-    btn.textContent = "Enviar";
+    btn.textContent = "➤";
   });
 
   // ─── Attach file to existing comment ─────────────────────
@@ -2223,15 +2589,13 @@ function _loadSuggestedComments(
       const { bg, border: borderColor, text } = stringToColor(c.text);
       chip.style.cssText = `padding:3px 8px;font-size:0.8rem;border:1px solid ${borderColor};border-radius:12px;background:${bg};color:${text};cursor:pointer;`;
       chip.addEventListener("click", () => {
-        // Fill close comment if this chip is inside the close form, otherwise fill normal input
-        const isInCloseForm = !!suggestedDiv.closest("#sp-qd-close-form");
-        const inputId = isInCloseForm
-          ? "sp-qd-close-comment"
-          : "sp-qd-comment-input";
         const inp = document.getElementById(
-          inputId,
+          "sp-qd-comment-input",
         ) as HTMLTextAreaElement | null;
-        if (inp) inp.value = c.text;
+        if (inp) {
+          inp.value = c.text;
+          inp.focus();
+        }
       });
       suggestedDiv.appendChild(chip);
     });
