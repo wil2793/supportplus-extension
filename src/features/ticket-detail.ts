@@ -1067,7 +1067,8 @@ async function _checkMondayStatus(uniqueCode: string): Promise<void> {
     // 2. Si no está en cache, consultar Monday en tiempo real
     const { getMondayToken, getMondayBoardId, getSpToken } =
       await import("../lib/api");
-    const token = await getMondayToken();
+    let token = await getMondayToken();
+    SP_Log.info("[Monday] token:", token ? "OK" : "NULL");
     if (!token) {
       _setMondayTag("○ Sin token", "none");
       return;
@@ -1075,15 +1076,33 @@ async function _checkMondayStatus(uniqueCode: string): Promise<void> {
 
     const spToken = getSpToken();
     const boardId = spToken ? await getMondayBoardId(spToken) : null;
-    if (!boardId) {
-      _setMondayTag("○ No migrado", "none");
-      return;
-    }
+    SP_Log.info("[Monday] boardId:", boardId);
 
     const { findMondayItem } = await import("../lib/monday-utils");
-    const found = await findMondayItem(token, uniqueCode, {
-      boards: [{ id: boardId, name: "" }],
-    });
+
+    // Log todos los boards disponibles
+    const { getMondayTicketBoards } = await import("../lib/api");
+    const allBoards = await getMondayTicketBoards(token);
+    SP_Log.info(
+      "[Monday] boards disponibles:",
+      allBoards.map((b) => b.name).join(", "),
+    );
+    SP_Log.info("[Monday] buscando uniqueCode:", uniqueCode);
+
+    let found = await findMondayItem(token, uniqueCode).catch(
+      async (e: Error) => {
+        // 401 → token expirado → refresh y retry
+        if (e.message.includes("401")) {
+          SP_Log.info("[Monday] 401 detectado — refrescando token...");
+          const { refreshMondayToken } = await import("../lib/api");
+          token = await refreshMondayToken();
+          if (!token) return null;
+          return findMondayItem(token, uniqueCode).catch(() => null);
+        }
+        return null;
+      },
+    );
+    SP_Log.info("[Monday] found:", found ? JSON.stringify(found) : "NULL");
 
     if (found) {
       const { addToCache } = await import("../lib/monday-cache");
@@ -1093,7 +1112,8 @@ async function _checkMondayStatus(uniqueCode: string): Promise<void> {
     } else {
       _setMondayTag("○ No migrado", "none");
     }
-  } catch {
+  } catch (e) {
+    SP_Log.warn("[Monday] _checkMondayStatus error:", (e as Error).message);
     _setMondayTag("○ No migrado", "none");
   }
 }

@@ -8,15 +8,18 @@ import { waitForElement } from "../lib/dom-utils";
 
 function colorRowsImmediate(): void {
   document.querySelectorAll<HTMLElement>(".MuiDataGrid-row").forEach((row) => {
-    if (row.dataset["spColored"]) return;
-    const cell = row.querySelector<HTMLElement>('[data-field="ticketStatusName"]');
+    const cell = row.querySelector<HTMLElement>(
+      '[data-field="ticketStatusName"]',
+    );
     if (!cell) return;
     const status = cell.textContent?.trim() ?? "";
-    const color = STATUS_COLORS[status];
-    if (color) {
-      row.style.backgroundColor = color;
-      row.dataset["spColored"] = "1";
-    }
+    const color = STATUS_COLORS[status] ?? "";
+
+    // Siempre actualizar — MUI reutiliza nodos DOM en scroll virtual,
+    // así que el status puede cambiar sin que se cree un nuevo elemento
+    if (row.dataset["spStatus"] === status) return; // mismo status, nada que hacer
+    row.style.backgroundColor = color;
+    row.dataset["spStatus"] = status; // guardar status en vez de solo "coloreado"
   });
 }
 
@@ -25,7 +28,12 @@ let _observer: MutationObserver | null = null;
 function startObserver(target: Element): void {
   if (_observer) _observer.disconnect();
   _observer = new MutationObserver(colorRowsImmediate);
-  _observer.observe(target, { childList: true, subtree: true });
+  _observer.observe(target, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributeOldValue: false,
+  });
 }
 
 export function initRowColors(): void {

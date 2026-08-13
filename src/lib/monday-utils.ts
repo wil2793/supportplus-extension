@@ -373,9 +373,9 @@ export async function syncTicketWithMonday(
 
 async function _doSync(opts: SyncTicketOptions): Promise<void> {
   // 1. Obtener token y boardId — si no hay token, no hacer nada
-  const { getMondayToken, getMondayBoardId, getSpToken } =
+  const { getMondayToken, getMondayBoardId, getSpToken, refreshMondayToken } =
     await import("./api");
-  const token = await getMondayToken();
+  let token = await getMondayToken();
   if (!token) return;
 
   const spToken = getSpToken();
@@ -386,10 +386,18 @@ async function _doSync(opts: SyncTicketOptions): Promise<void> {
 
   const uniqueCode = opts.ticket.uniqueCode ?? String(opts.ticket.id);
 
-  // 2. ¿Ya existe en Monday?
-  const existing = await findMondayItem(token, uniqueCode, {
-    boards: [{ id: boardId, name: "" }],
-  });
+  // 2. ¿Ya existe en Monday? — buscar en TODOS los boards del workspace
+  let existing = await findMondayItem(token, uniqueCode).catch(
+    async (e: Error) => {
+      // 401 → token expirado → refresh y retry una vez
+      if (e.message.includes("401")) {
+        token = await refreshMondayToken();
+        if (!token) return null;
+        return findMondayItem(token, uniqueCode).catch(() => null);
+      }
+      return null;
+    },
+  );
 
   if (existing) {
     // ── Ya existe: actualizar solo lo que cambió ─────────

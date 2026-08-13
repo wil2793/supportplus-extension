@@ -136,6 +136,28 @@ export async function getMondayToken(): Promise<string> {
   });
 }
 
+/**
+ * Invalida el token de Monday del caché y fuerza un nuevo sync
+ * para obtener un token fresco. Llamar cuando se recibe un 401.
+ */
+export async function refreshMondayToken(): Promise<string> {
+  // 1. Limpiar el caché para no reusar el token expirado
+  Cache.remove("monday-token");
+
+  // 2. Forzar sync con el backend para obtener el nuevo token
+  await new Promise<void>((resolve) => {
+    chrome.runtime.sendMessage({ type: "sync" }, () => resolve());
+  });
+
+  // 3. Esperar un momento para que el sync escriba en storage
+  await new Promise<void>((r) => setTimeout(r, 1500));
+
+  // 4. Leer el token fresco
+  const fresh = (await Storage.get<string>("mondayToken")) ?? "";
+  if (fresh) Cache.set("monday-token", fresh, 60 * 60 * 1000);
+  return fresh;
+}
+
 /** Clear the Monday token cache (e.g. after config changes). */
 export function clearMondayTokenCache(): void {
   Cache.remove("monday-token");
@@ -157,7 +179,9 @@ export async function getMondayTicketBoards(
         );
       const config = stored ?? {};
       const firstKey = Object.keys(config)[0];
-      return firstKey ? (config[firstKey].workspaceId ?? "") : "";
+      const fromStorage = firstKey ? (config[firstKey].workspaceId ?? "") : "";
+      // Fallback al workspaceId hardcodeado en config si storage está vacío
+      return fromStorage || SP_CONFIG.MONDAY_WORKSPACE_ID;
     })());
 
   if (!wsId) return [];
@@ -339,6 +363,7 @@ const SP_API_Lib = {
   spSearchTickets,
   mondayQuery,
   getMondayToken,
+  refreshMondayToken,
   clearMondayTokenCache,
   getMondayTicketBoards,
   getMondayUsers,
